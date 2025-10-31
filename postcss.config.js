@@ -6,4 +6,5 @@ export default {
     },
     autoprefixer: {},
   },
+  from: undefined,
 }
