@@ -430,7 +430,11 @@ export default function AdminPanel() {
           </TabsContent>
 
           <TabsContent value="images" className="space-y-4">
-            <ImageUploader adminMode={true} />
+            <ScrollArea className="h-[500px]">
+              <div className="space-y-3 pr-4">
+                <ImageUploader adminMode={true} />
+              </div>
+            </ScrollArea>
           </TabsContent>
 
           <TabsContent value="theme" className="space-y-4">
