@@ -11,6 +11,7 @@ import { Card, CardHeader, CardContent, CardFooter } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
+import ImageUploader from './ImageUploader';
 import type { UpgradeConfig, CharacterConfig } from '@shared/gameConfig';
 
 export default function AdminPanel() {
@@ -70,9 +71,10 @@ export default function AdminPanel() {
         </DialogHeader>
 
         <Tabs defaultValue="upgrades" className="flex-1">
-          <TabsList className="grid grid-cols-3 w-full">
+          <TabsList className="grid grid-cols-4 w-full">
             <TabsTrigger value="upgrades" data-testid="tab-admin-upgrades">Upgrades</TabsTrigger>
             <TabsTrigger value="characters" data-testid="tab-admin-characters">Characters</TabsTrigger>
+            <TabsTrigger value="images" data-testid="tab-admin-images">Images</TabsTrigger>
             <TabsTrigger value="settings" data-testid="tab-admin-settings">Settings</TabsTrigger>
           </TabsList>
 
@@ -257,6 +259,10 @@ export default function AdminPanel() {
                 ))}
               </div>
             </ScrollArea>
+          </TabsContent>
+
+          <TabsContent value="images" className="space-y-4">
+            <ImageUploader adminMode />
           </TabsContent>
 
           <TabsContent value="settings" className="space-y-4">

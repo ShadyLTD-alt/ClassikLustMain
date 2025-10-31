@@ -9,7 +9,11 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 
-export default function ImageUploader() {
+interface ImageUploaderProps {
+  adminMode?: boolean;
+}
+
+export default function ImageUploader({ adminMode = false }: ImageUploaderProps) {
   const { state, characters, images, addImage, removeImage, selectImage } = useGame();
   const [categories, setCategories] = useState({
     nsfw: false,
@@ -40,20 +44,8 @@ export default function ImageUploader() {
     e.target.value = '';
   };
 
-  return (
-    <Dialog>
-      <DialogTrigger asChild>
-        <Button variant="outline" data-testid="button-open-uploader">
-          <ImageIcon className="w-4 h-4 mr-2" />
-          Image Gallery
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-4xl max-h-[80vh]">
-        <DialogHeader>
-          <DialogTitle>Image Gallery - {selectedCharacter?.name}</DialogTitle>
-        </DialogHeader>
-        
-        <div className="space-y-4">
+  const UploaderContent = () => (
+    <div className="space-y-4">
           <Card>
             <CardContent className="p-4 space-y-4">
               <div>
@@ -169,6 +161,25 @@ export default function ImageUploader() {
             </ScrollArea>
           </div>
         </div>
+  );
+
+  if (adminMode) {
+    return <UploaderContent />;
+  }
+
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button variant="outline" data-testid="button-open-uploader">
+          <ImageIcon className="w-4 h-4 mr-2" />
+          Image Gallery
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-4xl max-h-[80vh]">
+        <DialogHeader>
+          <DialogTitle>Image Gallery - {selectedCharacter?.name}</DialogTitle>
+        </DialogHeader>
+        <UploaderContent />
       </DialogContent>
     </Dialog>
   );
