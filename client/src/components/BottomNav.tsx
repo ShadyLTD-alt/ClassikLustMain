@@ -96,36 +96,36 @@ export default function BottomNav() {
       </div>
 
       <Sheet open={activeSheet === 'upgrades'} onOpenChange={(open) => setActiveSheet(open ? 'upgrades' : null)}>
-        <SheetContent side="bottom" className="h-[70vh]">
+        <SheetContent side="bottom" className="h-[95vh]">
           <SheetHeader>
             <SheetTitle>Upgrades</SheetTitle>
           </SheetHeader>
-          <div className="h-full overflow-hidden mt-4">
+          <div className="h-[calc(100%-3rem)] overflow-hidden mt-4">
             <UpgradePanel />
           </div>
         </SheetContent>
       </Sheet>
 
       <Sheet open={activeSheet === 'characters'} onOpenChange={(open) => setActiveSheet(open ? 'characters' : null)}>
-        <SheetContent side="bottom" className="h-[70vh]">
+        <SheetContent side="bottom" className="h-[95vh]">
           <SheetHeader>
             <SheetTitle>Character Collection</SheetTitle>
           </SheetHeader>
-          <div className="h-full overflow-auto mt-4 px-4">
+          <div className="h-[calc(100%-3rem)] overflow-auto mt-4 px-4">
             <CharacterGallery inline />
           </div>
         </SheetContent>
       </Sheet>
 
       <Sheet open={activeSheet === 'levelup'} onOpenChange={(open) => setActiveSheet(open ? 'levelup' : null)}>
-        <SheetContent side="bottom" className="h-[70vh]">
+        <SheetContent side="bottom" className="h-[95vh]">
           <SheetHeader>
             <SheetTitle>Level Up - Level {nextLevel}</SheetTitle>
             <SheetDescription>
               Current Level: {state.level} | Experience: {Math.floor(state.experience)}/{nextLevelConfig?.experienceRequired || 0}
             </SheetDescription>
           </SheetHeader>
-          <ScrollArea className="h-full mt-4 px-4">
+          <ScrollArea className="h-[calc(100%-5rem)] mt-4 px-4">
             {nextLevelConfig ? (
               <div className="space-y-4 pb-20">
                 <Card>

@@ -4,13 +4,21 @@ import { storage } from "./storage";
 import multer from "multer";
 import path from "path";
 import { fileURLToPath } from "url";
+import fs from "fs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const storageConfig = multer.diskStorage({
-  destination: function (_req, _file, cb) {
-    cb(null, path.join(__dirname, "..", "uploads"));
+  destination: function (req, _file, cb) {
+    const characterId = req.body.characterId || 'default';
+    const uploadPath = path.join(__dirname, "..", "uploads", "characters", characterId);
+    
+    if (!fs.existsSync(uploadPath)) {
+      fs.mkdirSync(uploadPath, { recursive: true });
+    }
+    
+    cb(null, uploadPath);
   },
   filename: function (_req, file, cb) {
     const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
@@ -40,7 +48,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(400).json({ error: "No file uploaded" });
     }
     
-    const fileUrl = `/uploads/${req.file.filename}`;
+    const characterId = req.body.characterId || 'default';
+    const fileUrl = `/uploads/characters/${characterId}/${req.file.filename}`;
     res.json({ url: fileUrl });
   });
 

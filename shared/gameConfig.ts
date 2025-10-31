@@ -35,6 +35,7 @@ export interface ImageConfig {
     event: boolean;
     random: boolean;
   };
+  poses: string[];
 }
 
 export interface LevelRequirement {
