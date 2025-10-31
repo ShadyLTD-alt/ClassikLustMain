@@ -1,0 +1,281 @@
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import { DEFAULT_UPGRADES, DEFAULT_CHARACTERS, calculateUpgradeCost, calculateUpgradeValue, type UpgradeConfig, type CharacterConfig, type ImageConfig } from '@shared/gameConfig';
+
+interface GameState {
+  points: number;
+  energy: number;
+  maxEnergy: number;
+  level: number;
+  experience: number;
+  selectedCharacterId: string;
+  selectedImageId: string | null;
+  upgrades: Record<string, number>;
+  unlockedCharacters: string[];
+  unlockedImages: string[];
+  passiveIncomeRate: number;
+  passiveIncomeCap: number;
+  energyRegenRate: number;
+  isAdmin: boolean;
+}
+
+interface GameContextType {
+  state: GameState;
+  upgrades: UpgradeConfig[];
+  characters: CharacterConfig[];
+  images: ImageConfig[];
+  tap: () => void;
+  purchaseUpgrade: (upgradeId: string) => boolean;
+  selectCharacter: (characterId: string) => void;
+  selectImage: (imageId: string) => void;
+  toggleAdmin: () => void;
+  updateUpgradeConfig: (upgrade: UpgradeConfig) => void;
+  updateCharacterConfig: (character: CharacterConfig) => void;
+  addImage: (image: ImageConfig) => void;
+  removeImage: (imageId: string) => void;
+  resetGame: () => void;
+}
+
+const GameContext = createContext<GameContextType | undefined>(undefined);
+
+const INITIAL_STATE: GameState = {
+  points: 0,
+  energy: 1000,
+  maxEnergy: 1000,
+  level: 1,
+  experience: 0,
+  selectedCharacterId: 'starter',
+  selectedImageId: null,
+  upgrades: {},
+  unlockedCharacters: ['starter'],
+  unlockedImages: [],
+  passiveIncomeRate: 0,
+  passiveIncomeCap: 10000,
+  energyRegenRate: 1,
+  isAdmin: false
+};
+
+export function GameProvider({ children }: { children: ReactNode }) {
+  const [state, setState] = useState<GameState>(() => {
+    const saved = localStorage.getItem('gameState');
+    return saved ? { ...INITIAL_STATE, ...JSON.parse(saved) } : INITIAL_STATE;
+  });
+
+  const [upgrades, setUpgrades] = useState<UpgradeConfig[]>(() => {
+    const saved = localStorage.getItem('upgradeConfigs');
+    return saved ? JSON.parse(saved) : DEFAULT_UPGRADES;
+  });
+
+  const [characters, setCharacters] = useState<CharacterConfig[]>(() => {
+    const saved = localStorage.getItem('characterConfigs');
+    return saved ? JSON.parse(saved) : DEFAULT_CHARACTERS;
+  });
+
+  const [images, setImages] = useState<ImageConfig[]>(() => {
+    const saved = localStorage.getItem('imageConfigs');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('gameState', JSON.stringify(state));
+  }, [state]);
+
+  useEffect(() => {
+    localStorage.setItem('upgradeConfigs', JSON.stringify(upgrades));
+  }, [upgrades]);
+
+  useEffect(() => {
+    localStorage.setItem('characterConfigs', JSON.stringify(characters));
+  }, [characters]);
+
+  useEffect(() => {
+    localStorage.setItem('imageConfigs', JSON.stringify(images));
+  }, [images]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setState(prev => {
+        let newEnergy = Math.min(prev.maxEnergy, prev.energy + prev.energyRegenRate);
+        let newPoints = prev.points;
+        
+        if (prev.passiveIncomeRate > 0 && prev.points < prev.passiveIncomeCap) {
+          const incomePerSecond = prev.passiveIncomeRate / 3600;
+          newPoints = Math.min(prev.passiveIncomeCap, prev.points + incomePerSecond);
+        }
+
+        if (newEnergy === prev.energy && newPoints === prev.points) {
+          return prev;
+        }
+
+        return { ...prev, energy: newEnergy, points: newPoints };
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const tap = useCallback(() => {
+    setState(prev => {
+      if (prev.energy < 1) return prev;
+
+      const tapPowerUpgrades = upgrades.filter(u => u.type === 'perTap');
+      let tapValue = 1;
+      
+      tapPowerUpgrades.forEach(upgrade => {
+        const level = prev.upgrades[upgrade.id] || 0;
+        tapValue += calculateUpgradeValue(upgrade, level);
+      });
+
+      const newPoints = prev.points + tapValue;
+      const newExp = prev.experience + tapValue;
+      const expNeeded = prev.level * 100;
+      let newLevel = prev.level;
+      let remainingExp = newExp;
+
+      if (newExp >= expNeeded) {
+        newLevel++;
+        remainingExp = newExp - expNeeded;
+      }
+
+      const newUnlockedChars = characters
+        .filter(c => c.unlockLevel <= newLevel && !prev.unlockedCharacters.includes(c.id))
+        .map(c => c.id);
+
+      return {
+        ...prev,
+        points: newPoints,
+        energy: prev.energy - 1,
+        experience: remainingExp,
+        level: newLevel,
+        unlockedCharacters: [...prev.unlockedCharacters, ...newUnlockedChars]
+      };
+    });
+  }, [upgrades, characters]);
+
+  const purchaseUpgrade = useCallback((upgradeId: string) => {
+    const upgrade = upgrades.find(u => u.id === upgradeId);
+    if (!upgrade) return false;
+
+    const currentLevel = state.upgrades[upgradeId] || 0;
+    if (currentLevel >= upgrade.maxLevel) return false;
+
+    const cost = calculateUpgradeCost(upgrade, currentLevel);
+    if (state.points < cost) return false;
+
+    setState(prev => {
+      const newLevel = currentLevel + 1;
+      const newUpgrades = { ...prev.upgrades, [upgradeId]: newLevel };
+      
+      const perHourUpgrades = upgrades.filter(u => u.type === 'perHour');
+      let newPassiveRate = 0;
+      perHourUpgrades.forEach(u => {
+        const lvl = newUpgrades[u.id] || 0;
+        newPassiveRate += calculateUpgradeValue(u, lvl);
+      });
+
+      const energyUpgrades = upgrades.filter(u => u.type === 'energyMax' && u.id === 'energy-capacity');
+      let newMaxEnergy = 1000;
+      energyUpgrades.forEach(u => {
+        const lvl = newUpgrades[u.id] || 0;
+        newMaxEnergy = calculateUpgradeValue(u, lvl);
+      });
+
+      const regenUpgrades = upgrades.filter(u => u.type === 'energyMax' && u.id === 'energy-regen');
+      let newRegenRate = 1;
+      regenUpgrades.forEach(u => {
+        const lvl = newUpgrades[u.id] || 0;
+        newRegenRate = calculateUpgradeValue(u, lvl);
+      });
+
+      return {
+        ...prev,
+        points: prev.points - cost,
+        upgrades: newUpgrades,
+        passiveIncomeRate: newPassiveRate,
+        maxEnergy: newMaxEnergy,
+        energyRegenRate: newRegenRate
+      };
+    });
+
+    return true;
+  }, [state.upgrades, state.points, upgrades]);
+
+  const selectCharacter = useCallback((characterId: string) => {
+    if (state.unlockedCharacters.includes(characterId)) {
+      setState(prev => ({ ...prev, selectedCharacterId: characterId, selectedImageId: null }));
+    }
+  }, [state.unlockedCharacters]);
+
+  const selectImage = useCallback((imageId: string) => {
+    setState(prev => ({ ...prev, selectedImageId: imageId }));
+  }, []);
+
+  const toggleAdmin = useCallback(() => {
+    setState(prev => ({ ...prev, isAdmin: !prev.isAdmin }));
+  }, []);
+
+  const updateUpgradeConfig = useCallback((upgrade: UpgradeConfig) => {
+    setUpgrades(prev => {
+      const index = prev.findIndex(u => u.id === upgrade.id);
+      if (index >= 0) {
+        const newUpgrades = [...prev];
+        newUpgrades[index] = upgrade;
+        return newUpgrades;
+      }
+      return [...prev, upgrade];
+    });
+  }, []);
+
+  const updateCharacterConfig = useCallback((character: CharacterConfig) => {
+    setCharacters(prev => {
+      const index = prev.findIndex(c => c.id === character.id);
+      if (index >= 0) {
+        const newChars = [...prev];
+        newChars[index] = character;
+        return newChars;
+      }
+      return [...prev, character];
+    });
+  }, []);
+
+  const addImage = useCallback((image: ImageConfig) => {
+    setImages(prev => [...prev, image]);
+  }, []);
+
+  const removeImage = useCallback((imageId: string) => {
+    setImages(prev => prev.filter(img => img.id !== imageId));
+  }, []);
+
+  const resetGame = useCallback(() => {
+    setState(INITIAL_STATE);
+    setUpgrades(DEFAULT_UPGRADES);
+    setCharacters(DEFAULT_CHARACTERS);
+    setImages([]);
+  }, []);
+
+  return (
+    <GameContext.Provider value={{
+      state,
+      upgrades,
+      characters,
+      images,
+      tap,
+      purchaseUpgrade,
+      selectCharacter,
+      selectImage,
+      toggleAdmin,
+      updateUpgradeConfig,
+      updateCharacterConfig,
+      addImage,
+      removeImage,
+      resetGame
+    }}>
+      {children}
+    </GameContext.Provider>
+  );
+}
+
+export function useGame() {
+  const context = useContext(GameContext);
+  if (!context) throw new Error('useGame must be used within GameProvider');
+  return context;
+}
