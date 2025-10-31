@@ -11,7 +11,7 @@ import CharacterGallery from './CharacterGallery';
 import { useToast } from '@/hooks/use-toast';
 
 export default function BottomNav() {
-  const { state, upgrades, levelConfigs, canLevelUp, levelUp } = useGame();
+  const { state, upgrades, levelConfigs, canLevelUp, levelUp, characters, images } = useGame();
   const { toast } = useToast();
   const [activeSheet, setActiveSheet] = useState<string | null>(null);
 
@@ -21,6 +21,8 @@ export default function BottomNav() {
 
   const nextLevel = state.level + 1;
   const nextLevelConfig = levelConfigs.find(lc => lc.level === nextLevel);
+  const currentCharacter = characters.find(c => c.id === state.selectedCharacterId);
+  const currentAvatar = state.selectedAvatarId ? images.find(i => i.id === state.selectedAvatarId) : null;
 
   const handleLevelUp = () => {
     if (levelUp()) {
@@ -42,8 +44,10 @@ export default function BottomNav() {
           onClick={() => setActiveSheet(activeSheet === 'characters' ? null : 'characters')}
           data-testid="nav-avatar"
         >
-          {state.currentCharacter?.avatarUrl ? (
-            <img src={state.currentCharacter.avatarUrl} alt="Avatar" className="w-12 h-12 rounded-full object-cover border-2 border-primary" />
+          {currentAvatar?.url ? (
+            <img src={currentAvatar.url} alt="Avatar" className="w-12 h-12 rounded-full object-cover border-2 border-primary" />
+          ) : currentCharacter?.avatarUrl ? (
+            <img src={currentCharacter.avatarUrl} alt="Avatar" className="w-12 h-12 rounded-full object-cover border-2 border-primary" />
           ) : (
             <UserCircle className="w-12 h-12 text-muted-foreground" />
           )}
