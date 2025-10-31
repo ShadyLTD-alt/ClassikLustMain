@@ -58,12 +58,12 @@ export interface ThemeConfig {
   muted: string;
 }
 
-import tapPowerData from '../src/game-data/upgrades/tap-power.json';
-import criticalChanceData from '../src/game-data/upgrades/critical-chance.json';
-import passiveIncomeData from '../src/game-data/upgrades/passive-income.json';
-import incomeMultiplierData from '../src/game-data/upgrades/income-multiplier.json';
-import energyCapacityData from '../src/game-data/upgrades/energy-capacity.json';
-import energyRegenData from '../src/game-data/upgrades/energy-regen.json';
+import tapPowerData from '../client/src/game-data/upgrades/tap-power.json';
+import criticalChanceData from '../client/src/game-data/upgrades/critical-chance.json';
+import passiveIncomeData from '../client/src/game-data/upgrades/passive-income.json';
+import incomeMultiplierData from '../client/src/game-data/upgrades/income-multiplier.json';
+import energyCapacityData from '../client/src/game-data/upgrades/energy-capacity.json';
+import energyRegenData from '../client/src/game-data/upgrades/energy-regen.json';
 
 export const DEFAULT_UPGRADES: UpgradeConfig[] = [
   tapPowerData as UpgradeConfig,
@@ -86,11 +86,11 @@ export const DEFAULT_CHARACTERS: CharacterConfig[] = [
   darkAssassinData as CharacterConfig
 ];
 
-import level2Data from '../src/game-data/levelup/level-2.json';
-import level3Data from '../src/game-data/levelup/level-3.json';
-import level5Data from '../src/game-data/levelup/level-5.json';
-import level10Data from '../src/game-data/levelup/level-10.json';
-import level20Data from '../src/game-data/levelup/level-20.json';
+import level2Data from '../client/src/game-data/levelup/level-2.json';
+import level3Data from '../client/src/game-data/levelup/level-3.json';
+import level5Data from '../client/src/game-data/levelup/level-5.json';
+import level10Data from '../client/src/game-data/levelup/level-10.json';
+import level20Data from '../client/src/game-data/levelup/level-20.json';
 
 export const DEFAULT_LEVEL_CONFIGS: LevelConfig[] = [
   level2Data as LevelConfig,
