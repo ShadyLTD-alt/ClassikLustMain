@@ -13,14 +13,16 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import ImageUploader from '@/components/ImageUploader';
 import type { UpgradeConfig, CharacterConfig, LevelConfig, ThemeConfig } from '@shared/gameConfig';
+import upgradeTemplates from '@/game-data/upgrade-templates.json';
 
 export default function AdminPanel() {
-  const { state, upgrades, characters, levelConfigs, theme, updateUpgradeConfig, updateCharacterConfig, updateLevelConfig, updateTheme, resetGame } = useGame();
+  const { state, upgrades, characters, levelConfigs, theme, updateUpgradeConfig, updateCharacterConfig, updateLevelConfig, updateTheme, deleteUpgrade, deleteCharacter, deleteLevel, resetGame } = useGame();
   const { toast } = useToast();
   const [editingUpgrade, setEditingUpgrade] = useState<UpgradeConfig | null>(null);
   const [editingCharacter, setEditingCharacter] = useState<CharacterConfig | null>(null);
   const [editingLevel, setEditingLevel] = useState<LevelConfig | null>(null);
   const [editingTheme, setEditingTheme] = useState<ThemeConfig | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<string>('');
 
   if (!state.isAdmin) return null;
 
@@ -96,21 +98,89 @@ export default function AdminPanel() {
           </TabsList>
 
           <TabsContent value="upgrades" className="space-y-4">
-            <ScrollArea className="h-[500px]">
+            <div className="flex gap-3 mb-3">
+              <Select
+                value={selectedTemplate}
+                onValueChange={setSelectedTemplate}
+              >
+                <SelectTrigger className="w-[250px]" data-testid="select-upgrade-template">
+                  <SelectValue placeholder="Select template..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {upgradeTemplates.templates.map(template => (
+                    <SelectItem key={template.id} value={template.id}>
+                      {template.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                onClick={() => {
+                  const template = upgradeTemplates.templates.find(t => t.id === selectedTemplate);
+                  if (template) {
+                    setEditingUpgrade({
+                      id: `upgrade-${Date.now()}`,
+                      name: template.name,
+                      description: template.description,
+                      maxLevel: template.fields.maxLevel.default,
+                      baseCost: template.fields.baseCost.default,
+                      costMultiplier: template.fields.costMultiplier.default,
+                      baseValue: template.fields.baseValue.default,
+                      valueIncrement: template.fields.valueIncrement.default,
+                      icon: template.icon,
+                      type: template.type as any
+                    });
+                  } else {
+                    setEditingUpgrade({
+                      id: `upgrade-${Date.now()}`,
+                      name: 'New Upgrade',
+                      description: 'Description',
+                      maxLevel: 30,
+                      baseCost: 10,
+                      costMultiplier: 1.15,
+                      baseValue: 1,
+                      valueIncrement: 1,
+                      icon: 'Hand',
+                      type: 'perTap'
+                    });
+                  }
+                }}
+                disabled={!selectedTemplate}
+                data-testid="button-create-upgrade"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Create from Template
+              </Button>
+            </div>
+            <ScrollArea className="h-[450px]">
               <div className="space-y-3 pr-4">
                 {upgrades.map(upgrade => (
                   <Card key={upgrade.id}>
                     <CardHeader>
                       <div className="flex justify-between items-center">
                         <h3 className="font-semibold">{upgrade.name}</h3>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setEditingUpgrade(upgrade)}
-                          data-testid={`button-edit-upgrade-${upgrade.id}`}
-                        >
-                          Edit
-                        </Button>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setEditingUpgrade(upgrade)}
+                            data-testid={`button-edit-upgrade-${upgrade.id}`}
+                          >
+                            Edit
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => {
+                              if (confirm(`Delete upgrade "${upgrade.name}"?`)) {
+                                deleteUpgrade(upgrade.id);
+                              }
+                            }}
+                            data-testid={`button-delete-upgrade-${upgrade.id}`}
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </div>
                       </div>
                     </CardHeader>
                     {editingUpgrade?.id === upgrade.id && (
@@ -198,21 +268,53 @@ export default function AdminPanel() {
           </TabsContent>
 
           <TabsContent value="characters" className="space-y-4">
-            <ScrollArea className="h-[500px]">
+            <div className="flex justify-end mb-3">
+              <Button
+                onClick={() => setEditingCharacter({
+                  id: `character-${Date.now()}`,
+                  name: 'New Character',
+                  description: 'Description',
+                  unlockLevel: 1,
+                  rarity: 'common',
+                  defaultImage: '',
+                  avatarImage: '',
+                  displayImage: ''
+                })}
+                data-testid="button-create-character"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Create Character
+              </Button>
+            </div>
+            <ScrollArea className="h-[450px]">
               <div className="space-y-3 pr-4">
                 {characters.map(character => (
                   <Card key={character.id}>
                     <CardHeader>
                       <div className="flex justify-between items-center">
                         <h3 className="font-semibold">{character.name}</h3>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setEditingCharacter(character)}
-                          data-testid={`button-edit-character-${character.id}`}
-                        >
-                          Edit
-                        </Button>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setEditingCharacter(character)}
+                            data-testid={`button-edit-character-${character.id}`}
+                          >
+                            Edit
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => {
+                              if (confirm(`Delete character "${character.name}"?`)) {
+                                deleteCharacter(character.id);
+                              }
+                            }}
+                            data-testid={`button-delete-character-${character.id}`}
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </div>
                       </div>
                     </CardHeader>
                     {editingCharacter?.id === character.id && (
@@ -278,21 +380,49 @@ export default function AdminPanel() {
           </TabsContent>
 
           <TabsContent value="levels" className="space-y-4">
-            <ScrollArea className="h-[500px]">
+            <div className="flex justify-end mb-3">
+              <Button
+                onClick={() => setEditingLevel({
+                  level: levelConfigs.length + 1,
+                  experienceRequired: 100,
+                  requirements: [],
+                  unlocks: []
+                })}
+                data-testid="button-create-level"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Create Level
+              </Button>
+            </div>
+            <ScrollArea className="h-[450px]">
               <div className="space-y-3 pr-4">
                 {levelConfigs.map(levelConfig => (
                   <Card key={levelConfig.level}>
                     <CardHeader>
                       <div className="flex justify-between items-center">
                         <h3 className="font-semibold">Level {levelConfig.level}</h3>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setEditingLevel(levelConfig)}
-                          data-testid={`button-edit-level-${levelConfig.level}`}
-                        >
-                          Edit
-                        </Button>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setEditingLevel(levelConfig)}
+                            data-testid={`button-edit-level-${levelConfig.level}`}
+                          >
+                            Edit
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => {
+                              if (confirm(`Delete Level ${levelConfig.level}?`)) {
+                                deleteLevel(levelConfig.level);
+                              }
+                            }}
+                            data-testid={`button-delete-level-${levelConfig.level}`}
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </div>
                       </div>
                     </CardHeader>
                     {editingLevel?.level === levelConfig.level && (

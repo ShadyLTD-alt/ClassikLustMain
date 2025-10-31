@@ -39,6 +39,9 @@ interface GameContextType {
   addImage: (image: ImageConfig) => void;
   updateImage: (image: ImageConfig) => void;
   removeImage: (imageId: string) => void;
+  deleteUpgrade: (upgradeId: string) => void;
+  deleteCharacter: (characterId: string) => void;
+  deleteLevel: (level: number) => void;
   updateLevelConfig: (levelConfig: LevelConfig) => void;
   updateTheme: (theme: ThemeConfig) => void;
   resetGame: () => void;
@@ -128,7 +131,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       setState(prev => {
         let newEnergy = Math.min(prev.maxEnergy, prev.energy + prev.energyRegenRate);
         let newPoints = prev.points;
-        
+
         if (prev.passiveIncomeRate > 0 && prev.points < prev.passiveIncomeCap) {
           const incomePerSecond = prev.passiveIncomeRate / 3600;
           newPoints = Math.min(prev.passiveIncomeCap, prev.points + incomePerSecond);
@@ -151,7 +154,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
       const tapPowerUpgrades = upgrades.filter(u => u.type === 'perTap');
       let tapValue = 1;
-      
+
       tapPowerUpgrades.forEach(upgrade => {
         const level = prev.upgrades[upgrade.id] || 0;
         tapValue += calculateUpgradeValue(upgrade, level);
@@ -196,7 +199,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     setState(prev => {
       const newLevel = currentLevel + 1;
       const newUpgrades = { ...prev.upgrades, [upgradeId]: newLevel };
-      
+
       const perHourUpgrades = upgrades.filter(u => u.type === 'perHour');
       let newPassiveRate = 0;
       perHourUpgrades.forEach(u => {
@@ -249,7 +252,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     const nextLevel = state.level + 1;
     const nextLevelConfig = levelConfigs.find(lc => lc.level === nextLevel);
     if (!nextLevelConfig) return false;
-    
+
     const meetsRequirements = checkLevelRequirements(nextLevelConfig, state.upgrades);
     const hasEnoughExp = state.experience >= nextLevelConfig.experienceRequired;
     return meetsRequirements && hasEnoughExp;
@@ -326,6 +329,32 @@ export function GameProvider({ children }: { children: ReactNode }) {
     setImages(prev => prev.filter(img => img.id !== imageId));
   }, []);
 
+  const deleteUpgrade = useCallback((upgradeId: string) => {
+    setUpgrades(prev => prev.filter(u => u.id !== upgradeId));
+    setState(prev => {
+      const newUpgradesState = { ...prev.upgrades };
+      delete newUpgradesState[upgradeId];
+      return { ...prev, upgrades: newUpgradesState };
+    });
+  }, []);
+
+  const deleteCharacter = useCallback((characterId: string) => {
+    setCharacters(prev => prev.filter(c => c.id !== characterId));
+    setState(prev => {
+      const newUnlockedCharacters = prev.unlockedCharacters.filter(id => id !== characterId);
+      let newSelectedCharacterId = prev.selectedCharacterId;
+      if (prev.selectedCharacterId === characterId) {
+        newSelectedCharacterId = 'starter';
+      }
+      return { ...prev, unlockedCharacters: newUnlockedCharacters, selectedCharacterId: newSelectedCharacterId };
+    });
+  }, []);
+
+  const deleteLevel = useCallback((levelToDelete: number) => {
+    setLevelConfigs(prev => prev.filter(lc => lc.level !== levelToDelete));
+    // Potentially need to adjust game state if a level is deleted that the player has passed
+  }, []);
+
   const updateLevelConfig = useCallback((levelConfig: LevelConfig) => {
     setLevelConfigs(prev => {
       const index = prev.findIndex(lc => lc.level === levelConfig.level);
@@ -373,6 +402,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
       addImage,
       updateImage,
       removeImage,
+      deleteUpgrade,
+      deleteCharacter,
+      deleteLevel,
       updateLevelConfig,
       updateTheme,
       resetGame

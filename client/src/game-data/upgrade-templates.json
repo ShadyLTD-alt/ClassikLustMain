@@ -1,0 +1,89 @@
+
+{
+  "templates": [
+    {
+      "id": "perTap",
+      "name": "Points Per Tap",
+      "description": "Increases points earned per tap",
+      "type": "perTap",
+      "icon": "Hand",
+      "fields": {
+        "baseValue": { "label": "Base Tap Value", "default": 1, "min": 0 },
+        "valueIncrement": { "label": "Value Per Level", "default": 1, "min": 0 },
+        "baseCost": { "label": "Base Cost", "default": 10, "min": 1 },
+        "costMultiplier": { "label": "Cost Multiplier", "default": 1.15, "min": 1, "step": 0.01 },
+        "maxLevel": { "label": "Max Level", "default": 30, "min": 1 }
+      }
+    },
+    {
+      "id": "perHour",
+      "name": "Points Per Hour",
+      "description": "Passive income generation",
+      "type": "perHour",
+      "icon": "Clock",
+      "fields": {
+        "baseValue": { "label": "Base Hourly Income", "default": 10, "min": 0 },
+        "valueIncrement": { "label": "Income Per Level", "default": 10, "min": 0 },
+        "baseCost": { "label": "Base Cost", "default": 100, "min": 1 },
+        "costMultiplier": { "label": "Cost Multiplier", "default": 1.25, "min": 1, "step": 0.01 },
+        "maxLevel": { "label": "Max Level", "default": 30, "min": 1 }
+      }
+    },
+    {
+      "id": "energyMax",
+      "name": "Energy Maximum",
+      "description": "Maximum energy capacity",
+      "type": "energyMax",
+      "icon": "Zap",
+      "fields": {
+        "baseValue": { "label": "Base Energy", "default": 1000, "min": 0 },
+        "valueIncrement": { "label": "Energy Per Level", "default": 100, "min": 0 },
+        "baseCost": { "label": "Base Cost", "default": 200, "min": 1 },
+        "costMultiplier": { "label": "Cost Multiplier", "default": 1.18, "min": 1, "step": 0.01 },
+        "maxLevel": { "label": "Max Level", "default": 30, "min": 1 }
+      }
+    },
+    {
+      "id": "criticalChance",
+      "name": "Critical Hit",
+      "description": "Chance for bonus tap multiplier",
+      "type": "perTap",
+      "icon": "Sparkles",
+      "fields": {
+        "baseValue": { "label": "Base Crit Chance %", "default": 0, "min": 0, "max": 100 },
+        "valueIncrement": { "label": "Crit Chance Per Level", "default": 0.5, "min": 0, "step": 0.1 },
+        "baseCost": { "label": "Base Cost", "default": 50, "min": 1 },
+        "costMultiplier": { "label": "Cost Multiplier", "default": 1.2, "min": 1, "step": 0.01 },
+        "maxLevel": { "label": "Max Level", "default": 30, "min": 1 }
+      }
+    },
+    {
+      "id": "incomeMultiplier",
+      "name": "Income Multiplier",
+      "description": "Multiplies passive income",
+      "type": "perHour",
+      "icon": "TrendingUp",
+      "fields": {
+        "baseValue": { "label": "Base Multiplier %", "default": 0, "min": 0 },
+        "valueIncrement": { "label": "Multiplier Per Level", "default": 5, "min": 0 },
+        "baseCost": { "label": "Base Cost", "default": 500, "min": 1 },
+        "costMultiplier": { "label": "Cost Multiplier", "default": 1.3, "min": 1, "step": 0.01 },
+        "maxLevel": { "label": "Max Level", "default": 30, "min": 1 }
+      }
+    },
+    {
+      "id": "energyRegen",
+      "name": "Energy Regeneration",
+      "description": "Energy recovery rate",
+      "type": "energyMax",
+      "icon": "Battery",
+      "fields": {
+        "baseValue": { "label": "Base Regen Rate", "default": 1, "min": 0, "step": 0.1 },
+        "valueIncrement": { "label": "Regen Per Level", "default": 0.5, "min": 0, "step": 0.1 },
+        "baseCost": { "label": "Base Cost", "default": 300, "min": 1 },
+        "costMultiplier": { "label": "Cost Multiplier", "default": 1.22, "min": 1, "step": 0.01 },
+        "maxLevel": { "label": "Max Level", "default": 30, "min": 1 }
+      }
+    }
+  ]
+}
