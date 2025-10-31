@@ -430,7 +430,7 @@ export default function AdminPanel() {
           </TabsContent>
 
           <TabsContent value="images" className="space-y-4">
-            <ImageUploader adminMode />
+            <ImageUploader adminMode={true} />
           </TabsContent>
 
           <TabsContent value="theme" className="space-y-4">
