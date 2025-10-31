@@ -29,13 +29,14 @@ export interface ImageConfig {
   unlockLevel: number;
   isAvatar: boolean;
   isDisplay: boolean;
+  imageType: 'character' | 'avatar' | 'vip' | 'other';
   categories: {
     nsfw: boolean;
     vip: boolean;
     event: boolean;
     random: boolean;
   };
-  poses: string[];
+  poses?: string[];
 }
 
 export interface LevelRequirement {

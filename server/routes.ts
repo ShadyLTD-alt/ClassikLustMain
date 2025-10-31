@@ -12,7 +12,8 @@ const __dirname = path.dirname(__filename);
 const storageConfig = multer.diskStorage({
   destination: function (req, _file, cb) {
     const characterId = req.body.characterId || 'default';
-    const uploadPath = path.join(__dirname, "..", "uploads", "characters", characterId);
+    const imageType = req.body.imageType || 'character';
+    const uploadPath = path.join(__dirname, "..", "uploads", "characters", characterId, imageType);
     
     if (!fs.existsSync(uploadPath)) {
       fs.mkdirSync(uploadPath, { recursive: true });
@@ -49,7 +50,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     
     const characterId = req.body.characterId || 'default';
-    const fileUrl = `/uploads/characters/${characterId}/${req.file.filename}`;
+    const imageType = req.body.imageType || 'character';
+    const fileUrl = `/uploads/characters/${characterId}/${imageType}/${req.file.filename}`;
     res.json({ url: fileUrl });
   });
 

@@ -26,6 +26,7 @@ export default function ImageUploader({ adminMode = false }: ImageUploaderProps)
     random: false
   });
   const [unlockLevel, setUnlockLevel] = useState(1);
+  const [imageType, setImageType] = useState<'character' | 'avatar' | 'vip' | 'other'>('character');
   const [editingImage, setEditingImage] = useState<ImageConfig | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -81,6 +82,7 @@ export default function ImageUploader({ adminMode = false }: ImageUploaderProps)
     const formData = new FormData();
     formData.append('image', selectedFile);
     formData.append('characterId', selectedCharacterId);
+    formData.append('imageType', imageType);
 
     try {
       const response = await fetch('/api/upload', {
@@ -101,6 +103,7 @@ export default function ImageUploader({ adminMode = false }: ImageUploaderProps)
         unlockLevel: unlockLevel,
         isAvatar: false,
         isDisplay: false,
+        imageType: imageType,
         categories: { ...categories },
         poses: selectedPoses
       });
@@ -108,6 +111,7 @@ export default function ImageUploader({ adminMode = false }: ImageUploaderProps)
       setSelectedFile(null);
       setPreviewUrl(null);
       setUnlockLevel(1);
+      setImageType('character');
       setCategories({ nsfw: false, vip: false, event: false, random: false });
       setSelectedPoses([]);
     } catch (error) {
@@ -120,6 +124,7 @@ export default function ImageUploader({ adminMode = false }: ImageUploaderProps)
     setSelectedFile(null);
     setPreviewUrl(null);
     setUnlockLevel(1);
+    setImageType('character');
     setCategories({ nsfw: false, vip: false, event: false, random: false });
     setSelectedPoses([]);
   };
@@ -152,6 +157,21 @@ export default function ImageUploader({ adminMode = false }: ImageUploaderProps)
                       {char.name}
                     </SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="image-type-select">Image Type</Label>
+              <Select value={imageType} onValueChange={(value: any) => setImageType(value)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select image type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="character">Character</SelectItem>
+                  <SelectItem value="avatar">Avatar</SelectItem>
+                  <SelectItem value="vip">VIP</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -349,6 +369,7 @@ export default function ImageUploader({ adminMode = false }: ImageUploaderProps)
 
                   <div className="absolute bottom-0 left-0 right-0 bg-background/90 p-1 flex flex-wrap gap-1">
                     <Badge variant="outline" className="text-xs px-1">Lv.{image.unlockLevel}</Badge>
+                    {image.imageType && <Badge className="text-xs px-1 capitalize">{image.imageType}</Badge>}
                     {image.categories.nsfw && <Badge variant="destructive" className="text-xs px-1">NSFW</Badge>}
                     {image.categories.vip && <Badge variant="secondary" className="text-xs px-1">VIP</Badge>}
                     {image.categories.event && <Badge className="text-xs px-1">Event</Badge>}
@@ -378,6 +399,43 @@ export default function ImageUploader({ adminMode = false }: ImageUploaderProps)
             </DialogHeader>
             {editingImage && (
               <div className="space-y-4">
+                <div>
+                  <Label>Character</Label>
+                  <Select 
+                    value={editingImage.characterId} 
+                    onValueChange={(value) => setEditingImage({ ...editingImage, characterId: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {characters.map(char => (
+                        <SelectItem key={char.id} value={char.id}>
+                          {char.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label>Image Type</Label>
+                  <Select 
+                    value={editingImage.imageType || 'character'} 
+                    onValueChange={(value: any) => setEditingImage({ ...editingImage, imageType: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="character">Character</SelectItem>
+                      <SelectItem value="avatar">Avatar</SelectItem>
+                      <SelectItem value="vip">VIP</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 <div>
                   <Label>Unlock Level</Label>
                   <Input
