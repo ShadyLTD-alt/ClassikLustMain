@@ -6,7 +6,6 @@ interface GameState {
   energy: number;
   maxEnergy: number;
   level: number;
-  experience: number;
   selectedCharacterId: string;
   selectedImageId: string | null;
   selectedAvatarId: string | null;
@@ -54,7 +53,6 @@ const INITIAL_STATE: GameState = {
   energy: 1000,
   maxEnergy: 1000,
   level: 1,
-  experience: 0,
   selectedCharacterId: 'starter',
   selectedImageId: null,
   selectedAvatarId: null,
@@ -161,27 +159,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
       });
 
       const newPoints = prev.points + tapValue;
-      const newExp = prev.experience + tapValue;
-      const expNeeded = prev.level * 100;
-      let newLevel = prev.level;
-      let remainingExp = newExp;
-
-      if (newExp >= expNeeded) {
-        newLevel++;
-        remainingExp = newExp - expNeeded;
-      }
-
-      const newUnlockedChars = characters
-        .filter(c => c.unlockLevel <= newLevel && !prev.unlockedCharacters.includes(c.id))
-        .map(c => c.id);
 
       return {
         ...prev,
         points: newPoints,
-        energy: prev.energy - 1,
-        experience: remainingExp,
-        level: newLevel,
-        unlockedCharacters: [...prev.unlockedCharacters, ...newUnlockedChars]
+        energy: prev.energy - 1
       };
     });
   }, [upgrades, characters]);
@@ -254,9 +236,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
     if (!nextLevelConfig) return false;
 
     const meetsRequirements = checkLevelRequirements(nextLevelConfig, state.upgrades);
-    const hasEnoughExp = state.experience >= nextLevelConfig.experienceRequired;
-    return meetsRequirements && hasEnoughExp;
-  }, [state.level, state.experience, state.upgrades, levelConfigs]);
+    const hasEnoughPoints = state.points >= nextLevelConfig.cost;
+    return meetsRequirements && hasEnoughPoints;
+  }, [state.level, state.points, state.upgrades, levelConfigs]);
 
   const levelUp = useCallback(() => {
     if (!canLevelUp()) return false;
@@ -273,7 +255,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       return {
         ...prev,
         level: nextLevel,
-        experience: 0,
+        points: prev.points - levelConfig.cost,
         unlockedCharacters: [...prev.unlockedCharacters, ...newUnlockedChars]
       };
     });

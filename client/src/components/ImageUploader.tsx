@@ -33,6 +33,7 @@ export default function ImageUploader({ adminMode = false }: ImageUploaderProps)
   const [selectedCharacterId, setSelectedCharacterId] = useState(state.selectedCharacterId);
   const [selectedPoses, setSelectedPoses] = useState<string[]>([]);
   const [newPoseInput, setNewPoseInput] = useState('');
+  const [isHidden, setIsHidden] = useState(false);
   const [availablePoses, setAvailablePoses] = useState<string[]>(() => {
     const saved = localStorage.getItem('availablePoses');
     return saved ? JSON.parse(saved) : ['sitting', 'standing', 'casual', 'formal', 'bikini', 'dress'];
@@ -46,7 +47,9 @@ export default function ImageUploader({ adminMode = false }: ImageUploaderProps)
     setSelectedCharacterId(state.selectedCharacterId);
   }, [state.selectedCharacterId]);
 
-  const characterImages = images.filter(img => img.characterId === selectedCharacterId);
+  const characterImages = adminMode 
+    ? images.filter(img => img.characterId === selectedCharacterId)
+    : images.filter(img => img.characterId === selectedCharacterId && !img.isHidden);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -113,7 +116,8 @@ export default function ImageUploader({ adminMode = false }: ImageUploaderProps)
         isDisplay: false,
         imageType: imageType,
         categories: { ...categories },
-        poses: selectedPoses
+        poses: selectedPoses,
+        isHidden: isHidden
       });
       
       setSelectedFile(null);
@@ -122,6 +126,7 @@ export default function ImageUploader({ adminMode = false }: ImageUploaderProps)
       setImageType('character');
       setCategories({ nsfw: false, vip: false, event: false, random: false });
       setSelectedPoses([]);
+      setIsHidden(false);
     } catch (error) {
       console.error('Upload error:', error);
       alert('Failed to upload image');
@@ -223,6 +228,18 @@ export default function ImageUploader({ adminMode = false }: ImageUploaderProps)
                     onChange={(e) => setUnlockLevel(parseInt(e.target.value) || 1)}
                     data-testid="input-unlock-level"
                   />
+                </div>
+
+                <div>
+                  <div className="flex items-center space-x-2 mb-3">
+                    <Checkbox
+                      id="hidden"
+                      checked={isHidden}
+                      onCheckedChange={(checked) => setIsHidden(!!checked)}
+                      data-testid="checkbox-hidden"
+                    />
+                    <Label htmlFor="hidden" className="cursor-pointer">Hide from Character Gallery</Label>
+                  </div>
                 </div>
 
                 <Card>
@@ -479,6 +496,20 @@ export default function ImageUploader({ adminMode = false }: ImageUploaderProps)
                         {pose}
                       </Badge>
                     ))}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center space-x-2 mb-3">
+                    <Checkbox
+                      id="edit-hidden"
+                      checked={editingImage.isHidden || false}
+                      onCheckedChange={(checked) => setEditingImage({ 
+                        ...editingImage, 
+                        isHidden: !!checked
+                      })}
+                    />
+                    <Label htmlFor="edit-hidden">Hide from Character Gallery</Label>
                   </div>
                 </div>
 

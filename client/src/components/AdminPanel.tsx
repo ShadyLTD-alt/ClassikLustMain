@@ -136,10 +136,10 @@ export default function AdminPanel() {
                       onClick={() => {
                         const template = upgradeTemplates.templates.find(t => t.id === createTemplate);
                         if (template) {
-                          setEditingUpgrade({
+                          const newUpgrade = {
                             id: `upgrade-${Date.now()}`,
-                            name: template.name,
-                            description: template.description,
+                            name: '',
+                            description: '',
                             maxLevel: template.fields.maxLevel.default,
                             baseCost: template.fields.baseCost.default,
                             costMultiplier: template.fields.costMultiplier.default,
@@ -147,7 +147,8 @@ export default function AdminPanel() {
                             valueIncrement: template.fields.valueIncrement.default,
                             icon: template.icon,
                             type: template.type as any
-                          });
+                          };
+                          setEditingUpgrade(newUpgrade);
                           setShowCreateUpgrade(false);
                           setCreateTemplate('');
                         }
@@ -289,24 +290,36 @@ export default function AdminPanel() {
                     <DialogTitle>Create New Character</DialogTitle>
                   </DialogHeader>
                   <div className="space-y-4">
-                    <Button
-                      onClick={() => {
-                        setEditingCharacter({
-                          id: `character-${Date.now()}`,
-                          name: characterMaster.name,
-                          description: characterMaster.description,
-                          unlockLevel: characterMaster.unlockLevel,
-                          rarity: characterMaster.rarity as any,
-                          defaultImage: characterMaster.defaultImage,
-                          avatarImage: characterMaster.avatarImage,
-                          displayImage: characterMaster.displayImage
-                        });
-                        setShowCreateCharacter(false);
-                      }}
-                      className="w-full"
-                    >
-                      Create
-                    </Button>
+                    <div className="space-y-4">
+                      <div>
+                        <Label>Character Name</Label>
+                        <Input placeholder="Enter character name" id="new-char-name" />
+                      </div>
+                      <div>
+                        <Label>Description</Label>
+                        <Textarea placeholder="Enter description" id="new-char-desc" />
+                      </div>
+                      <Button
+                        onClick={() => {
+                          const nameInput = document.getElementById('new-char-name') as HTMLInputElement;
+                          const descInput = document.getElementById('new-char-desc') as HTMLTextAreaElement;
+                          setEditingCharacter({
+                            id: `character-${Date.now()}`,
+                            name: nameInput?.value || characterMaster.name,
+                            description: descInput?.value || characterMaster.description,
+                            unlockLevel: characterMaster.unlockLevel,
+                            rarity: characterMaster.rarity as any,
+                            defaultImage: characterMaster.defaultImage,
+                            avatarImage: characterMaster.avatarImage,
+                            displayImage: characterMaster.displayImage
+                          });
+                          setShowCreateCharacter(false);
+                        }}
+                        className="w-full"
+                      >
+                        Create
+                      </Button>
+                    </div>
                   </div>
                 </DialogContent>
               </Dialog>
@@ -406,12 +419,15 @@ export default function AdminPanel() {
           <TabsContent value="levels" className="space-y-4">
             <div className="flex justify-end mb-3">
               <Button
-                onClick={() => setEditingLevel({
-                  level: levelConfigs.length + 1,
-                  experienceRequired: 100,
-                  requirements: [],
-                  unlocks: []
-                })}
+                onClick={() => {
+                  const nextLevel = Math.max(...levelConfigs.map(l => l.level), 0) + 1;
+                  setEditingLevel({
+                    level: nextLevel,
+                    cost: 100,
+                    requirements: [],
+                    unlocks: []
+                  });
+                }}
                 data-testid="button-create-level"
               >
                 <Plus className="w-4 h-4 mr-2" />
@@ -438,12 +454,12 @@ export default function AdminPanel() {
                     {editingLevel?.level === levelConfig.level && (
                       <CardContent className="space-y-3">
                         <div>
-                          <Label>Experience Required</Label>
+                          <Label>Cost (Points Required)</Label>
                           <Input
                             type="number"
-                            value={editingLevel.experienceRequired}
-                            onChange={(e) => setEditingLevel({ ...editingLevel, experienceRequired: parseInt(e.target.value) })}
-                            data-testid="input-level-exp"
+                            value={editingLevel.cost}
+                            onChange={(e) => setEditingLevel({ ...editingLevel, cost: parseInt(e.target.value) })}
+                            data-testid="input-level-cost"
                           />
                         </div>
 

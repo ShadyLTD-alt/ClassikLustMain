@@ -35,8 +35,10 @@ export default function UpgradePanel() {
           <TabsTrigger value="energyMax" data-testid="tab-energy">Energy</TabsTrigger>
         </TabsList>
 
-        <TabsContent value={activeTab} className="flex-1 overflow-y-auto px-4 pb-4 space-y-4 mt-0">
-          {filteredUpgrades.map(upgrade => {
+        <TabsContent value={activeTab} className="flex-1 mt-0">
+          <ScrollArea className="h-full px-4 pb-4">
+            <div className="space-y-4">
+              {filteredUpgrades.map(upgrade => {
             const currentLevel = state.upgrades[upgrade.id] || 0;
             const cost = calculateUpgradeCost(upgrade, currentLevel);
             const currentValue = calculateUpgradeValue(upgrade, currentLevel);
@@ -94,6 +96,8 @@ export default function UpgradePanel() {
               </Card>
             );
           })}
+            </div>
+          </ScrollArea>
         </TabsContent>
       </Tabs>
     </div>

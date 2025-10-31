@@ -29,7 +29,7 @@ export interface ImageConfig {
   unlockLevel: number;
   isAvatar: boolean;
   isDisplay: boolean;
-  imageType: 'character' | 'avatar' | 'vip' | 'other';
+  imageType?: 'character' | 'avatar' | 'vip' | 'other';
   categories: {
     nsfw: boolean;
     vip: boolean;
@@ -37,6 +37,7 @@ export interface ImageConfig {
     random: boolean;
   };
   poses?: string[];
+  isHidden?: boolean;
 }
 
 export interface LevelRequirement {
@@ -46,8 +47,8 @@ export interface LevelRequirement {
 
 export interface LevelConfig {
   level: number;
+  cost: number;
   requirements: LevelRequirement[];
-  experienceRequired: number;
   unlocks: string[];
 }
 
@@ -88,18 +89,52 @@ export const DEFAULT_CHARACTERS: CharacterConfig[] = [
   darkAssassinData as CharacterConfig
 ];
 
-import level2Data from '../client/src/game-data/levelup/level-2.json';
-import level3Data from '../client/src/game-data/levelup/level-3.json';
-import level5Data from '../client/src/game-data/levelup/level-5.json';
-import level10Data from '../client/src/game-data/levelup/level-10.json';
-import level20Data from '../client/src/game-data/levelup/level-20.json';
-
 export const DEFAULT_LEVEL_CONFIGS: LevelConfig[] = [
-  level2Data as LevelConfig,
-  level3Data as LevelConfig,
-  level5Data as LevelConfig,
-  level10Data as LevelConfig,
-  level20Data as LevelConfig
+  {
+    level: 2,
+    cost: 500,
+    requirements: [{ upgradeId: 'tap-power', minLevel: 5 }],
+    unlocks: ['New upgrade: Passive Income']
+  },
+  {
+    level: 3,
+    cost: 1500,
+    requirements: [
+      { upgradeId: 'tap-power', minLevel: 8 },
+      { upgradeId: 'passive-income', minLevel: 3 }
+    ],
+    unlocks: ['New upgrade: Critical Chance']
+  },
+  {
+    level: 5,
+    cost: 5000,
+    requirements: [
+      { upgradeId: 'tap-power', minLevel: 10 },
+      { upgradeId: 'passive-income', minLevel: 5 },
+      { upgradeId: 'critical-chance', minLevel: 3 }
+    ],
+    unlocks: ['Character: Ice Warrior', 'New upgrade: Income Multiplier']
+  },
+  {
+    level: 10,
+    cost: 15000,
+    requirements: [
+      { upgradeId: 'tap-power', minLevel: 10 },
+      { upgradeId: 'passive-income', minLevel: 8 },
+      { upgradeId: 'critical-chance', minLevel: 5 }
+    ],
+    unlocks: ['Character: Dark Assassin', 'VIP features']
+  },
+  {
+    level: 20,
+    cost: 50000,
+    requirements: [
+      { upgradeId: 'tap-power', minLevel: 20 },
+      { upgradeId: 'passive-income', minLevel: 15 },
+      { upgradeId: 'energy-capacity', minLevel: 10 }
+    ],
+    unlocks: ['Character: Pink Mage', 'Advanced features']
+  }
 ];
 
 export const DEFAULT_THEME: ThemeConfig = {

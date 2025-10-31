@@ -103,8 +103,9 @@ export default function BottomNav() {
         <SheetContent side="bottom" className="h-[95vh]">
           <SheetHeader>
             <SheetTitle>Upgrades</SheetTitle>
+            <SheetDescription>Enhance your clicking power and passive income</SheetDescription>
           </SheetHeader>
-          <div className="h-[calc(100%-3rem)] overflow-hidden mt-4">
+          <div className="h-[calc(100%-5rem)] mt-4">
             <UpgradePanel />
           </div>
         </SheetContent>
