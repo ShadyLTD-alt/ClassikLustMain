@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { DEFAULT_UPGRADES, DEFAULT_CHARACTERS, calculateUpgradeCost, calculateUpgradeValue, type UpgradeConfig, type CharacterConfig, type ImageConfig } from '@shared/gameConfig';
+import { DEFAULT_UPGRADES, DEFAULT_CHARACTERS, DEFAULT_LEVEL_CONFIGS, DEFAULT_THEME, calculateUpgradeCost, calculateUpgradeValue, checkLevelRequirements, applyTheme, type UpgradeConfig, type CharacterConfig, type ImageConfig, type LevelConfig, type ThemeConfig } from '@shared/gameConfig';
 
 interface GameState {
   points: number;
@@ -9,6 +9,7 @@ interface GameState {
   experience: number;
   selectedCharacterId: string;
   selectedImageId: string | null;
+  selectedAvatarId: string | null;
   upgrades: Record<string, number>;
   unlockedCharacters: string[];
   unlockedImages: string[];
@@ -23,15 +24,23 @@ interface GameContextType {
   upgrades: UpgradeConfig[];
   characters: CharacterConfig[];
   images: ImageConfig[];
+  levelConfigs: LevelConfig[];
+  theme: ThemeConfig;
   tap: () => void;
   purchaseUpgrade: (upgradeId: string) => boolean;
   selectCharacter: (characterId: string) => void;
   selectImage: (imageId: string) => void;
+  selectAvatar: (imageId: string) => void;
+  levelUp: () => boolean;
+  canLevelUp: () => boolean;
   toggleAdmin: () => void;
   updateUpgradeConfig: (upgrade: UpgradeConfig) => void;
   updateCharacterConfig: (character: CharacterConfig) => void;
   addImage: (image: ImageConfig) => void;
+  updateImage: (image: ImageConfig) => void;
   removeImage: (imageId: string) => void;
+  updateLevelConfig: (levelConfig: LevelConfig) => void;
+  updateTheme: (theme: ThemeConfig) => void;
   resetGame: () => void;
 }
 
@@ -45,6 +54,7 @@ const INITIAL_STATE: GameState = {
   experience: 0,
   selectedCharacterId: 'starter',
   selectedImageId: null,
+  selectedAvatarId: null,
   upgrades: {},
   unlockedCharacters: ['starter'],
   unlockedImages: [],
@@ -75,6 +85,20 @@ export function GameProvider({ children }: { children: ReactNode }) {
     return saved ? JSON.parse(saved) : [];
   });
 
+  const [levelConfigs, setLevelConfigs] = useState<LevelConfig[]>(() => {
+    const saved = localStorage.getItem('levelConfigs');
+    return saved ? JSON.parse(saved) : DEFAULT_LEVEL_CONFIGS;
+  });
+
+  const [theme, setTheme] = useState<ThemeConfig>(() => {
+    const saved = localStorage.getItem('themeConfig');
+    return saved ? JSON.parse(saved) : DEFAULT_THEME;
+  });
+
+  useEffect(() => {
+    applyTheme(theme);
+  }, [theme]);
+
   useEffect(() => {
     localStorage.setItem('gameState', JSON.stringify(state));
   }, [state]);
@@ -90,6 +114,14 @@ export function GameProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     localStorage.setItem('imageConfigs', JSON.stringify(images));
   }, [images]);
+
+  useEffect(() => {
+    localStorage.setItem('levelConfigs', JSON.stringify(levelConfigs));
+  }, [levelConfigs]);
+
+  useEffect(() => {
+    localStorage.setItem('themeConfig', JSON.stringify(theme));
+  }, [theme]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -209,6 +241,43 @@ export function GameProvider({ children }: { children: ReactNode }) {
     setState(prev => ({ ...prev, selectedImageId: imageId }));
   }, []);
 
+  const selectAvatar = useCallback((imageId: string) => {
+    setState(prev => ({ ...prev, selectedAvatarId: imageId }));
+  }, []);
+
+  const canLevelUp = useCallback(() => {
+    const nextLevel = state.level + 1;
+    const nextLevelConfig = levelConfigs.find(lc => lc.level === nextLevel);
+    if (!nextLevelConfig) return false;
+    
+    const meetsRequirements = checkLevelRequirements(nextLevelConfig, state.upgrades);
+    const hasEnoughExp = state.experience >= nextLevelConfig.experienceRequired;
+    return meetsRequirements && hasEnoughExp;
+  }, [state.level, state.experience, state.upgrades, levelConfigs]);
+
+  const levelUp = useCallback(() => {
+    if (!canLevelUp()) return false;
+
+    setState(prev => {
+      const nextLevel = prev.level + 1;
+      const levelConfig = levelConfigs.find(lc => lc.level === nextLevel);
+      if (!levelConfig) return prev;
+
+      const newUnlockedChars = characters
+        .filter(c => c.unlockLevel === nextLevel && !prev.unlockedCharacters.includes(c.id))
+        .map(c => c.id);
+
+      return {
+        ...prev,
+        level: nextLevel,
+        experience: 0,
+        unlockedCharacters: [...prev.unlockedCharacters, ...newUnlockedChars]
+      };
+    });
+
+    return true;
+  }, [canLevelUp, levelConfigs, characters]);
+
   const toggleAdmin = useCallback(() => {
     setState(prev => ({ ...prev, isAdmin: !prev.isAdmin }));
   }, []);
@@ -241,8 +310,37 @@ export function GameProvider({ children }: { children: ReactNode }) {
     setImages(prev => [...prev, image]);
   }, []);
 
+  const updateImage = useCallback((image: ImageConfig) => {
+    setImages(prev => {
+      const index = prev.findIndex(img => img.id === image.id);
+      if (index >= 0) {
+        const newImages = [...prev];
+        newImages[index] = image;
+        return newImages;
+      }
+      return prev;
+    });
+  }, []);
+
   const removeImage = useCallback((imageId: string) => {
     setImages(prev => prev.filter(img => img.id !== imageId));
+  }, []);
+
+  const updateLevelConfig = useCallback((levelConfig: LevelConfig) => {
+    setLevelConfigs(prev => {
+      const index = prev.findIndex(lc => lc.level === levelConfig.level);
+      if (index >= 0) {
+        const newConfigs = [...prev];
+        newConfigs[index] = levelConfig;
+        return newConfigs;
+      }
+      return [...prev, levelConfig].sort((a, b) => a.level - b.level);
+    });
+  }, []);
+
+  const updateTheme = useCallback((newTheme: ThemeConfig) => {
+    setTheme(newTheme);
+    applyTheme(newTheme);
   }, []);
 
   const resetGame = useCallback(() => {
@@ -250,6 +348,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
     setUpgrades(DEFAULT_UPGRADES);
     setCharacters(DEFAULT_CHARACTERS);
     setImages([]);
+    setLevelConfigs(DEFAULT_LEVEL_CONFIGS);
+    setTheme(DEFAULT_THEME);
   }, []);
 
   return (
@@ -258,15 +358,23 @@ export function GameProvider({ children }: { children: ReactNode }) {
       upgrades,
       characters,
       images,
+      levelConfigs,
+      theme,
       tap,
       purchaseUpgrade,
       selectCharacter,
       selectImage,
+      selectAvatar,
+      levelUp,
+      canLevelUp,
       toggleAdmin,
       updateUpgradeConfig,
       updateCharacterConfig,
       addImage,
+      updateImage,
       removeImage,
+      updateLevelConfig,
+      updateTheme,
       resetGame
     }}>
       {children}

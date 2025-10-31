@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Settings, Save, RotateCcw } from 'lucide-react';
+import { Settings, Save, RotateCcw, Plus, X } from 'lucide-react';
 import { useGame } from '@/contexts/GameContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -12,13 +12,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import ImageUploader from './ImageUploader';
-import type { UpgradeConfig, CharacterConfig } from '@shared/gameConfig';
+import type { UpgradeConfig, CharacterConfig, LevelConfig, ThemeConfig } from '@shared/gameConfig';
 
 export default function AdminPanel() {
-  const { state, upgrades, characters, updateUpgradeConfig, updateCharacterConfig, resetGame } = useGame();
+  const { state, upgrades, characters, levelConfigs, theme, updateUpgradeConfig, updateCharacterConfig, updateLevelConfig, updateTheme, resetGame } = useGame();
   const { toast } = useToast();
   const [editingUpgrade, setEditingUpgrade] = useState<UpgradeConfig | null>(null);
   const [editingCharacter, setEditingCharacter] = useState<CharacterConfig | null>(null);
+  const [editingLevel, setEditingLevel] = useState<LevelConfig | null>(null);
+  const [editingTheme, setEditingTheme] = useState<ThemeConfig | null>(null);
 
   if (!state.isAdmin) return null;
 
@@ -34,6 +36,20 @@ export default function AdminPanel() {
     updateCharacterConfig(editingCharacter);
     toast({ title: 'Character saved', description: `${editingCharacter.name} has been updated.` });
     setEditingCharacter(null);
+  };
+
+  const handleSaveLevel = () => {
+    if (!editingLevel) return;
+    updateLevelConfig(editingLevel);
+    toast({ title: 'Level config saved', description: `Level ${editingLevel.level} has been updated.` });
+    setEditingLevel(null);
+  };
+
+  const handleSaveTheme = () => {
+    if (!editingTheme) return;
+    updateTheme(editingTheme);
+    toast({ title: 'Theme saved', description: 'Theme has been applied successfully.' });
+    setEditingTheme(null);
   };
 
   const handleResetGame = () => {
@@ -71,11 +87,12 @@ export default function AdminPanel() {
         </DialogHeader>
 
         <Tabs defaultValue="upgrades" className="flex-1">
-          <TabsList className="grid grid-cols-4 w-full">
+          <TabsList className="grid grid-cols-5 w-full">
             <TabsTrigger value="upgrades" data-testid="tab-admin-upgrades">Upgrades</TabsTrigger>
             <TabsTrigger value="characters" data-testid="tab-admin-characters">Characters</TabsTrigger>
+            <TabsTrigger value="levels" data-testid="tab-admin-levels">Levels</TabsTrigger>
             <TabsTrigger value="images" data-testid="tab-admin-images">Images</TabsTrigger>
-            <TabsTrigger value="settings" data-testid="tab-admin-settings">Settings</TabsTrigger>
+            <TabsTrigger value="theme" data-testid="tab-admin-theme">Theme</TabsTrigger>
           </TabsList>
 
           <TabsContent value="upgrades" className="space-y-4">
@@ -261,8 +278,239 @@ export default function AdminPanel() {
             </ScrollArea>
           </TabsContent>
 
+          <TabsContent value="levels" className="space-y-4">
+            <ScrollArea className="h-[500px]">
+              <div className="space-y-3 pr-4">
+                {levelConfigs.map(levelConfig => (
+                  <Card key={levelConfig.level}>
+                    <CardHeader>
+                      <div className="flex justify-between items-center">
+                        <h3 className="font-semibold">Level {levelConfig.level}</h3>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setEditingLevel(levelConfig)}
+                          data-testid={`button-edit-level-${levelConfig.level}`}
+                        >
+                          Edit
+                        </Button>
+                      </div>
+                    </CardHeader>
+                    {editingLevel?.level === levelConfig.level && (
+                      <CardContent className="space-y-3">
+                        <div>
+                          <Label>Experience Required</Label>
+                          <Input
+                            type="number"
+                            value={editingLevel.experienceRequired}
+                            onChange={(e) => setEditingLevel({ ...editingLevel, experienceRequired: parseInt(e.target.value) })}
+                            data-testid="input-level-exp"
+                          />
+                        </div>
+                        
+                        <div>
+                          <Label>Requirements</Label>
+                          {editingLevel.requirements.map((req, idx) => (
+                            <div key={idx} className="flex gap-2 mb-2">
+                              <Select
+                                value={req.upgradeId}
+                                onValueChange={(value) => {
+                                  const newReqs = [...editingLevel.requirements];
+                                  newReqs[idx] = { ...req, upgradeId: value };
+                                  setEditingLevel({ ...editingLevel, requirements: newReqs });
+                                }}
+                              >
+                                <SelectTrigger data-testid={`select-req-upgrade-${idx}`}>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {upgrades.map(u => (
+                                    <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <Input
+                                type="number"
+                                placeholder="Min Level"
+                                value={req.minLevel}
+                                onChange={(e) => {
+                                  const newReqs = [...editingLevel.requirements];
+                                  newReqs[idx] = { ...req, minLevel: parseInt(e.target.value) };
+                                  setEditingLevel({ ...editingLevel, requirements: newReqs });
+                                }}
+                                data-testid={`input-req-level-${idx}`}
+                              />
+                              <Button
+                                variant="destructive"
+                                size="icon"
+                                onClick={() => {
+                                  setEditingLevel({
+                                    ...editingLevel,
+                                    requirements: editingLevel.requirements.filter((_, i) => i !== idx)
+                                  });
+                                }}
+                              >
+                                <X className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          ))}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setEditingLevel({
+                                ...editingLevel,
+                                requirements: [...editingLevel.requirements, { upgradeId: upgrades[0]?.id || '', minLevel: 1 }]
+                              });
+                            }}
+                            data-testid="button-add-requirement"
+                          >
+                            <Plus className="w-4 h-4 mr-2" />
+                            Add Requirement
+                          </Button>
+                        </div>
+
+                        <div>
+                          <Label>Unlocks</Label>
+                          {editingLevel.unlocks.map((unlock, idx) => (
+                            <div key={idx} className="flex gap-2 mb-2">
+                              <Input
+                                value={unlock}
+                                onChange={(e) => {
+                                  const newUnlocks = [...editingLevel.unlocks];
+                                  newUnlocks[idx] = e.target.value;
+                                  setEditingLevel({ ...editingLevel, unlocks: newUnlocks });
+                                }}
+                                data-testid={`input-unlock-${idx}`}
+                              />
+                              <Button
+                                variant="destructive"
+                                size="icon"
+                                onClick={() => {
+                                  setEditingLevel({
+                                    ...editingLevel,
+                                    unlocks: editingLevel.unlocks.filter((_, i) => i !== idx)
+                                  });
+                                }}
+                              >
+                                <X className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          ))}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setEditingLevel({
+                                ...editingLevel,
+                                unlocks: [...editingLevel.unlocks, 'New unlock']
+                              });
+                            }}
+                            data-testid="button-add-unlock"
+                          >
+                            <Plus className="w-4 h-4 mr-2" />
+                            Add Unlock
+                          </Button>
+                        </div>
+
+                        <div className="flex gap-2">
+                          <Button onClick={handleSaveLevel} data-testid="button-save-level">
+                            <Save className="w-4 h-4 mr-2" />
+                            Save
+                          </Button>
+                          <Button variant="outline" onClick={() => setEditingLevel(null)}>
+                            Cancel
+                          </Button>
+                        </div>
+                      </CardContent>
+                    )}
+                  </Card>
+                ))}
+              </div>
+            </ScrollArea>
+          </TabsContent>
+
           <TabsContent value="images" className="space-y-4">
             <ImageUploader adminMode />
+          </TabsContent>
+
+          <TabsContent value="theme" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <h3 className="font-semibold">Theme Customization</h3>
+                <p className="text-sm text-muted-foreground">Customize colors using HSL format (H S% L%)</p>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Primary Color</Label>
+                    <Input
+                      value={editingTheme?.primary || theme.primary}
+                      onChange={(e) => setEditingTheme({ ...(editingTheme || theme), primary: e.target.value })}
+                      placeholder="270 60% 50%"
+                      data-testid="input-theme-primary"
+                    />
+                  </div>
+                  <div>
+                    <Label>Secondary Color</Label>
+                    <Input
+                      value={editingTheme?.secondary || theme.secondary}
+                      onChange={(e) => setEditingTheme({ ...(editingTheme || theme), secondary: e.target.value })}
+                      placeholder="240 5% 26%"
+                      data-testid="input-theme-secondary"
+                    />
+                  </div>
+                  <div>
+                    <Label>Accent Color</Label>
+                    <Input
+                      value={editingTheme?.accent || theme.accent}
+                      onChange={(e) => setEditingTheme({ ...(editingTheme || theme), accent: e.target.value })}
+                      placeholder="280 65% 60%"
+                      data-testid="input-theme-accent"
+                    />
+                  </div>
+                  <div>
+                    <Label>Background Color</Label>
+                    <Input
+                      value={editingTheme?.background || theme.background}
+                      onChange={(e) => setEditingTheme({ ...(editingTheme || theme), background: e.target.value })}
+                      placeholder="240 10% 8%"
+                      data-testid="input-theme-background"
+                    />
+                  </div>
+                  <div>
+                    <Label>Card Color</Label>
+                    <Input
+                      value={editingTheme?.card || theme.card}
+                      onChange={(e) => setEditingTheme({ ...(editingTheme || theme), card: e.target.value })}
+                      placeholder="240 8% 12%"
+                      data-testid="input-theme-card"
+                    />
+                  </div>
+                  <div>
+                    <Label>Muted Color</Label>
+                    <Input
+                      value={editingTheme?.muted || theme.muted}
+                      onChange={(e) => setEditingTheme({ ...(editingTheme || theme), muted: e.target.value })}
+                      placeholder="240 5% 20%"
+                      data-testid="input-theme-muted"
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button onClick={handleSaveTheme} data-testid="button-save-theme">
+                    <Save className="w-4 h-4 mr-2" />
+                    Apply Theme
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setEditingTheme(null)}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="settings" className="space-y-4">
