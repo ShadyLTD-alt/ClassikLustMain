@@ -1,0 +1,12 @@
+{
+  "id": "tap-power",
+  "name": "Tap Power",
+  "description": "Increase points earned per tap",
+  "maxLevel": 30,
+  "baseCost": 10,
+  "costMultiplier": 1.15,
+  "baseValue": 1,
+  "valueIncrement": 1,
+  "icon": "Hand",
+  "type": "perTap"
+}

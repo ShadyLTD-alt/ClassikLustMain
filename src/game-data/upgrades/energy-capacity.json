@@ -1,0 +1,12 @@
+{
+  "id": "energy-capacity",
+  "name": "Energy Capacity",
+  "description": "Maximum energy storage",
+  "maxLevel": 30,
+  "baseCost": 200,
+  "costMultiplier": 1.18,
+  "baseValue": 1000,
+  "valueIncrement": 100,
+  "icon": "Zap",
+  "type": "energyMax"
+}

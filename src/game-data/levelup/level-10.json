@@ -1,0 +1,10 @@
+{
+  "level": 10,
+  "requirements": [
+    { "upgradeId": "tap-power", "minLevel": 10 },
+    { "upgradeId": "passive-income", "minLevel": 8 },
+    { "upgradeId": "critical-chance", "minLevel": 5 }
+  ],
+  "experienceRequired": 1000,
+  "unlocks": ["Character: Stella", "VIP features"]
+}

@@ -1,0 +1,9 @@
+{
+  "level": 3,
+  "requirements": [
+    { "upgradeId": "tap-power", "minLevel": 3 },
+    { "upgradeId": "passive-income", "minLevel": 2 }
+  ],
+  "experienceRequired": 200,
+  "unlocks": ["Boost multiplier x1.2"]
+}

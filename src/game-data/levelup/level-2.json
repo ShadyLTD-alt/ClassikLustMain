@@ -1,0 +1,9 @@
+{
+  "level": 2,
+  "requirements": [
+    { "upgradeId": "tap-power", "minLevel": 1 },
+    { "upgradeId": "energy-capacity", "minLevel": 1 }
+  ],
+  "experienceRequired": 100,
+  "unlocks": ["New character slot available"]
+}

@@ -1,0 +1,10 @@
+{
+  "level": 20,
+  "requirements": [
+    { "upgradeId": "tap-power", "minLevel": 20 },
+    { "upgradeId": "passive-income", "minLevel": 15 },
+    { "upgradeId": "income-multiplier", "minLevel": 10 }
+  ],
+  "experienceRequired": 2000,
+  "unlocks": ["Character: Shadow", "Legendary tier unlocked"]
+}

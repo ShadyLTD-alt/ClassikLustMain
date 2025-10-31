@@ -1,0 +1,10 @@
+{
+  "id": "pink-mage",
+  "name": "Stella",
+  "unlockLevel": 10,
+  "description": "The pink mage",
+  "rarity": "epic",
+  "defaultImage": "/attached_assets/generated_images/Pink_mage_character_portrait_ac8f14fa.png",
+  "avatarImage": "/attached_assets/generated_images/Pink_mage_character_portrait_ac8f14fa.png",
+  "displayImage": "/attached_assets/generated_images/Pink_mage_character_portrait_ac8f14fa.png"
+}

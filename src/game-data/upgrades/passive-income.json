@@ -1,0 +1,12 @@
+{
+  "id": "passive-income",
+  "name": "Passive Income",
+  "description": "Points earned per hour",
+  "maxLevel": 30,
+  "baseCost": 100,
+  "costMultiplier": 1.25,
+  "baseValue": 10,
+  "valueIncrement": 10,
+  "icon": "Clock",
+  "type": "perHour"
+}

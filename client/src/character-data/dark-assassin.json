@@ -1,0 +1,10 @@
+{
+  "id": "dark-assassin",
+  "name": "Shadow",
+  "unlockLevel": 20,
+  "description": "The dark assassin",
+  "rarity": "legendary",
+  "defaultImage": "/attached_assets/generated_images/Dark_assassin_character_portrait_8231b831.png",
+  "avatarImage": "/attached_assets/generated_images/Dark_assassin_character_portrait_8231b831.png",
+  "displayImage": "/attached_assets/generated_images/Dark_assassin_character_portrait_8231b831.png"
+}

@@ -1,0 +1,10 @@
+{
+  "id": "starter",
+  "name": "Aria",
+  "unlockLevel": 1,
+  "description": "Your first companion",
+  "rarity": "common",
+  "defaultImage": "/attached_assets/generated_images/Main_anime_character_portrait_2b6366d4.png",
+  "avatarImage": "/attached_assets/generated_images/Main_anime_character_portrait_2b6366d4.png",
+  "displayImage": "/attached_assets/generated_images/Main_anime_character_portrait_2b6366d4.png"
+}

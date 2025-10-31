@@ -1,0 +1,12 @@
+{
+  "id": "energy-regen",
+  "name": "Energy Recovery",
+  "description": "Energy regeneration rate",
+  "maxLevel": 30,
+  "baseCost": 300,
+  "costMultiplier": 1.22,
+  "baseValue": 1,
+  "valueIncrement": 0.5,
+  "icon": "Battery",
+  "type": "energyMax"
+}

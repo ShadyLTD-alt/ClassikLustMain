@@ -1,0 +1,12 @@
+{
+  "id": "critical-chance",
+  "name": "Critical Tap",
+  "description": "Boost tap multiplier",
+  "maxLevel": 30,
+  "baseCost": 50,
+  "costMultiplier": 1.2,
+  "baseValue": 0,
+  "valueIncrement": 0.5,
+  "icon": "Sparkles",
+  "type": "perTap"
+}

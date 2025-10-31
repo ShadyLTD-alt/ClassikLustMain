@@ -1,0 +1,10 @@
+{
+  "id": "ice-warrior",
+  "name": "Frost",
+  "unlockLevel": 5,
+  "description": "The ice warrior",
+  "rarity": "rare",
+  "defaultImage": "/attached_assets/generated_images/Ice_warrior_character_portrait_6f04192c.png",
+  "avatarImage": "/attached_assets/generated_images/Ice_warrior_character_portrait_6f04192c.png",
+  "displayImage": "/attached_assets/generated_images/Ice_warrior_character_portrait_6f04192c.png"
+}

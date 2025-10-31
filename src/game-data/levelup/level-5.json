@@ -1,0 +1,10 @@
+{
+  "level": 5,
+  "requirements": [
+    { "upgradeId": "tap-power", "minLevel": 5 },
+    { "upgradeId": "passive-income", "minLevel": 5 },
+    { "upgradeId": "energy-capacity", "minLevel": 3 }
+  ],
+  "experienceRequired": 500,
+  "unlocks": ["Character: Frost", "New image slots"]
+}
