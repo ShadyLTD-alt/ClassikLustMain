@@ -79,9 +79,14 @@ export default function ImageUploader({ adminMode = false }: ImageUploaderProps)
   const handleUpload = async () => {
     if (!selectedFile) return;
 
+    // Get the character name for the folder structure
+    const selectedChar = characters.find(c => c.id === selectedCharacterId);
+    const characterName = selectedChar?.name || 'default';
+
     const formData = new FormData();
     formData.append('image', selectedFile);
     formData.append('characterId', selectedCharacterId);
+    formData.append('characterName', characterName);
     formData.append('imageType', imageType);
 
     try {
