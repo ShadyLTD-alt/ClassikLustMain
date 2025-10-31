@@ -138,8 +138,8 @@ export default function AdminPanel() {
                         if (template) {
                           const newUpgrade = {
                             id: `upgrade-${Date.now()}`,
-                            name: '',
-                            description: '',
+                            name: template.name || '',
+                            description: template.description || '',
                             maxLevel: template.fields.maxLevel.default,
                             baseCost: template.fields.baseCost.default,
                             costMultiplier: template.fields.costMultiplier.default,
@@ -148,6 +148,7 @@ export default function AdminPanel() {
                             icon: template.icon,
                             type: template.type as any
                           };
+                          updateUpgradeConfig(newUpgrade);
                           setEditingUpgrade(newUpgrade);
                           setShowCreateUpgrade(false);
                           setCreateTemplate('');
@@ -421,12 +422,14 @@ export default function AdminPanel() {
               <Button
                 onClick={() => {
                   const nextLevel = Math.max(...levelConfigs.map(l => l.level), 0) + 1;
-                  setEditingLevel({
+                  const newLevel = {
                     level: nextLevel,
                     cost: 100,
                     requirements: [],
                     unlocks: []
-                  });
+                  };
+                  updateLevelConfig(newLevel);
+                  setEditingLevel(newLevel);
                 }}
                 data-testid="button-create-level"
               >

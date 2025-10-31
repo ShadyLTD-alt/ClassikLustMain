@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Hand, Clock, Zap, Sparkles, TrendingUp, Battery } from 'lucide-react';
 import { calculateUpgradeCost, calculateUpgradeValue } from '@shared/gameConfig';
 
@@ -37,7 +36,7 @@ export default function UpgradePanel() {
         </TabsList>
 
         <TabsContent value={activeTab} className="flex-1 mt-0">
-          <ScrollArea className="h-full px-4 pb-4">
+          <div className="h-full overflow-y-auto px-4 pb-4">
             <div className="space-y-4">
               {filteredUpgrades.map(upgrade => {
             const currentLevel = state.upgrades[upgrade.id] || 0;
@@ -98,7 +97,7 @@ export default function UpgradePanel() {
             );
           })}
             </div>
-          </ScrollArea>
+          </div>
         </TabsContent>
       </Tabs>
     </div>

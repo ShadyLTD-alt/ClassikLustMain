@@ -196,19 +196,19 @@ export default function ImageUploader({ adminMode = false }: ImageUploaderProps)
             </div>
 
             <div>
-              <Label htmlFor="image-upload" className="cursor-pointer">
+              <input
+                id="image-upload"
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleFileSelect}
+                data-testid="input-image-upload"
+              />
+              <Label htmlFor="image-upload" className="cursor-pointer block">
                 <div className="border-2 border-dashed border-border rounded-lg p-8 hover-elevate flex flex-col items-center justify-center gap-2">
                   <Upload className="w-8 h-8 text-muted-foreground" />
                   <span className="text-sm text-muted-foreground">Click to select image</span>
                 </div>
-                <input
-                  id="image-upload"
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleFileSelect}
-                  data-testid="input-image-upload"
-                />
               </Label>
             </div>
 
