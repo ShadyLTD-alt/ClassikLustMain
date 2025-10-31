@@ -69,6 +69,8 @@ export default function ImageUploader({ adminMode = false }: ImageUploaderProps)
   const handleCancelUpload = () => {
     setSelectedFile(null);
     setPreviewUrl(null);
+    setUnlockLevel(1);
+    setCategories({ nsfw: false, vip: false, event: false, random: false });
   };
 
   const handleSaveEdit = () => {
@@ -233,18 +235,9 @@ export default function ImageUploader({ adminMode = false }: ImageUploaderProps)
 
                   {!adminMode && isUnlocked && (
                     <div className="absolute top-1 right-1">
-                      <Button
-                        variant="secondary"
-                        size="icon"
-                        className="h-6 w-6"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleSetAsDisplay(image.id);
-                        }}
-                        data-testid={`button-set-display-${image.id}`}
-                      >
-                        <Check className="w-3 h-3" />
-                      </Button>
+                      <Badge className="bg-primary text-xs cursor-pointer">
+                        {isSelected ? 'Display' : 'Set'}
+                      </Badge>
                     </div>
                   )}
 
@@ -255,17 +248,6 @@ export default function ImageUploader({ adminMode = false }: ImageUploaderProps)
                     {image.categories.event && <Badge className="text-xs px-1">Event</Badge>}
                     {image.categories.random && <Badge variant="outline" className="text-xs px-1">Random</Badge>}
                   </div>
-
-                  {isSelected && (
-                    <div className="absolute top-1 left-1">
-                      <Badge className="bg-primary text-xs">Display</Badge>
-                    </div>
-                  )}
-                  {isAvatar && (
-                    <div className="absolute top-7 left-1">
-                      <Badge className="bg-accent text-xs">Avatar</Badge>
-                    </div>
-                  )}
                 </div>
               );
             })}

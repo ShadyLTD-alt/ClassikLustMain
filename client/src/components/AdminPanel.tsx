@@ -235,23 +235,6 @@ export default function AdminPanel() {
                               data-testid="input-character-unlock"
                             />
                           </div>
-                          <div>
-                            <Label>Rarity</Label>
-                            <Select
-                              value={editingCharacter.rarity}
-                              onValueChange={(value: any) => setEditingCharacter({ ...editingCharacter, rarity: value })}
-                            >
-                              <SelectTrigger data-testid="select-character-rarity">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="common">Common</SelectItem>
-                                <SelectItem value="rare">Rare</SelectItem>
-                                <SelectItem value="epic">Epic</SelectItem>
-                                <SelectItem value="legendary">Legendary</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
                         </div>
                         <div>
                           <Label>Description</Label>
@@ -259,6 +242,22 @@ export default function AdminPanel() {
                             value={editingCharacter.description}
                             onChange={(e) => setEditingCharacter({ ...editingCharacter, description: e.target.value })}
                             data-testid="input-character-desc"
+                          />
+                        </div>
+                        <div>
+                          <Label>Avatar Image URL (for top-left icon)</Label>
+                          <Input
+                            value={editingCharacter.avatarImage}
+                            onChange={(e) => setEditingCharacter({ ...editingCharacter, avatarImage: e.target.value })}
+                            placeholder="URL for avatar image"
+                          />
+                        </div>
+                        <div>
+                          <Label>Display Image URL (default character image)</Label>
+                          <Input
+                            value={editingCharacter.displayImage}
+                            onChange={(e) => setEditingCharacter({ ...editingCharacter, displayImage: e.target.value })}
+                            placeholder="URL for display image"
                           />
                         </div>
                         <div className="flex gap-2">
@@ -307,7 +306,7 @@ export default function AdminPanel() {
                             data-testid="input-level-exp"
                           />
                         </div>
-                        
+
                         <div>
                           <Label>Requirements</Label>
                           {editingLevel.requirements.map((req, idx) => (
