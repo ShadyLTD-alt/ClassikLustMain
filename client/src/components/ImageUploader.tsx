@@ -36,34 +36,53 @@ export default function ImageUploader({ adminMode = false }: ImageUploaderProps)
     const file = e.target.files?.[0];
     if (!file) return;
 
+    setSelectedFile(file as any);
+    
     const reader = new FileReader();
     reader.onload = (event) => {
       const imageUrl = event.target?.result as string;
-      setSelectedFile(imageUrl);
       setPreviewUrl(imageUrl);
     };
     reader.readAsDataURL(file);
     e.target.value = '';
   };
 
-  const handleUpload = () => {
+  const handleUpload = async () => {
     if (!selectedFile) return;
 
-    addImage({
-      id: `img-${Date.now()}`,
-      characterId: state.selectedCharacterId,
-      url: selectedFile,
-      unlockLevel: unlockLevel,
-      isAvatar: false,
-      isDisplay: false,
-      categories: { ...categories }
-    });
-    
-    // Reset form
-    setSelectedFile(null);
-    setPreviewUrl(null);
-    setUnlockLevel(1);
-    setCategories({ nsfw: false, vip: false, event: false, random: false });
+    const formData = new FormData();
+    formData.append('image', selectedFile as any);
+
+    try {
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok) {
+        throw new Error('Upload failed');
+      }
+
+      const data = await response.json();
+      
+      addImage({
+        id: `img-${Date.now()}`,
+        characterId: state.selectedCharacterId,
+        url: data.url,
+        unlockLevel: unlockLevel,
+        isAvatar: false,
+        isDisplay: false,
+        categories: { ...categories }
+      });
+      
+      setSelectedFile(null);
+      setPreviewUrl(null);
+      setUnlockLevel(1);
+      setCategories({ nsfw: false, vip: false, event: false, random: false });
+    } catch (error) {
+      console.error('Upload error:', error);
+      alert('Failed to upload image');
+    }
   };
 
   const handleCancelUpload = () => {
