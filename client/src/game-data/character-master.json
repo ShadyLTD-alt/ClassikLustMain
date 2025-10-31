@@ -1,0 +1,10 @@
+
+{
+  "name": "New Character",
+  "description": "A mysterious character waiting to be discovered",
+  "unlockLevel": 1,
+  "rarity": "common",
+  "defaultImage": "",
+  "avatarImage": "",
+  "displayImage": ""
+}
