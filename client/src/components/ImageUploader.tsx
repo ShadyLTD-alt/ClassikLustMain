@@ -81,12 +81,15 @@ export default function ImageUploader({ adminMode = false }: ImageUploaderProps)
 
     // Get the character name for the folder structure
     const selectedChar = characters.find(c => c.id === selectedCharacterId);
-    const characterName = selectedChar?.name || 'default';
+    if (!selectedChar) {
+      alert('Please select a character first');
+      return;
+    }
 
     const formData = new FormData();
     formData.append('image', selectedFile);
     formData.append('characterId', selectedCharacterId);
-    formData.append('characterName', characterName);
+    formData.append('characterName', selectedChar.name);
     formData.append('imageType', imageType);
 
     try {
@@ -165,6 +168,12 @@ export default function ImageUploader({ adminMode = false }: ImageUploaderProps)
                 </SelectContent>
               </Select>
             </div>
+
+            {!selectedCharacterId && (
+              <div className="text-sm text-muted-foreground bg-muted p-3 rounded">
+                Please select a character before uploading images
+              </div>
+            )}
 
             <div>
               <Label htmlFor="image-type-select">Image Type</Label>

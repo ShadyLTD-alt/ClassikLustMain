@@ -11,9 +11,8 @@ const __dirname = path.dirname(__filename);
 
 const storageConfig = multer.diskStorage({
   destination: function (req, _file, cb) {
-    const characterName = req.body.characterName || 'default';
-    const imageType = req.body.imageType || 'character';
-    const uploadPath = path.join(__dirname, "..", "uploads", "characters", characterName, imageType);
+    // Character name will be available in req.body after multer processes the form
+    const uploadPath = path.join(__dirname, "..", "uploads", "temp");
     
     if (!fs.existsSync(uploadPath)) {
       fs.mkdirSync(uploadPath, { recursive: true });
@@ -49,8 +48,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(400).json({ error: "No file uploaded" });
     }
     
-    const characterName = req.body.characterName || 'default';
+    const characterName = req.body.characterName;
     const imageType = req.body.imageType || 'character';
+    
+    if (!characterName) {
+      // Clean up temp file
+      fs.unlinkSync(req.file.path);
+      return res.status(400).json({ error: "Character name is required" });
+    }
+    
+    // Create the final directory structure
+    const finalDir = path.join(__dirname, "..", "uploads", "characters", characterName, imageType);
+    if (!fs.existsSync(finalDir)) {
+      fs.mkdirSync(finalDir, { recursive: true });
+    }
+    
+    // Move file from temp to final location
+    const finalPath = path.join(finalDir, req.file.filename);
+    fs.renameSync(req.file.path, finalPath);
+    
     const fileUrl = `/uploads/characters/${characterName}/${imageType}/${req.file.filename}`;
     res.json({ url: fileUrl });
   });
