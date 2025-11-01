@@ -174,7 +174,12 @@ export default function AdminPanel() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => setEditingUpgrade(upgrade)}
+                          onClick={() => {
+                            setEditingUpgrade(upgrade);
+                            setTimeout(() => {
+                              document.getElementById(`upgrade-edit-${upgrade.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            }, 100);
+                          }}
                           data-testid={`button-edit-upgrade-${upgrade.id}`}
                         >
                           Edit
@@ -182,7 +187,7 @@ export default function AdminPanel() {
                       </div>
                     </CardHeader>
                     {editingUpgrade?.id === upgrade.id && (
-                      <CardContent className="space-y-3">
+                      <CardContent className="space-y-3" id={`upgrade-edit-${upgrade.id}`}>
                         <div className="grid grid-cols-2 gap-3">
                           <div>
                             <Label>Name</Label>
@@ -422,16 +427,26 @@ export default function AdminPanel() {
             <div className="flex justify-end mb-3">
               <Button
                 onClick={() => {
-                  const nextLevel = Math.max(...levelConfigs.map(l => l.level), 0) + 1;
+                  // Find the first missing level number, or use next available
+                  const existingLevels = levelConfigs.map(l => l.level).sort((a, b) => a - b);
+                  let nextLevel = 1;
+                  for (let i = 0; i < existingLevels.length; i++) {
+                    if (existingLevels[i] !== i + 1) {
+                      nextLevel = i + 1;
+                      break;
+                    }
+                  }
+                  if (nextLevel === 1 && existingLevels.length > 0) {
+                    nextLevel = Math.max(...existingLevels) + 1;
+                  }
+                  
                   const newLevel = {
                     level: nextLevel,
                     cost: 100,
                     requirements: [],
                     unlocks: []
                   };
-                  updateLevelConfig(newLevel);
-                  // Set editing immediately to show the form
-                  setTimeout(() => setEditingLevel(newLevel), 100);
+                  setEditingLevel(newLevel);
                 }}
                 data-testid="button-create-level"
               >
@@ -458,14 +473,26 @@ export default function AdminPanel() {
                     </CardHeader>
                     {editingLevel?.level === levelConfig.level && (
                       <CardContent className="space-y-3">
-                        <div>
-                          <Label>Cost (Points Required)</Label>
-                          <Input
-                            type="number"
-                            value={editingLevel.cost}
-                            onChange={(e) => setEditingLevel({ ...editingLevel, cost: parseInt(e.target.value) })}
-                            data-testid="input-level-cost"
-                          />
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <Label>Level Number</Label>
+                            <Input
+                              type="number"
+                              min="1"
+                              value={editingLevel.level}
+                              onChange={(e) => setEditingLevel({ ...editingLevel, level: parseInt(e.target.value) || 1 })}
+                              data-testid="input-level-number"
+                            />
+                          </div>
+                          <div>
+                            <Label>Cost (Points Required)</Label>
+                            <Input
+                              type="number"
+                              value={editingLevel.cost}
+                              onChange={(e) => setEditingLevel({ ...editingLevel, cost: parseInt(e.target.value) })}
+                              data-testid="input-level-cost"
+                            />
+                          </div>
                         </div>
 
                         <div>

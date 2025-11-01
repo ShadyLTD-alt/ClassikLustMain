@@ -124,6 +124,11 @@ export default function ImageUploader({ adminMode = false }: ImageUploaderProps)
       
       addImage(newImage);
       
+      // Auto-select the uploaded image
+      if (imageType === 'character') {
+        selectImage(newImage.id);
+      }
+      
       // Reset form
       setSelectedFile(null);
       setPreviewUrl(null);

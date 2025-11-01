@@ -1,4 +1,4 @@
-import { TrendingUp, UserCircle, ArrowUpCircle, CheckCircle, XCircle } from 'lucide-react';
+import { TrendingUp, UserCircle, ArrowUpCircle, CheckCircle, XCircle, Check, X } from 'lucide-react';
 import { useState } from 'react';
 import { useGame } from '@/contexts/GameContext';
 import { Button } from '@/components/ui/button';
@@ -144,14 +144,18 @@ export default function BottomNav() {
                       const isMet = currentLevel >= req.minLevel;
 
                       return (
-                        <div key={req.upgradeId} className="flex items-center justify-between">
+                        <div key={req.upgradeId} className="flex items-center justify-between p-2 rounded border border-border">
                           <div className="flex items-center gap-2">
                             {isMet ? (
-                              <CheckCircle className="w-4 h-4 text-green-500" />
+                              <div className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
+                                <Check className="w-3 h-3 text-white" />
+                              </div>
                             ) : (
-                              <XCircle className="w-4 h-4 text-muted-foreground" />
+                              <div className="w-5 h-5 rounded-full bg-red-500 flex items-center justify-center flex-shrink-0">
+                                <X className="w-3 h-3 text-white" />
+                              </div>
                             )}
-                            <span className={isMet ? 'text-green-500' : 'text-muted-foreground'}>
+                            <span className={isMet ? 'text-green-500 font-medium' : 'text-muted-foreground'}>
                               {upgrade?.name || req.upgradeId}
                             </span>
                           </div>
@@ -182,12 +186,12 @@ export default function BottomNav() {
 
                 <Button
                   onClick={handleLevelUp}
-                  disabled={!isLevelUpReady}
-                  className={`w-full ${isLevelUpReady ? 'bg-green-600 hover:bg-green-700' : ''}`}
+                  disabled={!canLevelUp()}
+                  className={`w-full ${canLevelUp() ? 'bg-green-600 hover:bg-green-700' : ''}`}
                   size="lg"
                   data-testid="button-confirm-levelup"
                 >
-                  {isLevelUpReady ? 'Level Up Now!' : 'Requirements Not Met'}
+                  {canLevelUp() ? 'Level Up Now!' : 'Requirements Not Met'}
                 </Button>
               </div>
             ) : (
