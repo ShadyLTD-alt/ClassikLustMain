@@ -5,19 +5,20 @@ import { z } from "zod";
 
 export const players = pgTable("players", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  telegramId: text("telegram_id").unique(),
+  telegramId: text("telegramId").unique(),
   username: text("username").notNull(),
   points: integer("points").default(0).notNull(),
   energy: integer("energy").default(1000).notNull(),
-  maxEnergy: integer("max_energy").default(1000).notNull(),
+  maxEnergy: integer("maxEnergy").default(1000).notNull(),
   level: integer("level").default(1).notNull(),
   experience: integer("experience").default(0).notNull(),
-  passiveIncomeRate: integer("passive_income_rate").default(0).notNull(),
-  isAdmin: boolean("is_admin").default(false).notNull(),
-  selectedCharacterId: text("selected_character_id"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  lastLogin: timestamp("last_login").defaultNow().notNull(),
-  lastEnergyUpdate: timestamp("last_energy_update").defaultNow().notNull(),
+  passiveIncomeRate: integer("passiveIncomeRate").default(0).notNull(),
+  isAdmin: boolean("isAdmin").default(false).notNull(),
+  selectedCharacterId: text("selectedCharacterId"),
+  displayImage: text("displayImage"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  lastLogin: timestamp("lastLogin").defaultNow().notNull(),
+  lastEnergyUpdate: timestamp("lastEnergyUpdate").defaultNow().notNull(),
 });
 
 export const upgrades = pgTable("upgrades", {
@@ -26,49 +27,49 @@ export const upgrades = pgTable("upgrades", {
   description: text("description").notNull(),
   type: text("type").notNull(),
   icon: text("icon").notNull(),
-  maxLevel: integer("max_level").notNull(),
-  baseCost: integer("base_cost").notNull(),
-  costMultiplier: real("cost_multiplier").notNull(),
-  baseValue: real("base_value").notNull(),
-  valueIncrement: real("value_increment").notNull(),
-  isHidden: boolean("is_hidden").default(false).notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  maxLevel: integer("maxLevel").notNull(),
+  baseCost: integer("baseCost").notNull(),
+  costMultiplier: real("costMultiplier").notNull(),
+  baseValue: real("baseValue").notNull(),
+  valueIncrement: real("valueIncrement").notNull(),
+  isHidden: boolean("isHidden").default(false).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
 export const characters = pgTable("characters", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
-  unlockLevel: integer("unlock_level").notNull(),
+  unlockLevel: integer("unlockLevel").notNull(),
   description: text("description").notNull(),
   rarity: text("rarity").notNull(),
-  defaultImage: text("default_image"),
-  avatarImage: text("avatar_image"),
-  displayImage: text("display_image"),
-  isHidden: boolean("is_hidden").default(false).notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  defaultImage: text("defaultImage"),
+  avatarImage: text("avatarImage"),
+  displayImage: text("displayImage"),
+  isHidden: boolean("isHidden").default(false).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
 export const levels = pgTable("levels", {
   level: integer("level").primaryKey(),
-  experienceRequired: integer("experience_required").notNull(),
+  experienceRequired: integer("experienceRequired").notNull(),
   requirements: jsonb("requirements").notNull().$type<Array<{ upgradeId: string; minLevel: number }>>(),
   unlocks: text("unlocks").array().notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
-export const playerUpgrades = pgTable("player_upgrades", {
+export const playerUpgrades = pgTable("playerUpgrades", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  playerId: varchar("player_id").notNull().references(() => players.id, { onDelete: 'cascade' }),
-  upgradeId: text("upgrade_id").notNull().references(() => upgrades.id, { onDelete: 'cascade' }),
+  playerId: varchar("playerId").notNull().references(() => players.id, { onDelete: 'cascade' }),
+  upgradeId: text("upgradeId").notNull().references(() => upgrades.id, { onDelete: 'cascade' }),
   level: integer("level").default(0).notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
-export const playerCharacters = pgTable("player_characters", {
+export const playerCharacters = pgTable("playerCharacters", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  playerId: varchar("player_id").notNull().references(() => players.id, { onDelete: 'cascade' }),
-  characterId: text("character_id").notNull().references(() => characters.id, { onDelete: 'cascade' }),
-  unlockedAt: timestamp("unlocked_at").defaultNow().notNull(),
+  playerId: varchar("playerId").notNull().references(() => players.id, { onDelete: 'cascade' }),
+  characterId: text("characterId").notNull().references(() => characters.id, { onDelete: 'cascade' }),
+  unlockedAt: timestamp("unlockedAt").defaultNow().notNull(),
 });
 
 export const insertPlayerSchema = createInsertSchema(players).omit({
