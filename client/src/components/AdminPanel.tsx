@@ -218,12 +218,7 @@ export default function AdminPanel() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => {
-                            setEditingUpgrade(upgrade);
-                            setTimeout(() => {
-                              document.getElementById('upgrade-edit-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                            }, 100);
-                          }}
+                          onClick={() => setEditingUpgrade(upgrade)}
                           data-testid={`button-edit-upgrade-${upgrade.id}`}
                         >
                           Edit
@@ -236,129 +231,131 @@ export default function AdminPanel() {
             </ScrollArea>
 
             {editingUpgrade && (
-              <Card id="upgrade-edit-form" className="border-primary">
-                <CardHeader>
-                  <h3 className="font-semibold">Editing: {editingUpgrade.name}</h3>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <Label>Name</Label>
-                      <Input
-                        value={editingUpgrade.name}
-                        onChange={(e) => setEditingUpgrade({ ...editingUpgrade, name: e.target.value })}
-                        data-testid="input-upgrade-name"
-                      />
+              <Dialog open={!!editingUpgrade} onOpenChange={(open) => !open && setEditingUpgrade(null)}>
+                <DialogContent className="max-w-2xl">
+                  <DialogHeader>
+                    <DialogTitle>Editing: {editingUpgrade.name}</DialogTitle>
+                  </DialogHeader>
+                  <div id="upgrade-edit-form" className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label>Name</Label>
+                        <Input
+                          value={editingUpgrade.name}
+                          onChange={(e) => setEditingUpgrade({ ...editingUpgrade, name: e.target.value })}
+                          data-testid="input-upgrade-name"
+                        />
+                      </div>
+                      <div>
+                        <Label>Max Level</Label>
+                        <Input
+                          type="number"
+                          value={editingUpgrade.maxLevel}
+                          onChange={(e) => setEditingUpgrade({ ...editingUpgrade, maxLevel: parseInt(e.target.value) })}
+                          data-testid="input-upgrade-maxlevel"
+                        />
+                      </div>
+                      <div>
+                        <Label>Base Cost</Label>
+                        <Input
+                          type="number"
+                          value={editingUpgrade.baseCost}
+                          onChange={(e) => setEditingUpgrade({ ...editingUpgrade, baseCost: parseFloat(e.target.value) })}
+                          data-testid="input-upgrade-basecost"
+                        />
+                      </div>
+                      <div>
+                        <Label>Cost Multiplier</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={editingUpgrade.costMultiplier}
+                          onChange={(e) => setEditingUpgrade({ ...editingUpgrade, costMultiplier: parseFloat(e.target.value) })}
+                          data-testid="input-upgrade-costmult"
+                        />
+                      </div>
+                      <div>
+                        <Label>Base Value</Label>
+                        <Input
+                          type="number"
+                          value={editingUpgrade.baseValue}
+                          onChange={(e) => setEditingUpgrade({ ...editingUpgrade, baseValue: parseFloat(e.target.value) })}
+                          data-testid="input-upgrade-basevalue"
+                        />
+                      </div>
+                      <div>
+                        <Label>Value Increment</Label>
+                        <Input
+                          type="number"
+                          step="0.1"
+                          value={editingUpgrade.valueIncrement}
+                          onChange={(e) => setEditingUpgrade({ ...editingUpgrade, valueIncrement: parseFloat(e.target.value) })}
+                          data-testid="input-upgrade-valueinc"
+                        />
+                      </div>
+                      <div>
+                        <Label>Passive Income Time (Minutes)</Label>
+                        <Input
+                          type="number"
+                          value={editingUpgrade.passiveIncomeTime || 0}
+                          onChange={(e) => setEditingUpgrade({ ...editingUpgrade, passiveIncomeTime: parseInt(e.target.value) || 0 })}
+                          data-testid="input-upgrade-passive-time"
+                        />
+                      </div>
                     </div>
                     <div>
-                      <Label>Max Level</Label>
-                      <Input
-                        type="number"
-                        value={editingUpgrade.maxLevel}
-                        onChange={(e) => setEditingUpgrade({ ...editingUpgrade, maxLevel: parseInt(e.target.value) })}
-                        data-testid="input-upgrade-maxlevel"
+                      <Label>Description</Label>
+                      <Textarea
+                        value={editingUpgrade.description}
+                        onChange={(e) => setEditingUpgrade({ ...editingUpgrade, description: e.target.value })}
+                        data-testid="input-upgrade-desc"
                       />
                     </div>
-                    <div>
-                      <Label>Base Cost</Label>
-                      <Input
-                        type="number"
-                        value={editingUpgrade.baseCost}
-                        onChange={(e) => setEditingUpgrade({ ...editingUpgrade, baseCost: parseFloat(e.target.value) })}
-                        data-testid="input-upgrade-basecost"
-                      />
+                    <div className="flex gap-4">
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="upgrade-vip"
+                          checked={editingUpgrade.isVip || false}
+                          onCheckedChange={(checked) => setEditingUpgrade({ ...editingUpgrade, isVip: checked as boolean })}
+                          data-testid="checkbox-upgrade-vip"
+                        />
+                        <Label htmlFor="upgrade-vip">VIP Upgrade</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="upgrade-event"
+                          checked={editingUpgrade.isEvent || false}
+                          onCheckedChange={(checked) => setEditingUpgrade({ ...editingUpgrade, isEvent: checked as boolean })}
+                          data-testid="checkbox-upgrade-event"
+                        />
+                        <Label htmlFor="upgrade-event">Event Upgrade</Label>
+                      </div>
                     </div>
-                    <div>
-                      <Label>Cost Multiplier</Label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={editingUpgrade.costMultiplier}
-                        onChange={(e) => setEditingUpgrade({ ...editingUpgrade, costMultiplier: parseFloat(e.target.value) })}
-                        data-testid="input-upgrade-costmult"
-                      />
-                    </div>
-                    <div>
-                      <Label>Base Value</Label>
-                      <Input
-                        type="number"
-                        value={editingUpgrade.baseValue}
-                        onChange={(e) => setEditingUpgrade({ ...editingUpgrade, baseValue: parseFloat(e.target.value) })}
-                        data-testid="input-upgrade-basevalue"
-                      />
-                    </div>
-                    <div>
-                      <Label>Value Increment</Label>
-                      <Input
-                        type="number"
-                        step="0.1"
-                        value={editingUpgrade.valueIncrement}
-                        onChange={(e) => setEditingUpgrade({ ...editingUpgrade, valueIncrement: parseFloat(e.target.value) })}
-                        data-testid="input-upgrade-valueinc"
-                      />
-                    </div>
-                    <div>
-                      <Label>Passive Income Time (Minutes)</Label>
-                      <Input
-                        type="number"
-                        value={editingUpgrade.passiveIncomeTime || 0}
-                        onChange={(e) => setEditingUpgrade({ ...editingUpgrade, passiveIncomeTime: parseInt(e.target.value) || 0 })}
-                        data-testid="input-upgrade-passive-time"
-                      />
+                    <div className="flex gap-2">
+                      <Button onClick={handleSaveUpgrade} data-testid="button-save-upgrade">
+                        <Save className="w-4 h-4 mr-2" />
+                        Save
+                      </Button>
+                      <Button variant="outline" onClick={() => setEditingUpgrade(null)}>
+                        Cancel
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        onClick={() => {
+                          if (confirm(`Delete upgrade "${editingUpgrade.name}"?`)) {
+                            deleteUpgrade(editingUpgrade.id);
+                            setEditingUpgrade(null);
+                          }
+                        }}
+                        data-testid="button-delete-upgrade"
+                      >
+                        <X className="w-4 h-4 mr-2" />
+                        Delete
+                      </Button>
                     </div>
                   </div>
-                  <div>
-                    <Label>Description</Label>
-                    <Textarea
-                      value={editingUpgrade.description}
-                      onChange={(e) => setEditingUpgrade({ ...editingUpgrade, description: e.target.value })}
-                      data-testid="input-upgrade-desc"
-                    />
-                  </div>
-                  <div className="flex gap-4">
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="upgrade-vip"
-                        checked={editingUpgrade.isVip || false}
-                        onCheckedChange={(checked) => setEditingUpgrade({ ...editingUpgrade, isVip: checked as boolean })}
-                        data-testid="checkbox-upgrade-vip"
-                      />
-                      <Label htmlFor="upgrade-vip">VIP Upgrade</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="upgrade-event"
-                        checked={editingUpgrade.isEvent || false}
-                        onCheckedChange={(checked) => setEditingUpgrade({ ...editingUpgrade, isEvent: checked as boolean })}
-                        data-testid="checkbox-upgrade-event"
-                      />
-                      <Label htmlFor="upgrade-event">Event Upgrade</Label>
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button onClick={handleSaveUpgrade} data-testid="button-save-upgrade">
-                      <Save className="w-4 h-4 mr-2" />
-                      Save
-                    </Button>
-                    <Button variant="outline" onClick={() => setEditingUpgrade(null)}>
-                      Cancel
-                    </Button>
-                    <Button
-                      variant="destructive"
-                      onClick={() => {
-                        if (confirm(`Delete upgrade "${editingUpgrade.name}"?`)) {
-                          deleteUpgrade(editingUpgrade.id);
-                          setEditingUpgrade(null);
-                        }
-                      }}
-                      data-testid="button-delete-upgrade"
-                    >
-                      <X className="w-4 h-4 mr-2" />
-                      Delete
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+                </DialogContent>
+              </Dialog>
             )}
           </TabsContent>
 
