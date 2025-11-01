@@ -36,10 +36,16 @@ export default function AdminPanel() {
     queryKey: ['/api/admin/players'],
     enabled: !!adminToken && state.isAdmin,
     queryFn: async () => {
+      const headers: Record<string, string> = {
+        'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`
+      };
+      
+      if (adminToken) {
+        headers['x-admin-token'] = adminToken;
+      }
+      
       const response = await fetch('/api/admin/players', {
-        headers: {
-          'x-admin-token': adminToken
-        }
+        headers
       });
       if (!response.ok) throw new Error('Failed to fetch players');
       return response.json();
@@ -48,12 +54,18 @@ export default function AdminPanel() {
 
   const updatePlayerMutation = useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: any }) => {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`
+      };
+      
+      if (adminToken) {
+        headers['x-admin-token'] = adminToken;
+      }
+      
       const response = await fetch(`/api/admin/players/${id}`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-admin-token': adminToken
-        },
+        headers,
         body: JSON.stringify(updates)
       });
       if (!response.ok) throw new Error('Failed to update player');
@@ -72,12 +84,18 @@ export default function AdminPanel() {
       const method = existing ? 'PATCH' : 'POST';
       const url = existing ? `/api/admin/upgrades/${upgrade.id}` : '/api/admin/upgrades';
       
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`
+      };
+      
+      if (adminToken) {
+        headers['x-admin-token'] = adminToken;
+      }
+      
       const response = await fetch(url, {
         method,
-        headers: {
-          'Content-Type': 'application/json',
-          'x-admin-token': adminToken
-        },
+        headers,
         body: JSON.stringify(upgrade)
       });
       if (!response.ok) throw new Error('Failed to save upgrade');
@@ -97,12 +115,18 @@ export default function AdminPanel() {
       const method = existing ? 'PATCH' : 'POST';
       const url = existing ? `/api/admin/characters/${character.id}` : '/api/admin/characters';
       
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`
+      };
+      
+      if (adminToken) {
+        headers['x-admin-token'] = adminToken;
+      }
+      
       const response = await fetch(url, {
         method,
-        headers: {
-          'Content-Type': 'application/json',
-          'x-admin-token': adminToken
-        },
+        headers,
         body: JSON.stringify(character)
       });
       if (!response.ok) throw new Error('Failed to save character');
@@ -122,12 +146,18 @@ export default function AdminPanel() {
       const method = existing ? 'PATCH' : 'POST';
       const url = existing ? `/api/admin/levels/${level.level}` : '/api/admin/levels';
       
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`
+      };
+      
+      if (adminToken) {
+        headers['x-admin-token'] = adminToken;
+      }
+      
       const response = await fetch(url, {
         method,
-        headers: {
-          'Content-Type': 'application/json',
-          'x-admin-token': adminToken
-        },
+        headers,
         body: JSON.stringify(level)
       });
       if (!response.ok) throw new Error('Failed to save level');
@@ -190,11 +220,17 @@ export default function AdminPanel() {
 
   const handleDeleteUpgrade = async (upgradeId: string) => {
     try {
+      const headers: Record<string, string> = {
+        'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`
+      };
+      
+      if (adminToken) {
+        headers['x-admin-token'] = adminToken;
+      }
+      
       await fetch(`/api/admin/upgrades/${upgradeId}`, {
         method: 'DELETE',
-        headers: {
-          'x-admin-token': adminToken
-        }
+        headers
       });
       deleteUpgrade(upgradeId);
       setEditingUpgrade(null);
@@ -213,11 +249,17 @@ export default function AdminPanel() {
 
   const handleDeleteCharacter = async (characterId: string) => {
     try {
+      const headers: Record<string, string> = {
+        'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`
+      };
+      
+      if (adminToken) {
+        headers['x-admin-token'] = adminToken;
+      }
+      
       await fetch(`/api/admin/characters/${characterId}`, {
         method: 'DELETE',
-        headers: {
-          'x-admin-token': adminToken
-        }
+        headers
       });
       deleteCharacter(characterId);
       setEditingCharacter(null);
@@ -236,11 +278,17 @@ export default function AdminPanel() {
 
   const handleDeleteLevel = async (level: number) => {
     try {
+      const headers: Record<string, string> = {
+        'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`
+      };
+      
+      if (adminToken) {
+        headers['x-admin-token'] = adminToken;
+      }
+      
       await fetch(`/api/admin/levels/${level}`, {
         method: 'DELETE',
-        headers: {
-          'x-admin-token': adminToken
-        }
+        headers
       });
       deleteLevel(level);
       setEditingLevel(null);
