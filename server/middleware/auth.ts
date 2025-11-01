@@ -47,6 +47,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 }
 
 export function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  // Check admin token first (for external admin tools)
   const adminToken = req.headers['x-admin-token'] as string;
   const envAdminToken = process.env.ADMIN_TOKEN;
   
@@ -54,6 +55,7 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction) {
     return next();
   }
   
+  // If no admin token, check if user is authenticated and is admin
   if (!req.player) {
     return res.status(401).json({ 
       error: 'Authentication required', 
@@ -69,4 +71,26 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction) {
   }
   
   next();
+}
+
+// New middleware: Optional admin - works for both admin users and admin token
+export function optionalAdmin(req: Request, res: Response, next: NextFunction) {
+  const adminToken = req.headers['x-admin-token'] as string;
+  const envAdminToken = process.env.ADMIN_TOKEN;
+  
+  // Allow if valid admin token
+  if (envAdminToken && adminToken === envAdminToken) {
+    return next();
+  }
+  
+  // Allow if authenticated user is admin
+  if (req.player?.isAdmin) {
+    return next();
+  }
+  
+  // Deny access
+  return res.status(403).json({ 
+    error: 'Admin access required', 
+    message: 'You need admin privileges or a valid admin token to access this resource.' 
+  });
 }
