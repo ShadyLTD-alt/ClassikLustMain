@@ -3,7 +3,7 @@ import { Settings, Save, RotateCcw, Plus, X, Users } from 'lucide-react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useGame } from '@/contexts/GameContext';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -519,7 +519,7 @@ export default function AdminPanel() {
                   if (nextLevel === 1 && existingLevels.length > 0) {
                     nextLevel = Math.max(...existingLevels) + 1;
                   }
-                  
+
                   const newLevel = {
                     level: nextLevel,
                     cost: 100,
@@ -558,6 +558,175 @@ export default function AdminPanel() {
                 ))}
               </div>
             </ScrollArea>
+
+            {editingLevel && (
+              <Dialog open={!!editingLevel} onOpenChange={(open) => !open && setEditingLevel(null)}>
+                <DialogContent className="max-w-2xl">
+                  <DialogHeader>
+                    <DialogTitle>Editing: Level {editingLevel.level}</DialogTitle>
+                  </DialogHeader>
+                  <div id="level-edit-form" className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label>Level Number</Label>
+                        <Input
+                          type="number"
+                          min="1"
+                          value={editingLevel.level}
+                          onChange={(e) => setEditingLevel({ ...editingLevel, level: parseInt(e.target.value) || 1 })}
+                          data-testid="input-level-number"
+                        />
+                      </div>
+                      <div>
+                        <Label>Cost (Points Required)</Label>
+                        <Input
+                          type="number"
+                          value={editingLevel.cost}
+                          onChange={(e) => setEditingLevel({ ...editingLevel, cost: parseInt(e.target.value) })}
+                          data-testid="input-level-cost"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <Label>Requirements</Label>
+                      {editingLevel.requirements.map((req, idx) => (
+                        <div key={idx} className="flex gap-2 mb-2">
+                          <Select
+                            value={req.upgradeId}
+                            onValueChange={(value) => {
+                              const newReqs = [...editingLevel.requirements];
+                              newReqs[idx] = { ...req, upgradeId: value };
+                              setEditingLevel({ ...editingLevel, requirements: newReqs });
+                            }}
+                          >
+                            <SelectTrigger data-testid={`select-req-upgrade-${idx}`}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {upgrades.map(u => (
+                                <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Input
+                            type="number"
+                            placeholder="Min Level"
+                            value={req.minLevel}
+                            onChange={(e) => {
+                              const newReqs = [...editingLevel.requirements];
+                              newReqs[idx] = { ...req, minLevel: parseInt(e.target.value) };
+                              setEditingLevel({ ...editingLevel, requirements: newReqs });
+                            }}
+                            data-testid={`input-req-level-${idx}`}
+                          />
+                          <Button
+                            variant="destructive"
+                            size="icon"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingLevel({
+                                ...editingLevel,
+                                requirements: editingLevel.requirements.filter((_, i) => i !== idx)
+                              });
+                            }}
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      ))}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setEditingLevel({
+                            ...editingLevel,
+                            requirements: [...editingLevel.requirements, { upgradeId: upgrades[0]?.id || '', minLevel: 1 }]
+                          });
+                        }}
+                        data-testid="button-add-requirement"
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        Add Requirement
+                      </Button>
+                    </div>
+
+                    <div>
+                      <Label>Unlocks</Label>
+                      {editingLevel.unlocks.map((unlock, idx) => (
+                        <div key={idx} className="flex gap-2 mb-2">
+                          <Input
+                            value={unlock}
+                            onChange={(e) => {
+                              const newUnlocks = [...editingLevel.unlocks];
+                              newUnlocks[idx] = e.target.value;
+                              setEditingLevel({ ...editingLevel, unlocks: newUnlocks });
+                            }}
+                            data-testid={`input-unlock-${idx}`}
+                          />
+                          <Button
+                            variant="destructive"
+                            size="icon"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingLevel({
+                                ...editingLevel,
+                                unlocks: editingLevel.unlocks.filter((_, i) => i !== idx)
+                              });
+                            }}
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      ))}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setEditingLevel({
+                            ...editingLevel,
+                            unlocks: [...editingLevel.unlocks, 'New unlock']
+                          });
+                        }}
+                        data-testid="button-add-unlock"
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        Add Unlock
+                      </Button>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <Button onClick={handleSaveLevel} data-testid="button-save-level">
+                        <Save className="w-4 h-4 mr-2" />
+                        Save
+                      </Button>
+                      <Button variant="outline" onClick={() => setEditingLevel(null)}>
+                        Cancel
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (confirm(`Delete Level ${editingLevel.level}? This cannot be undone.`)) {
+                            const levelToDelete = editingLevel.level;
+                            setEditingLevel(null);
+                            deleteLevel(levelToDelete);
+                            toast({
+                              title: 'Level deleted',
+                              description: `Level ${levelToDelete} has been removed.`
+                            });
+                          }
+                        }}
+                        data-testid="button-delete-level"
+                      >
+                        <X className="w-4 h-4 mr-2" />
+                        Delete
+                      </Button>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            )}
           </TabsContent>
 
           <TabsContent value="images" className="space-y-4">
@@ -568,190 +737,7 @@ export default function AdminPanel() {
             </ScrollArea>
           </TabsContent>
 
-          
-  );
-}
-
-// Separate level editing dialog component
-function LevelEditDialog({ 
-  editingLevel, 
-  setEditingLevel, 
-  handleSaveLevel, 
-  upgrades, 
-  deleteLevel, 
-  toast 
-}: any) {
-  if (!editingLevel) return null;
-
-  return (
-    <Dialog open={!!editingLevel} onOpenChange={(open) => !open && setEditingLevel(null)}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Editing: Level {editingLevel.level}</DialogTitle>
-        </DialogHeader>
-        <div id="level-edit-form" className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label>Level Number</Label>
-              <Input
-                type="number"
-                min="1"
-                value={editingLevel.level}
-                onChange={(e) => setEditingLevel({ ...editingLevel, level: parseInt(e.target.value) || 1 })}
-                data-testid="input-level-number"
-              />
-            </div>
-            <div>
-              <Label>Cost (Points Required)</Label>
-              <Input
-                type="number"
-                value={editingLevel.cost}
-                onChange={(e) => setEditingLevel({ ...editingLevel, cost: parseInt(e.target.value) })}
-                data-testid="input-level-cost"
-              />
-            </div>
-          </div>
-
-          <div>
-            <Label>Requirements</Label>
-            {editingLevel.requirements.map((req, idx) => (
-              <div key={idx} className="flex gap-2 mb-2">
-                <Select
-                  value={req.upgradeId}
-                  onValueChange={(value) => {
-                    const newReqs = [...editingLevel.requirements];
-                    newReqs[idx] = { ...req, upgradeId: value };
-                    setEditingLevel({ ...editingLevel, requirements: newReqs });
-                  }}
-                >
-                  <SelectTrigger data-testid={`select-req-upgrade-${idx}`}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {upgrades.map(u => (
-                      <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Input
-                  type="number"
-                  placeholder="Min Level"
-                  value={req.minLevel}
-                  onChange={(e) => {
-                    const newReqs = [...editingLevel.requirements];
-                    newReqs[idx] = { ...req, minLevel: parseInt(e.target.value) };
-                    setEditingLevel({ ...editingLevel, requirements: newReqs });
-                  }}
-                  data-testid={`input-req-level-${idx}`}
-                />
-                <Button
-                  variant="destructive"
-                  size="icon"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setEditingLevel({
-                      ...editingLevel,
-                      requirements: editingLevel.requirements.filter((_, i) => i !== idx)
-                    });
-                  }}
-                >
-                  <X className="w-4 h-4" />
-                </Button>
-              </div>
-            ))}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setEditingLevel({
-                  ...editingLevel,
-                  requirements: [...editingLevel.requirements, { upgradeId: upgrades[0]?.id || '', minLevel: 1 }]
-                });
-              }}
-              data-testid="button-add-requirement"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Add Requirement
-            </Button>
-          </div>
-
-          <div>
-            <Label>Unlocks</Label>
-            {editingLevel.unlocks.map((unlock, idx) => (
-              <div key={idx} className="flex gap-2 mb-2">
-                <Input
-                  value={unlock}
-                  onChange={(e) => {
-                    const newUnlocks = [...editingLevel.unlocks];
-                    newUnlocks[idx] = e.target.value;
-                    setEditingLevel({ ...editingLevel, unlocks: newUnlocks });
-                  }}
-                  data-testid={`input-unlock-${idx}`}
-                />
-                <Button
-                  variant="destructive"
-                  size="icon"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setEditingLevel({
-                      ...editingLevel,
-                      unlocks: editingLevel.unlocks.filter((_, i) => i !== idx)
-                    });
-                  }}
-                >
-                  <X className="w-4 h-4" />
-                </Button>
-              </div>
-            ))}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setEditingLevel({
-                  ...editingLevel,
-                  unlocks: [...editingLevel.unlocks, 'New unlock']
-                });
-              }}
-              data-testid="button-add-unlock"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Add Unlock
-            </Button>
-          </div>
-
-          <div className="flex gap-2">
-            <Button onClick={handleSaveLevel} data-testid="button-save-level">
-              <Save className="w-4 h-4 mr-2" />
-              Save
-            </Button>
-            <Button variant="outline" onClick={() => setEditingLevel(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (confirm(`Delete Level ${editingLevel.level}? This cannot be undone.`)) {
-                  const levelToDelete = editingLevel.level;
-                  setEditingLevel(null);
-                  deleteLevel(levelToDelete);
-                  toast({ 
-                    title: 'Level deleted', 
-                    description: `Level ${levelToDelete} has been removed.` 
-                          });
-                }
-              }}
-              data-testid="button-delete-level"
-            >
-              <X className="w-4 h-4 mr-2" />
-              Delete
-            </Button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}</old_str>
+          <TabsContent value="players" className="space-y-4">
             {!adminToken ? (
               <Card>
                 <CardHeader>
@@ -1015,3 +1001,5 @@ function LevelEditDialog({
     </Dialog>
   );
 }
+
+// Separate level editing dialog component is removed as it's now integrated.
