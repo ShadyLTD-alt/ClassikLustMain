@@ -68,18 +68,12 @@ function App() {
           if (response.ok) {
             const data = await response.json();
             console.log('📦 [v3.0] Player data received:', data.player?.username);
+            console.log('✅ [v3.0] Session valid, user authenticated');
             
             if (!isMounted) return;
             setUserData(data.player);
             setLoadingProgress(100);
-            
-            // Use setTimeout to ensure state updates are processed
-            setTimeout(() => {
-              if (!isMounted) return;
-              console.log('🎯 [v3.0] Setting authState to authenticated NOW');
-              setAuthState('authenticated');
-              console.log('✅ [v3.0] authState set to authenticated');
-            }, 0);
+            setAuthState('authenticated');
             return;
           } else {
             console.log('❌ [v3.0] Session invalid, clearing token');
@@ -115,13 +109,8 @@ function App() {
             setLoadingProgress(90);
             setUserData(data.player);
             setLoadingProgress(100);
-            
-            setTimeout(() => {
-              if (!isMounted) return;
-              console.log('🎯 [v3.0] Setting authState to authenticated NOW (Telegram)');
-              setAuthState('authenticated');
-              console.log('✅ [v3.0] Telegram auto-auth successful');
-            }, 0);
+            setAuthState('authenticated');
+            console.log('✅ [v3.0] Telegram auto-auth successful');
             return;
           } else {
             console.log('❌ [v3.0] Telegram auth failed');
@@ -136,10 +125,7 @@ function App() {
       console.log('🔐 [v3.0] No valid session found, showing login screen');
       if (!isMounted) return;
       setLoadingProgress(100);
-      setTimeout(() => {
-        if (!isMounted) return;
-        setAuthState('unauthenticated');
-      }, 0);
+      setAuthState('unauthenticated');
     };
 
     checkAuth();
