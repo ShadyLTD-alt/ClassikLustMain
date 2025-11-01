@@ -27,12 +27,13 @@ function App() {
   useEffect(() => {
     // Check for existing session
     const checkAuth = async () => {
-      console.log('🚀 App.tsx checkAuth starting...');
+      console.log('🚀 [v3.0] App.tsx checkAuth starting...');
+      console.log('⏰ Current timestamp:', new Date().toISOString());
       setLoadingProgress(20);
       
       // Check if running in Telegram WebApp
       const tg = (window as any).Telegram?.WebApp;
-      console.log('📱 Telegram WebApp check:', { 
+      console.log('📱 [v3.0] Telegram WebApp check:', { 
         exists: !!tg, 
         hasInitData: !!tg?.initData,
         initDataLength: tg?.initData?.length || 0,
@@ -50,33 +51,47 @@ function App() {
       
       // Check localStorage for saved player data FIRST
       const savedPlayer = localStorage.getItem('playerData');
-      console.log('👤 Saved player exists:', !!savedPlayer);
+      console.log('👤 [v3.0] localStorage check:', {
+        exists: !!savedPlayer,
+        length: savedPlayer?.length || 0,
+        preview: savedPlayer ? savedPlayer.substring(0, 100) : 'null'
+      });
       
       // If we have saved player data with telegramId, use it immediately
       if (savedPlayer) {
         try {
           const playerData = JSON.parse(savedPlayer);
+          console.log('📊 [v3.0] Parsed player data:', {
+            id: playerData.id,
+            username: playerData.username,
+            telegramId: playerData.telegramId,
+            hasTelegramId: !!playerData.telegramId,
+            hasId: !!playerData.id
+          });
+          
           if (playerData.telegramId && playerData.id) {
-            console.log('✅ Valid saved session found for:', playerData.username);
+            console.log('✅ [v3.0] Valid saved session found! Username:', playerData.username);
             setUserData(playerData);
             setLoadingProgress(100);
             setTimeout(() => setAuthState('authenticated'), 500);
             return;
           } else {
-            console.log('⚠️ Saved player missing telegramId or id, clearing...');
+            console.log('⚠️ [v3.0] Saved player missing telegramId or id, clearing...');
             localStorage.removeItem('playerData');
           }
         } catch (error) {
-          console.error('💥 Failed to parse saved player:', error);
+          console.error('💥 [v3.0] Failed to parse saved player:', error);
           localStorage.removeItem('playerData');
         }
+      } else {
+        console.log('❌ [v3.0] No saved player in localStorage');
       }
       
       setLoadingProgress(60);
       
       // Only try Telegram auth if we don't have a valid saved session
       if (tg && tg.initData && tg.initData.length > 0) {
-        console.log('🔑 No saved session, attempting Telegram auth...');
+        console.log('🔑 [v3.0] No saved session, attempting Telegram auth...');
         setLoadingProgress(70);
         try {
           console.log('📤 Sending auth request...');
@@ -103,10 +118,10 @@ function App() {
           console.error('💥 Telegram auth failed:', error);
         }
       } else {
-        console.log('ℹ️ No initData available for Telegram auth');
+        console.log('ℹ️ [v3.0] No initData available for Telegram auth');
       }
       
-      console.log('🔐 No valid session found, showing login screen');
+      console.log('🔐 [v3.0] No valid session found, showing login screen');
       setLoadingProgress(100);
       setTimeout(() => setAuthState('login'), 500);
     };
