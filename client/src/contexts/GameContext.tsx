@@ -54,11 +54,11 @@ const INITIAL_STATE: GameState = {
   energy: 1000,
   maxEnergy: 1000,
   level: 1,
-  selectedCharacterId: 'starter',
+  selectedCharacterId: 'aria',
   selectedImageId: null,
   selectedAvatarId: null,
   upgrades: {},
-  unlockedCharacters: ['starter'],
+  unlockedCharacters: ['aria'],
   unlockedImages: [],
   passiveIncomeRate: 0,
   passiveIncomeCap: 10000,
@@ -112,11 +112,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
             energy: player.energy || prev.energy,
             maxEnergy: player.maxEnergy || prev.maxEnergy,
             level: player.level || prev.level,
-            selectedCharacterId: player.selectedCharacterId || 'starter',
+            selectedCharacterId: player.selectedCharacterId || 'aria',
             selectedImageId: player.selectedImageId || null,
             displayImage: player.displayImage || null,
             upgrades: player.upgrades || {},
-            unlockedCharacters: Array.isArray(player.unlockedCharacters) ? player.unlockedCharacters : ['starter'],
+            unlockedCharacters: Array.isArray(player.unlockedCharacters) ? player.unlockedCharacters : ['aria'],
             passiveIncomeRate: player.passiveIncomeRate || 0,
             isAdmin: player.isAdmin || false
           }));
@@ -627,7 +627,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       const newUnlockedCharacters = prev.unlockedCharacters.filter(id => id !== characterId);
       let newSelectedCharacterId = prev.selectedCharacterId;
       if (prev.selectedCharacterId === characterId) {
-        newSelectedCharacterId = 'starter';
+        newSelectedCharacterId = 'aria';
       }
       return { ...prev, unlockedCharacters: newUnlockedCharacters, selectedCharacterId: newSelectedCharacterId };
     });
