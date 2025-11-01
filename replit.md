@@ -58,19 +58,32 @@ Preferred communication style: Simple, everyday language.
 
 **Database ORM**: Drizzle ORM configured for PostgreSQL with the Neon serverless driver.
 
-**Schema**: Currently minimal with a `users` table (username/password fields). Game state is persisted client-side using localStorage via the GameContext.
+**Schema**: Full PostgreSQL schema using Supabase including:
+- `players`: Player progression data (points, energy, level, upgrades, unlocked characters)
+- `upgrades`: Game upgrade definitions synced from JSON files
+- `characters`: Character definitions synced from JSON files
+- `levels`: Level progression requirements synced from JSON files
+- `mediaUploads`: Uploaded character images with metadata (characterId, url, type, unlockLevel, categories, poses)
+- `sessions`: Player authentication sessions
+- `playerUpgrades`, `playerCharacters`: Junction tables for player progression
 
-**Game Configuration**: JSON-based configuration files stored in the repository:
-- `client/src/character-data/*.json`: Character definitions with unlock levels and rarity
-- `src/game-data/upgrades/*.json`: Upgrade configurations with cost curves and value increments
-- `src/game-data/levelup/*.json`: Level requirements and unlock conditions
+**Game Configuration**: Dual-persistence strategy using both JSON files and database:
+- `main-gamedata/progressive-data/upgrades/*.json`: Upgrade configurations with cost curves and value increments
+- `main-gamedata/progressive-data/levelup/*.json`: Level requirements and unlock conditions
+- `main-gamedata/character-data/*.json`: Character definitions with unlock levels and rarity
+- JSON files are synced to database on server startup via `syncAllGameData()`
 
-**Configuration Management**: Admin panel allows runtime editing of configurations stored in context state, with persistence to localStorage. No database persistence for game configs currently implemented.
+**Configuration Management**: Admin panel now uses backend API endpoints to:
+- Create/update/delete upgrades, characters, and levels
+- Save changes to both database AND JSON files via `saveUpgradeToJSON()`, `saveCharacterToJSON()`, `saveLevelToJSON()`
+- Ensure data persistence across server restarts
 
 **Data Persistence Strategy**: 
-- Player progression saved to localStorage on state changes
-- Game configurations loaded from JSON files on app initialization
-- Admin edits stored in localStorage (not synced to JSON files)
+- Player progression synced to Supabase database in real-time
+- Game configurations stored in database and synced to JSON files for version control
+- Image uploads saved to disk with metadata in `mediaUploads` table
+- All data persists across server restarts
+- Admin edits persist to both database and JSON files
 
 ### Authentication and Authorization
 
