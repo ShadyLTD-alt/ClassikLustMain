@@ -6,6 +6,9 @@ import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
 import { AuthDataValidator } from "@telegram-auth/server";
+import { requireAuth, requireAdmin } from "./middleware/auth";
+import { syncAllGameData, saveUpgradeToJSON, saveLevelToJSON, saveCharacterToJSON } from "./utils/dataLoader";
+import { insertUpgradeSchema, insertCharacterSchema, insertLevelSchema, insertPlayerUpgradeSchema } from "@shared/schema";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -43,23 +46,9 @@ const upload = multer({
   }
 });
 
-function requireAdmin(req: Request, res: Response, next: NextFunction) {
-  const adminToken = req.headers['x-admin-token'];
-  const envAdminToken = process.env.ADMIN_TOKEN;
-  
-  if (!envAdminToken) {
-    return res.status(500).json({ error: 'Admin authentication not configured' });
-  }
-  
-  if (adminToken !== envAdminToken) {
-    return res.status(403).json({ error: 'Unauthorized: Admin access required' });
-  }
-  
-  next();
-}
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  app.post("/api/upload", upload.single("image"), (req, res) => {
+  app.post("/api/upload", requireAuth, upload.single("image"), (req, res) => {
     if (!req.file) {
       return res.status(400).json({ error: "No file uploaded" });
     }
@@ -165,7 +154,254 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/admin/players", requireAdmin, async (_req, res) => {
+  app.get("/api/upgrades", requireAuth, async (req, res) => {
+    try {
+      const includeHidden = req.player?.isAdmin || false;
+      const upgrades = await storage.getUpgrades(includeHidden);
+      res.json({ upgrades });
+    } catch (error) {
+      console.error('Error fetching upgrades:', error);
+      res.status(500).json({ error: 'Failed to fetch upgrades' });
+    }
+  });
+
+  app.get("/api/characters", requireAuth, async (req, res) => {
+    try {
+      const includeHidden = req.player?.isAdmin || false;
+      const characters = await storage.getCharacters(includeHidden);
+      res.json({ characters });
+    } catch (error) {
+      console.error('Error fetching characters:', error);
+      res.status(500).json({ error: 'Failed to fetch characters' });
+    }
+  });
+
+  app.get("/api/levels", requireAuth, async (_req, res) => {
+    try {
+      const levels = await storage.getLevels();
+      res.json({ levels });
+    } catch (error) {
+      console.error('Error fetching levels:', error);
+      res.status(500).json({ error: 'Failed to fetch levels' });
+    }
+  });
+
+  app.get("/api/player/me", requireAuth, async (req, res) => {
+    try {
+      const player = await storage.getPlayer(req.player!.id);
+      if (!player) {
+        return res.status(404).json({ error: 'Player not found' });
+      }
+      res.json({ player });
+    } catch (error) {
+      console.error('Error fetching player:', error);
+      res.status(500).json({ error: 'Failed to fetch player data' });
+    }
+  });
+
+  app.patch("/api/player/me", requireAuth, async (req, res) => {
+    try {
+      const updates = req.body;
+      if (updates.isAdmin !== undefined) {
+        delete updates.isAdmin;
+      }
+      
+      const updatedPlayer = await storage.updatePlayer(req.player!.id, updates);
+      res.json({ player: updatedPlayer });
+    } catch (error) {
+      console.error('Error updating player:', error);
+      res.status(500).json({ error: 'Failed to update player' });
+    }
+  });
+
+  app.get("/api/player/upgrades", requireAuth, async (req, res) => {
+    try {
+      const playerUpgrades = await storage.getPlayerUpgrades(req.player!.id);
+      res.json({ upgrades: playerUpgrades });
+    } catch (error) {
+      console.error('Error fetching player upgrades:', error);
+      res.status(500).json({ error: 'Failed to fetch player upgrades' });
+    }
+  });
+
+  app.post("/api/player/upgrades", requireAuth, async (req, res) => {
+    try {
+      const validation = insertPlayerUpgradeSchema.safeParse({
+        ...req.body,
+        playerId: req.player!.id,
+      });
+
+      if (!validation.success) {
+        return res.status(400).json({ error: 'Invalid upgrade data', details: validation.error });
+      }
+
+      const playerUpgrade = await storage.setPlayerUpgrade(validation.data);
+      res.json({ upgrade: playerUpgrade });
+    } catch (error) {
+      console.error('Error setting player upgrade:', error);
+      res.status(500).json({ error: 'Failed to set player upgrade' });
+    }
+  });
+
+  app.get("/api/player/characters", requireAuth, async (req, res) => {
+    try {
+      const playerCharacters = await storage.getPlayerCharacters(req.player!.id);
+      res.json({ characters: playerCharacters });
+    } catch (error) {
+      console.error('Error fetching player characters:', error);
+      res.status(500).json({ error: 'Failed to fetch player characters' });
+    }
+  });
+
+  app.post("/api/player/characters/:characterId/unlock", requireAuth, async (req, res) => {
+    try {
+      const { characterId } = req.params;
+      
+      const hasCharacter = await storage.hasCharacter(req.player!.id, characterId);
+      if (hasCharacter) {
+        return res.status(400).json({ error: 'Character already unlocked' });
+      }
+
+      const character = await storage.unlockCharacter({
+        playerId: req.player!.id,
+        characterId,
+      });
+      
+      res.json({ character });
+    } catch (error) {
+      console.error('Error unlocking character:', error);
+      res.status(500).json({ error: 'Failed to unlock character' });
+    }
+  });
+
+  app.post("/api/admin/sync-data", requireAuth, requireAdmin, async (_req, res) => {
+    try {
+      await syncAllGameData();
+      res.json({ success: true, message: 'Game data synchronized from JSON files' });
+    } catch (error) {
+      console.error('Error syncing game data:', error);
+      res.status(500).json({ error: 'Failed to sync game data' });
+    }
+  });
+
+  app.post("/api/admin/upgrades", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const validation = insertUpgradeSchema.safeParse(req.body);
+      
+      if (!validation.success) {
+        return res.status(400).json({ error: 'Invalid upgrade data', details: validation.error });
+      }
+
+      const upgrade = await storage.createUpgrade(validation.data);
+      
+      await saveUpgradeToJSON(validation.data);
+      
+      res.json({ upgrade, message: 'Upgrade created and JSON file generated' });
+    } catch (error) {
+      console.error('Error creating upgrade:', error);
+      res.status(500).json({ error: 'Failed to create upgrade' });
+    }
+  });
+
+  app.patch("/api/admin/upgrades/:id", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const updates = req.body;
+      
+      const updatedUpgrade = await storage.updateUpgrade(id, updates);
+      
+      if (!updatedUpgrade) {
+        return res.status(404).json({ error: 'Upgrade not found' });
+      }
+
+      await saveUpgradeToJSON(updatedUpgrade);
+      
+      res.json({ upgrade: updatedUpgrade, message: 'Upgrade updated and JSON file synced' });
+    } catch (error) {
+      console.error('Error updating upgrade:', error);
+      res.status(500).json({ error: 'Failed to update upgrade' });
+    }
+  });
+
+  app.post("/api/admin/characters", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const validation = insertCharacterSchema.safeParse(req.body);
+      
+      if (!validation.success) {
+        return res.status(400).json({ error: 'Invalid character data', details: validation.error });
+      }
+
+      const character = await storage.createCharacter(validation.data);
+      
+      await saveCharacterToJSON(validation.data);
+      
+      res.json({ character, message: 'Character created and JSON file generated' });
+    } catch (error) {
+      console.error('Error creating character:', error);
+      res.status(500).json({ error: 'Failed to create character' });
+    }
+  });
+
+  app.patch("/api/admin/characters/:id", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const updates = req.body;
+      
+      const updatedCharacter = await storage.updateCharacter(id, updates);
+      
+      if (!updatedCharacter) {
+        return res.status(404).json({ error: 'Character not found' });
+      }
+
+      await saveCharacterToJSON(updatedCharacter);
+      
+      res.json({ character: updatedCharacter, message: 'Character updated and JSON file synced' });
+    } catch (error) {
+      console.error('Error updating character:', error);
+      res.status(500).json({ error: 'Failed to update character' });
+    }
+  });
+
+  app.post("/api/admin/levels", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const validation = insertLevelSchema.safeParse(req.body);
+      
+      if (!validation.success) {
+        return res.status(400).json({ error: 'Invalid level data', details: validation.error });
+      }
+
+      const level = await storage.createLevel(validation.data);
+      
+      await saveLevelToJSON(validation.data);
+      
+      res.json({ level, message: 'Level created and JSON file generated' });
+    } catch (error) {
+      console.error('Error creating level:', error);
+      res.status(500).json({ error: 'Failed to create level' });
+    }
+  });
+
+  app.patch("/api/admin/levels/:level", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const level = parseInt(req.params.level);
+      const updates = req.body;
+      
+      const updatedLevel = await storage.updateLevel(level, updates);
+      
+      if (!updatedLevel) {
+        return res.status(404).json({ error: 'Level not found' });
+      }
+
+      await saveLevelToJSON(updatedLevel);
+      
+      res.json({ level: updatedLevel, message: 'Level updated and JSON file synced' });
+    } catch (error) {
+      console.error('Error updating level:', error);
+      res.status(500).json({ error: 'Failed to update level' });
+    }
+  });
+
+  app.get("/api/admin/players", requireAuth, requireAdmin, async (_req, res) => {
     try {
       const players = await storage.getAllPlayers();
       res.json({ players });
@@ -175,7 +411,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/admin/players/:id", requireAdmin, async (req, res) => {
+  app.patch("/api/admin/players/:id", requireAuth, requireAdmin, async (req, res) => {
     try {
       const { id } = req.params;
       const updates = req.body;
