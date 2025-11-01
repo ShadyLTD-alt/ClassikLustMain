@@ -19,88 +19,9 @@ function Router() {
 }
 
 function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [sessionToken, setSessionToken] = useState<string | null>(null);
-  const [playerData, setPlayerData] = useState<any>(null);
-
-  useEffect(() => {
-    checkAuth();
-  }, []);
-
-  const checkAuth = async () => {
-    console.log('🚀 [v3.0] App.tsx checkAuth starting...');
-    console.log('⏰ Current timestamp:', new Date().toISOString());
-    
-    try {
-      const token = localStorage.getItem('sessionToken');
-      console.log('🔑 [v3.0] Session token check:', { 
-        exists: !!token, 
-        length: token?.length || 0 
-      });
-
-      if (token) {
-        const response = await fetch('/api/auth/me', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          console.log('✅ [v3.0] Session valid, user authenticated');
-          setSessionToken(token);
-          setPlayerData(data.player);
-          setIsAuthenticated(true);
-        } else {
-          console.log('❌ [v3.0] Session invalid, clearing token');
-          localStorage.removeItem('sessionToken');
-        }
-      }
-    } catch (error) {
-      console.error('💥 [v3.0] Auth check failed:', error);
-      localStorage.removeItem('sessionToken');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleLogin = (token: string, player: any) => {
-    console.log('✅ Login successful, saving session');
-    localStorage.setItem('sessionToken', token);
-    setSessionToken(token);
-    setPlayerData(player);
-    setIsAuthenticated(true);
-  };
-
-  if (isLoading) {
-    return <LoadingScreen progress={50} />;
-  }
-
-  if (!isAuthenticated) {
-    return <LoginScreen onLogin={handleLogin} />;
-  }
-
-  return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <GameProvider>
-          <Router />
-          <Toaster />
-        </GameProvider>
-      </TooltipProvider>
-    </QueryClientProvider>
-  );
-}
-
-export default App;
-
-function App() {
   const [authState, setAuthState] = useState<'loading' | 'login' | 'authenticated' | 'unauthenticated'>('loading');
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [userData, setUserData] = useState<any>(null);
-
-  // Renamed state variables to match the original code's logic before the edit
-  const setPlayerData = setUserData;
-  const setAuthStatus = setAuthState;
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -141,8 +62,8 @@ function App() {
           if (response.ok) {
             const data = await response.json();
             setLoadingProgress(90);
-            setPlayerData(data.player);
-            setAuthStatus('authenticated');
+            setUserData(data.player);
+            setAuthState('authenticated');
             console.log('✅ [v3.0] Session valid, user authenticated');
             setLoadingProgress(100);
             return;
@@ -172,8 +93,8 @@ function App() {
             const data = await response.json();
             localStorage.setItem('sessionToken', data.sessionToken);
             setLoadingProgress(90);
-            setPlayerData(data.player);
-            setAuthStatus('authenticated');
+            setUserData(data.player);
+            setAuthState('authenticated');
             console.log('✅ [v3.0] Telegram auto-auth successful');
             setLoadingProgress(100);
             return;
@@ -189,7 +110,7 @@ function App() {
 
       console.log('🔐 [v3.0] No valid session found, showing login screen');
       setLoadingProgress(100);
-      setAuthStatus('unauthenticated');
+      setAuthState('unauthenticated');
     };
 
     checkAuth();
@@ -206,7 +127,7 @@ function App() {
     return <LoadingScreen progress={loadingProgress} />;
   }
 
-  if (authState === 'login' || authState === 'unauthenticated') { // Treat unauthenticated as needing login
+  if (authState === 'login' || authState === 'unauthenticated') {
     return <LoginScreen onLogin={handleLogin} />;
   }
 
