@@ -92,17 +92,12 @@ export default function ImageUploader({ adminMode = false }: ImageUploaderProps)
       return;
     }
 
-    // Get player data from localStorage
-    const savedPlayer = localStorage.getItem('playerData');
-    let playerId = '';
+    // Get session token from localStorage
+    const sessionToken = localStorage.getItem('sessionToken');
     
-    if (savedPlayer) {
-      try {
-        const playerData = JSON.parse(savedPlayer);
-        playerId = playerData.id;
-      } catch (error) {
-        console.error('Failed to parse player data:', error);
-      }
+    if (!sessionToken) {
+      alert('You must be logged in to upload images. Please log in first.');
+      return;
     }
 
     const formData = new FormData();
@@ -115,7 +110,7 @@ export default function ImageUploader({ adminMode = false }: ImageUploaderProps)
       const response = await fetch('/api/upload', {
         method: 'POST',
         headers: {
-          'x-player-id': playerId
+          'Authorization': `Bearer ${sessionToken}`
         },
         body: formData
       });
