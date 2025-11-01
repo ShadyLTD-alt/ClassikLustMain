@@ -18,11 +18,11 @@ const storageConfig = multer.diskStorage({
   destination: function (req, _file, cb) {
     // Character name will be available in req.body after multer processes the form
     const uploadPath = path.join(__dirname, "..", "uploads", "temp");
-    
+
     if (!fs.existsSync(uploadPath)) {
       fs.mkdirSync(uploadPath, { recursive: true });
     }
-    
+
     cb(null, uploadPath);
   },
   filename: function (_req, file, cb) {
@@ -31,14 +31,14 @@ const storageConfig = multer.diskStorage({
   },
 });
 
-const upload = multer({ 
+const upload = multer({
   storage: storageConfig,
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const allowedTypes = /jpeg|jpg|png|gif|webp/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
     const mimetype = allowedTypes.test(file.mimetype);
-    
+
     if (mimetype && extname) {
       return cb(null, true);
     } else {
@@ -53,23 +53,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!req.file) {
       return res.status(400).json({ error: "No file uploaded" });
     }
-    
+
     const characterName = req.body.characterName;
     const imageType = req.body.imageType || 'character';
-    
+
     if (!characterName) {
       fs.unlinkSync(req.file.path);
       return res.status(400).json({ error: "Character name is required" });
     }
-    
+
     const finalDir = path.join(__dirname, "..", "uploads", "characters", characterName, imageType);
     if (!fs.existsSync(finalDir)) {
       fs.mkdirSync(finalDir, { recursive: true });
     }
-    
+
     const finalPath = path.join(finalDir, req.file.filename);
     fs.renameSync(req.file.path, finalPath);
-    
+
     const fileUrl = `/uploads/characters/${characterName}/${imageType}/${req.file.filename}`;
     res.json({ url: fileUrl });
   });
@@ -94,10 +94,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     console.log('🛠️ Dev auth request received');
-    
+
     try {
       const { username } = req.body;
-      
+
       if (!username || username.trim().length === 0) {
         return res.status(400).json({ error: 'Username is required' });
       }
@@ -106,9 +106,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const devTelegramId = `dev_${sanitizedUsername.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
 
       console.log('👤 Dev login for:', sanitizedUsername);
-      
+
       let player = await storage.getPlayerByTelegramId(devTelegramId);
-      
+
       if (!player) {
         console.log('➕ Creating new dev player...');
         player = await storage.createPlayer({
@@ -152,20 +152,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/auth/telegram", async (req, res) => {
     console.log('🔐 Telegram auth request received');
     console.log('📦 Request body:', JSON.stringify(req.body, null, 2));
-    
+
     try {
       const { initData } = req.body;
       const botToken = process.env.TELEGRAM_BOT_TOKEN;
-      
+
       console.log('🔑 Bot token exists:', !!botToken);
       console.log('📝 InitData exists:', !!initData);
       console.log('📝 InitData length:', initData?.length || 0);
-      
+
       if (!botToken) {
         console.error('❌ Missing TELEGRAM_BOT_TOKEN');
         return res.status(500).json({ error: 'Telegram authentication not configured' });
       }
-      
+
       if (!initData) {
         console.error('❌ Missing initData in request');
         return res.status(400).json({ error: 'Missing initData' });
@@ -174,14 +174,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log('🔍 Parsing initData...');
       const validator = new AuthDataValidator({ botToken });
       const dataMap = new Map(new URLSearchParams(initData).entries());
-      
+
       console.log('📊 Parsed data map entries:', Array.from(dataMap.entries()));
-      
+
       console.log('✅ Validating Telegram data...');
       const validationResult = await validator.validate(dataMap);
-      
+
       console.log('📋 Validation result:', JSON.stringify(validationResult, null, 2));
-      
+
       if (!validationResult || !validationResult.id) {
         console.error('❌ Invalid validation result or missing ID');
         return res.status(401).json({ error: 'Invalid Telegram authentication' });
@@ -189,7 +189,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const telegramId = validationResult.id.toString();
       console.log('👤 Telegram ID:', telegramId);
-      
+
       if (!telegramId) {
         console.error('❌ Failed to extract Telegram ID');
         return res.status(400).json({ error: 'Missing Telegram user ID' });
@@ -197,7 +197,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log('🔍 Looking up player by Telegram ID...');
       let player = await storage.getPlayerByTelegramId(telegramId);
-      
+
       if (!player) {
         console.log('➕ Creating new player...');
         player = await storage.createPlayer({
@@ -289,7 +289,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (updates.isAdmin !== undefined) {
         delete updates.isAdmin;
       }
-      
+
       const updatedPlayer = await storage.updatePlayer(req.player!.id, updates);
       res.json({ player: updatedPlayer });
     } catch (error) {
@@ -340,7 +340,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/player/characters/:characterId/unlock", requireAuth, async (req, res) => {
     try {
       const { characterId } = req.params;
-      
+
       const hasCharacter = await storage.hasCharacter(req.player!.id, characterId);
       if (hasCharacter) {
         return res.status(400).json({ error: 'Character already unlocked' });
@@ -350,7 +350,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         playerId: req.player!.id,
         characterId,
       });
-      
+
       res.json({ character });
     } catch (error) {
       console.error('Error unlocking character:', error);
@@ -371,15 +371,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/admin/upgrades", requireAuth, requireAdmin, async (req, res) => {
     try {
       const validation = insertUpgradeSchema.safeParse(req.body);
-      
+
       if (!validation.success) {
         return res.status(400).json({ error: 'Invalid upgrade data', details: validation.error });
       }
 
       const upgrade = await storage.createUpgrade(validation.data);
-      
+
       await saveUpgradeToJSON(validation.data);
-      
+
       res.json({ upgrade, message: 'Upgrade created and JSON file generated' });
     } catch (error) {
       console.error('Error creating upgrade:', error);
@@ -391,15 +391,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const updates = req.body;
-      
+
       const updatedUpgrade = await storage.updateUpgrade(id, updates);
-      
+
       if (!updatedUpgrade) {
         return res.status(404).json({ error: 'Upgrade not found' });
       }
 
       await saveUpgradeToJSON(updatedUpgrade);
-      
+
       res.json({ upgrade: updatedUpgrade, message: 'Upgrade updated and JSON file synced' });
     } catch (error) {
       console.error('Error updating upgrade:', error);
@@ -412,11 +412,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id } = req.params;
       const upgradesDir = path.join(__dirname, "../client/src/game-data/upgrades");
       const filePath = path.join(upgradesDir, `${id}.json`);
-      
+
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
       }
-      
+
       res.json({ success: true, message: 'Upgrade deleted and JSON file removed' });
     } catch (error) {
       console.error('Error deleting upgrade:', error);
@@ -427,15 +427,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/admin/characters", requireAuth, requireAdmin, async (req, res) => {
     try {
       const validation = insertCharacterSchema.safeParse(req.body);
-      
+
       if (!validation.success) {
         return res.status(400).json({ error: 'Invalid character data', details: validation.error });
       }
 
       const character = await storage.createCharacter(validation.data);
-      
+
       await saveCharacterToJSON(validation.data);
-      
+
       res.json({ character, message: 'Character created and JSON file generated' });
     } catch (error) {
       console.error('Error creating character:', error);
@@ -447,15 +447,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const updates = req.body;
-      
+
       const updatedCharacter = await storage.updateCharacter(id, updates);
-      
+
       if (!updatedCharacter) {
         return res.status(404).json({ error: 'Character not found' });
       }
 
       await saveCharacterToJSON(updatedCharacter);
-      
+
       res.json({ character: updatedCharacter, message: 'Character updated and JSON file synced' });
     } catch (error) {
       console.error('Error updating character:', error);
@@ -468,11 +468,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id } = req.params;
       const charactersDir = path.join(__dirname, "../client/src/character-data");
       const filePath = path.join(charactersDir, `${id}.json`);
-      
+
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
       }
-      
+
       res.json({ success: true, message: 'Character deleted and JSON file removed' });
     } catch (error) {
       console.error('Error deleting character:', error);
@@ -483,15 +483,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/admin/levels", requireAuth, requireAdmin, async (req, res) => {
     try {
       const validation = insertLevelSchema.safeParse(req.body);
-      
+
       if (!validation.success) {
         return res.status(400).json({ error: 'Invalid level data', details: validation.error });
       }
 
       const level = await storage.createLevel(validation.data);
-      
+
       await saveLevelToJSON(validation.data);
-      
+
       res.json({ level, message: 'Level created and JSON file generated' });
     } catch (error) {
       console.error('Error creating level:', error);
@@ -503,15 +503,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const level = parseInt(req.params.level);
       const updates = req.body;
-      
+
       const updatedLevel = await storage.updateLevel(level, updates);
-      
+
       if (!updatedLevel) {
         return res.status(404).json({ error: 'Level not found' });
       }
 
       await saveLevelToJSON(updatedLevel);
-      
+
       res.json({ level: updatedLevel, message: 'Level updated and JSON file synced' });
     } catch (error) {
       console.error('Error updating level:', error);
@@ -524,11 +524,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const level = parseInt(req.params.level);
       const levelsDir = path.join(__dirname, "../client/src/game-data/levelup");
       const filePath = path.join(levelsDir, `level-${level}.json`);
-      
+
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
       }
-      
+
       res.json({ success: true, message: 'Level deleted and JSON file removed' });
     } catch (error) {
       console.error('Error deleting level:', error);
@@ -550,13 +550,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const updates = req.body;
-      
+
       const updatedPlayer = await storage.updatePlayer(id, updates);
-      
+
       if (!updatedPlayer) {
         return res.status(404).json({ error: 'Player not found' });
       }
-      
+
       res.json({ player: updatedPlayer });
     } catch (error) {
       console.error('Error updating player:', error);

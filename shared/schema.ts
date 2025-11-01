@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, boolean, jsonb, real } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, boolean, jsonb, real, numeric } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -7,7 +7,7 @@ export const players = pgTable("players", {
   id: varchar("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   telegramId: text("telegramId").unique(),
   username: text("username").notNull(),
-  points: integer("points").default(0).notNull(),
+  points: numeric("points", { precision: 10, scale: 2 }).default("0").notNull(), // Supports decimals with 2 decimal places // Always round to integer before saving
   energy: integer("energy").default(1000).notNull(),
   maxEnergy: integer("maxEnergy").default(1000).notNull(),
   level: integer("level").default(1).notNull(),
