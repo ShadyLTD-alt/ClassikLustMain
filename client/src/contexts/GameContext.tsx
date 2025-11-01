@@ -88,13 +88,44 @@ export function GameProvider({ children }: { children: ReactNode }) {
       }
 
       try {
-        console.log('🔄 Starting to load all game data...');
+        console.log('🔄 Starting to load game data...');
         
-        // Load all data in parallel for faster loading
-        const [playerRes, upgradesRes, charactersRes, levelsRes, mediaRes] = await Promise.all([
-          fetch('/api/player/me', {
-            headers: { 'Authorization': `Bearer ${sessionToken}` }
-          }),
+        // STEP 1: Load player data FIRST
+        console.log('📥 Loading player data...');
+        const playerRes = await fetch('/api/player/me', {
+          headers: { 'Authorization': `Bearer ${sessionToken}` }
+        });
+
+        if (!playerRes.ok) {
+          console.error('❌ Failed to load player data');
+          setIsInitialized(true);
+          return;
+        }
+
+        const playerData = await playerRes.json();
+        
+        if (playerData?.player) {
+          const player = playerData.player;
+          setState(prev => ({
+            ...prev,
+            points: typeof player.points === 'string' ? parseFloat(player.points) : player.points,
+            energy: player.energy || prev.energy,
+            maxEnergy: player.maxEnergy || prev.maxEnergy,
+            level: player.level || prev.level,
+            selectedCharacterId: player.selectedCharacterId || 'starter',
+            selectedImageId: player.selectedImageId || null,
+            displayImage: player.displayImage || null,
+            upgrades: player.upgrades || {},
+            unlockedCharacters: Array.isArray(player.unlockedCharacters) ? player.unlockedCharacters : ['starter'],
+            passiveIncomeRate: player.passiveIncomeRate || 0,
+            isAdmin: player.isAdmin || false
+          }));
+          console.log('✅ Loaded player data:', player.username);
+        }
+
+        // STEP 2: Load game config data in parallel AFTER player data is set
+        console.log('📥 Loading game configuration data...');
+        const [upgradesRes, charactersRes, levelsRes, mediaRes] = await Promise.all([
           fetch('/api/upgrades', {
             headers: { 'Authorization': `Bearer ${sessionToken}` }
           }),
@@ -109,16 +140,15 @@ export function GameProvider({ children }: { children: ReactNode }) {
           })
         ]);
 
-        // Parse responses
-        const [playerData, upgradesData, charactersData, levelsData, mediaData] = await Promise.all([
-          playerRes.ok ? playerRes.json() : null,
+        // Parse config responses
+        const [upgradesData, charactersData, levelsData, mediaData] = await Promise.all([
           upgradesRes.ok ? upgradesRes.json() : null,
           charactersRes.ok ? charactersRes.json() : null,
           levelsRes.ok ? levelsRes.json() : null,
           mediaRes.ok ? mediaRes.json() : null
         ]);
 
-        // Set upgrades first
+        // Set upgrades
         if (upgradesData?.upgrades) {
           setUpgrades(upgradesData.upgrades);
           console.log('✅ Loaded upgrades:', upgradesData.upgrades.length);
@@ -149,26 +179,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
           }));
           setImages(imageConfigs);
           console.log('✅ Loaded media:', imageConfigs.length);
-        }
-
-        // Set player data last
-        if (playerData?.player) {
-          const player = playerData.player;
-          setState(prev => ({
-            ...prev,
-            points: typeof player.points === 'string' ? parseFloat(player.points) : player.points,
-            energy: player.energy || prev.energy,
-            maxEnergy: player.maxEnergy || prev.maxEnergy,
-            level: player.level || prev.level,
-            selectedCharacterId: player.selectedCharacterId || 'starter',
-            selectedImageId: player.selectedImageId || null,
-            displayImage: player.displayImage || null,
-            upgrades: player.upgrades || {},
-            unlockedCharacters: Array.isArray(player.unlockedCharacters) ? player.unlockedCharacters : ['starter'],
-            passiveIncomeRate: player.passiveIncomeRate || 0,
-            isAdmin: player.isAdmin || false
-          }));
-          console.log('✅ Loaded player data:', player.username);
         }
 
         console.log('✅ All game data loaded successfully');

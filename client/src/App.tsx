@@ -121,9 +121,10 @@ function App() {
   }, []);
 
   const handleLogin = (sessionToken: string, playerData: any) => {
+    console.log('🎉 Login successful, setting session token and player data');
     localStorage.setItem('sessionToken', sessionToken);
-    setPlayerData(playerData);
-    setAuthState('authenticated'); // Directly set authState to authenticated on successful login
+    setUserData(playerData);
+    setAuthState('authenticated');
   };
 
   if (authState === 'loading') {
