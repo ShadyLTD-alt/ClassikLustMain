@@ -30,15 +30,14 @@ function App() {
       console.log('🚀 App.tsx checkAuth starting...');
       setLoadingProgress(20);
       
-      // Check localStorage for guest session
-      const guestSession = localStorage.getItem('guestSession');
-      console.log('👤 Guest session:', guestSession);
+      // Check localStorage for saved player data
+      const savedPlayer = localStorage.getItem('playerData');
+      console.log('👤 Saved player:', savedPlayer);
       
       setLoadingProgress(50);
       
       // Check if running in Telegram WebApp
       const tg = (window as any).Telegram?.WebApp;
-      console.log('📱 Telegram WebApp full object:', tg);
       console.log('📱 Telegram WebApp check:', { 
         exists: !!tg, 
         hasInitData: !!tg?.initData,
@@ -55,7 +54,6 @@ function App() {
       
       if (tg && tg.initData && tg.initData.length > 0) {
         console.log('✅ Telegram WebApp detected, attempting auto-auth...');
-        console.log('📝 InitData (first 50 chars):', tg.initData.substring(0, 50) + '...');
         setLoadingProgress(70);
         try {
           console.log('📤 Sending auto-auth request...');
@@ -70,6 +68,7 @@ function App() {
           
           if (data.success && data.player) {
             console.log('🎉 Auto-auth successful!');
+            localStorage.setItem('playerData', JSON.stringify(data.player));
             setUserData(data.player);
             setLoadingProgress(100);
             setTimeout(() => setAuthState('authenticated'), 500);
@@ -82,34 +81,37 @@ function App() {
         }
       } else {
         console.log('ℹ️ Not in Telegram WebApp or no initData available');
-        console.log('ℹ️ This app must be opened via Telegram Bot Web App button');
       }
       
       setLoadingProgress(80);
       
-      if (guestSession) {
-        console.log('👋 Using guest session');
-        setUserData({ id: 'guest', isGuest: true });
-        setLoadingProgress(100);
-        setTimeout(() => setAuthState('authenticated'), 500);
-      } else {
-        console.log('🔐 No session found, showing login screen');
-        setLoadingProgress(100);
-        setTimeout(() => setAuthState('login'), 500);
+      // Try to use saved player data for auto-login
+      if (savedPlayer) {
+        try {
+          const playerData = JSON.parse(savedPlayer);
+          console.log('🔄 Auto-login with saved player:', playerData.username);
+          setUserData(playerData);
+          setLoadingProgress(100);
+          setTimeout(() => setAuthState('authenticated'), 500);
+          return;
+        } catch (error) {
+          console.error('💥 Failed to parse saved player:', error);
+          localStorage.removeItem('playerData');
+        }
       }
+      
+      console.log('🔐 No valid session found, showing login screen');
+      setLoadingProgress(100);
+      setTimeout(() => setAuthState('login'), 500);
     };
 
     checkAuth();
   }, []);
 
   const handleLogin = (userId: string, user?: any) => {
-    setUserData(user || { id: userId });
-    setAuthState('authenticated');
-  };
-
-  const handleGuestLogin = () => {
-    localStorage.setItem('guestSession', 'true');
-    setUserData({ id: 'guest', isGuest: true });
+    const playerData = user || { id: userId };
+    localStorage.setItem('playerData', JSON.stringify(playerData));
+    setUserData(playerData);
     setAuthState('authenticated');
   };
 
@@ -118,7 +120,7 @@ function App() {
   }
 
   if (authState === 'login') {
-    return <LoginScreen onLogin={handleLogin} onGuestLogin={handleGuestLogin} />;
+    return <LoginScreen onLogin={handleLogin} />;
   }
 
   return (

@@ -8,19 +8,40 @@ async function throwIfResNotOk(res: Response) {
 }
 
 export async function apiRequest(
-  method: string,
-  url: string,
-  data?: unknown | undefined,
+  endpoint: string,
+  options?: RequestInit,
 ): Promise<Response> {
-  const res = await fetch(url, {
-    method,
-    headers: data ? { "Content-Type": "application/json" } : {},
-    body: data ? JSON.stringify(data) : undefined,
-    credentials: "include",
+  // Get player data from localStorage
+  const savedPlayer = localStorage.getItem('playerData');
+  let playerId = '';
+
+  if (savedPlayer) {
+    try {
+      const playerData = JSON.parse(savedPlayer);
+      playerId = playerData.id;
+    } catch (error) {
+      console.error('Failed to parse player data:', error);
+    }
+  }
+
+  const response = await fetch(endpoint, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      'x-player-id': playerId,
+      ...options?.headers,
+    },
   });
 
-  await throwIfResNotOk(res);
-  return res;
+  if (!response.ok) {
+    if (response.status >= 500) {
+      throw new Error(`${response.status}: ${response.statusText}`);
+    }
+
+    throw new Error(`${response.status}: ${await response.text()}`);
+  }
+
+  return response;
 }
 
 type UnauthorizedBehavior = "returnNull" | "throw";

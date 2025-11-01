@@ -5,10 +5,9 @@ import TelegramAuth from './TelegramAuth';
 
 interface LoginScreenProps {
   onLogin: (userId: string, userData?: any) => void;
-  onGuestLogin: () => void;
 }
 
-export default function LoginScreen({ onLogin, onGuestLogin }: LoginScreenProps) {
+export default function LoginScreen({ onLogin }: LoginScreenProps) {
   const handleTelegramAuth = (player: any) => {
     console.log('Telegram auth successful:', player);
     onLogin(player.id, player);
@@ -37,29 +36,9 @@ export default function LoginScreen({ onLogin, onGuestLogin }: LoginScreenProps)
           <div className="space-y-3">
             <TelegramAuth onAuth={handleTelegramAuth} />
             <p className="text-xs text-gray-400 text-center">
-              Login with Telegram for cloud save and cross-device sync
+              Login with Telegram to play. Your progress will be saved to the cloud.
             </p>
           </div>
-
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t border-gray-600" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-gray-900 px-2 text-gray-400">Or</span>
-            </div>
-          </div>
-
-          <Button 
-            onClick={onGuestLogin}
-            variant="outline"
-            className="w-full border-gray-600 text-gray-300 hover:bg-gray-800"
-          >
-            Continue as Guest
-          </Button>
-          <p className="text-xs text-gray-400 text-center">
-            Guest progress is saved locally only
-          </p>
         </CardContent>
       </Card>
     </div>

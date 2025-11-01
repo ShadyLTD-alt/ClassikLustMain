@@ -92,6 +92,19 @@ export default function ImageUploader({ adminMode = false }: ImageUploaderProps)
       return;
     }
 
+    // Get player data from localStorage
+    const savedPlayer = localStorage.getItem('playerData');
+    let playerId = '';
+    
+    if (savedPlayer) {
+      try {
+        const playerData = JSON.parse(savedPlayer);
+        playerId = playerData.id;
+      } catch (error) {
+        console.error('Failed to parse player data:', error);
+      }
+    }
+
     const formData = new FormData();
     formData.append('image', selectedFile);
     formData.append('characterId', selectedCharacterId);
@@ -101,6 +114,9 @@ export default function ImageUploader({ adminMode = false }: ImageUploaderProps)
     try {
       const response = await fetch('/api/upload', {
         method: 'POST',
+        headers: {
+          'x-player-id': playerId
+        },
         body: formData
       });
 
