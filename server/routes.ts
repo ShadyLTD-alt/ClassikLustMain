@@ -22,6 +22,7 @@ import {
 } from "./utils/dataLoader";
 import { insertUpgradeSchema, insertCharacterSchema, insertLevelSchema, insertPlayerUpgradeSchema, insertMediaUploadSchema } from "@shared/schema";
 import { generateSecureToken, getSessionExpiry } from "./utils/auth";
+import logger from "./logger";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -61,16 +62,26 @@ const upload = multer({
 
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  console.log('🔧 Initializing routes...');
+  logger.info('Initializing routes...');
 
-  console.log('📤 Setting up /api/upload route...');
+  // Health check endpoint - MUST BE FIRST
+  logger.info('Setting up /api/health route...');
+  app.get("/api/health", (req, res) => {
+    logger.info('Health check requested', { ip: req.ip, userAgent: req.get('User-Agent') });
+    res.json({ 
+      status: 'ok', 
+      timestamp: new Date().toISOString(),
+      env: process.env.NODE_ENV || 'development',
+      port: process.env.PORT || '5000'
+    });
+  });
+
+  logger.info('Setting up /api/upload route...');
   app.post("/api/upload", requireAuth, upload.single("image"), async (req, res) => {
-    console.log('📤 Upload request received');
-    console.log('📦 Request body:', req.body);
-    console.log('📁 File:', req.file ? req.file.filename : 'No file');
+    logger.info('Upload request received', { hasFile: !!req.file });
 
     if (!req.file) {
-      console.error('❌ No file uploaded');
+      logger.error('No file uploaded');
       return res.status(400).json({ error: "No file uploaded" });
     }
 
@@ -107,10 +118,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         chatSendPercent: Math.min(100, Math.max(0, parseInt(body.chatSendPercent) || 0))
       };
 
-      console.log('📋 Parsed data:', parsedData);
+      logger.info('Parsed upload data', parsedData);
 
       if (!parsedData.characterId || !parsedData.characterName) {
-        console.error('❌ Missing character ID or name');
+        logger.error('Missing character ID or name');
         fs.unlinkSync(req.file.path);
         return res.status(400).json({ error: "Character ID and name are required" });
       }
@@ -118,16 +129,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const finalDir = path.join(__dirname, "..", "uploads", "characters", parsedData.characterName, parsedData.imageType);
       if (!fs.existsSync(finalDir)) {
         fs.mkdirSync(finalDir, { recursive: true });
-        console.log('📁 Created directory:', finalDir);
+        logger.info('Created directory', { path: finalDir });
       }
 
       const finalPath = path.join(finalDir, req.file.filename);
       fs.renameSync(req.file.path, finalPath);
-      console.log('✅ File moved to:', finalPath);
+      logger.info('File moved', { from: req.file.path, to: finalPath });
 
       const fileUrl = `/uploads/characters/${parsedData.characterName}/${parsedData.imageType}/${req.file.filename}`;
 
-      console.log('💾 Creating media upload in database...');
+      logger.info('Creating media upload in database...');
       const mediaUpload = await storage.createMediaUpload({
         characterId: parsedData.characterId,
         url: fileUrl,
@@ -140,19 +151,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         chatSendPercent: parsedData.chatSendPercent,
       });
 
-      console.log('✅ Media upload created:', mediaUpload.id);
+      logger.info('Media upload created', { id: mediaUpload.id });
       res.json({ url: fileUrl, media: mediaUpload });
     } catch (error) {
       if (req.file && fs.existsSync(req.file.path)) {
         fs.unlinkSync(req.file.path);
       }
-      console.error('💥 Error uploading file:', error);
+      logger.error('Error uploading file', { error });
       res.status(500).json({ error: 'Failed to upload file', details: (error as Error).message });
     }
   });
 
-  console.log('🔐 Setting up auth routes...');
+  logger.info('Setting up auth routes...');
   app.get("/api/auth/me", requireAuth, async (req, res) => {
+    logger.info('Auth me request', { playerId: req.player?.id });
     try {
       const player = await storage.getPlayer(req.player!.id);
       if (!player) {
@@ -160,7 +172,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       res.json({ success: true, player });
     } catch (error) {
-      console.error('Error fetching current player:', error);
+      logger.error('Error fetching current player', { error });
       res.status(500).json({ error: 'Failed to fetch player data' });
     }
   });
@@ -171,26 +183,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(403).json({ error: 'Development login not available in production' });
     }
 
-    console.log('🛠️ Dev auth request received');
-    console.log('📦 Request body:', req.body);
+    logger.info('Dev auth request received', { body: req.body });
 
     try {
       const { username } = req.body;
 
       if (!username || username.trim().length === 0) {
-        console.log('❌ No username provided');
+        logger.warn('No username provided for dev auth');
         return res.status(400).json({ error: 'Username is required' });
       }
 
       const sanitizedUsername = username.trim().substring(0, 50);
       const devTelegramId = `dev_${sanitizedUsername.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
 
-      console.log('👤 Dev login for:', sanitizedUsername);
+      logger.info('Dev login attempt', { username: sanitizedUsername, telegramId: devTelegramId });
 
       let player = await storage.getPlayerByTelegramId(devTelegramId);
 
       if (!player) {
-        console.log('➕ Creating new dev player...');
+        logger.info('Creating new dev player...');
         player = await storage.createPlayer({
           telegramId: devTelegramId,
           username: sanitizedUsername,
@@ -202,10 +213,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           passiveIncomeRate: 0,
           isAdmin: false,
         });
-        console.log('✅ New dev player created:', player.id);
+        logger.info('New dev player created', { playerId: player.id });
         await savePlayerDataToJSON(player);
       } else {
-        console.log('👋 Existing dev player found, updating last login...');
+        logger.info('Existing dev player found, updating last login...');
         await storage.updatePlayer(player.id, {
           lastLogin: new Date(),
         });
@@ -219,71 +230,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
         expiresAt: getSessionExpiry(),
       });
 
-      console.log('🎉 Dev auth successful for player:', player.username);
+      logger.info('Dev auth successful', { username: player.username, playerId: player.id });
       res.json({
         success: true,
         player,
         sessionToken,
       });
     } catch (error) {
-      console.error('💥 Dev auth error:', error);
-      console.error('📍 Error stack:', (error as Error).stack);
+      logger.error('Dev auth error', { error, stack: (error as Error).stack });
       res.status(500).json({ error: 'Authentication failed', details: (error as Error).message });
     }
   });
 
-  console.log('📱 Setting up Telegram auth...');
+  logger.info('Setting up Telegram auth...');
   app.post("/api/auth/telegram", async (req, res) => {
-    console.log('🔐 Telegram auth request received');
-    console.log('📦 Request body:', JSON.stringify(req.body, null, 2));
+    logger.info('Telegram auth request received', { body: req.body });
 
     try {
       const { initData } = req.body;
       const botToken = process.env.TELEGRAM_BOT_TOKEN;
 
-      console.log('🔑 Bot token exists:', !!botToken);
-      console.log('📝 InitData exists:', !!initData);
-      console.log('📝 InitData length:', initData?.length || 0);
+      logger.info('Telegram auth check', { 
+        hasBotToken: !!botToken, 
+        hasInitData: !!initData, 
+        initDataLength: initData?.length || 0 
+      });
 
       if (!botToken) {
-        console.error('❌ Missing TELEGRAM_BOT_TOKEN');
+        logger.error('Missing TELEGRAM_BOT_TOKEN');
         return res.status(500).json({ error: 'Telegram authentication not configured' });
       }
 
       if (!initData) {
-        console.error('❌ Missing initData in request');
+        logger.error('Missing initData in request');
         return res.status(400).json({ error: 'Missing initData' });
       }
 
-      console.log('🔍 Parsing initData...');
+      logger.info('Parsing initData...');
       const validator = new AuthDataValidator({ botToken });
       const dataMap = new Map(new URLSearchParams(initData).entries());
 
-      console.log('📊 Parsed data map entries:', Array.from(dataMap.entries()));
+      logger.info('Parsed data map entries', { entries: Array.from(dataMap.entries()) });
 
-      console.log('✅ Validating Telegram data...');
+      logger.info('Validating Telegram data...');
       const validationResult = await validator.validate(dataMap);
 
-      console.log('📋 Validation result:', JSON.stringify(validationResult, null, 2));
+      logger.info('Validation result', { result: validationResult });
 
       if (!validationResult || !validationResult.id) {
-        console.error('❌ Invalid validation result or missing ID');
+        logger.error('Invalid validation result or missing ID');
         return res.status(401).json({ error: 'Invalid Telegram authentication' });
       }
 
       const telegramId = validationResult.id.toString();
-      console.log('👤 Telegram ID:', telegramId);
+      logger.info('Telegram auth for user', { telegramId });
 
       if (!telegramId) {
-        console.error('❌ Failed to extract Telegram ID');
+        logger.error('Failed to extract Telegram ID');
         return res.status(400).json({ error: 'Missing Telegram user ID' });
       }
 
-      console.log('🔍 Looking up player by Telegram ID...');
+      logger.info('Looking up player by Telegram ID...');
       let player = await storage.getPlayerByTelegramId(telegramId);
 
       if (!player) {
-        console.log('➕ Creating new player...');
+        logger.info('Creating new player...');
         player = await storage.createPlayer({
           telegramId,
           username: (validationResult as any).username || (validationResult as any).first_name || 'TelegramUser',
@@ -294,10 +305,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           passiveIncomeRate: 0,
           isAdmin: false,
         });
-        console.log('✅ New player created:', player.id);
+        logger.info('New player created', { playerId: player.id });
         await savePlayerDataToJSON(player);
       } else {
-        console.log('👋 Existing player found, updating last login...');
+        logger.info('Existing player found, updating last login...');
         await storage.updatePlayer(player.id, {
           lastLogin: new Date(),
         });
@@ -311,20 +322,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         expiresAt: getSessionExpiry(),
       });
 
-      console.log('🎉 Auth successful for player:', player.username);
+      logger.info('Telegram auth successful', { username: player.username, playerId: player.id });
       res.json({
         success: true,
         player,
         sessionToken,
       });
     } catch (error) {
-      console.error('💥 Telegram auth error:', error);
-      console.error('📍 Error stack:', (error as Error).stack);
+      logger.error('Telegram auth error', { error, stack: (error as Error).stack });
       res.status(500).json({ error: 'Authentication failed', details: (error as Error).message });
     }
   });
 
-  console.log('⚙️ Setting up game data routes...');
+  logger.info('Setting up game data routes...');
   // Get all upgrades (from memory)
   app.get("/api/upgrades", requireAuth, async (_req, res) => {
     try {
@@ -363,12 +373,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const mediaUploads = await storage.getMediaUploads(characterId, includeHidden);
       res.json({ media: mediaUploads });
     } catch (error: any) {
-      console.error('Error fetching media uploads:', error);
+      logger.error('Error fetching media uploads', { error });
       res.status(500).json({ error: 'Failed to fetch media uploads' });
     }
   });
 
-  console.log('👤 Setting up player routes...');
+  logger.info('Setting up player routes...');
   app.get("/api/player/me", requireAuth, async (req, res) => {
     try {
       const player = await storage.getPlayer(req.player!.id);
@@ -377,7 +387,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       res.json({ player });
     } catch (error) {
-      console.error('Error fetching player:', error);
+      logger.error('Error fetching player', { error });
       res.status(500).json({ error: 'Failed to fetch player data' });
     }
   });
@@ -427,7 +437,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.json({ player: updatedPlayer });
       }
     } catch (error) {
-      console.error('Error updating player:', error);
+      logger.error('Error updating player', { error });
       res.status(500).json({ error: 'Failed to update player' });
     }
   });
@@ -437,7 +447,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const playerUpgrades = await storage.getPlayerUpgrades(req.player!.id);
       res.json({ upgrades: playerUpgrades });
     } catch (error) {
-      console.error('Error fetching player upgrades:', error);
+      logger.error('Error fetching player upgrades', { error });
       res.status(500).json({ error: 'Failed to fetch player upgrades' });
     }
   });
@@ -497,7 +507,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ upgrade: playerUpgrade });
     } catch (error) {
-      console.error('Error setting player upgrade:', error);
+      logger.error('Error setting player upgrade', { error });
       res.status(500).json({ error: 'Failed to set player upgrade' });
     }
   });
@@ -507,7 +517,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const playerCharacters = await storage.getPlayerCharacters(req.player!.id);
       res.json({ characters: playerCharacters });
     } catch (error) {
-      console.error('Error fetching player characters:', error);
+      logger.error('Error fetching player characters', { error });
       res.status(500).json({ error: 'Failed to fetch player characters' });
     }
   });
@@ -548,18 +558,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ character: playerCharacter });
     } catch (error) {
-      console.error('Error unlocking character:', error);
+      logger.error('Error unlocking character', { error });
       res.status(500).json({ error: 'Failed to unlock character' });
     }
   });
 
-  console.log('👑 Setting up admin routes...');
+  logger.info('Setting up admin routes...');
   app.post("/api/admin/sync-data", requireAuth, requireAdmin, async (_req, res) => {
     try {
       await syncAllGameData();
       res.json({ success: true, message: 'Game data synchronized successfully' });
     } catch (error) {
-      console.error('Error syncing game data:', error);
+      logger.error('Error syncing game data', { error });
       res.status(500).json({ error: 'Failed to sync game data' });
     }
   });
@@ -571,7 +581,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const upgrades = getUpgradesFromMemory(includeHidden);
       res.json({ upgrades });
     } catch (error) {
-      console.error('Error fetching upgrades for admin:', error);
+      logger.error('Error fetching upgrades for admin', { error });
       res.status(500).json({ error: 'Failed to fetch upgrades' });
     }
   });
@@ -590,7 +600,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ upgrade, message: 'Upgrade created, saved to JSON and DB' });
     } catch (error) {
-      console.error('Error creating upgrade:', error);
+      logger.error('Error creating upgrade', { error });
       res.status(500).json({ error: 'Failed to create upgrade' });
     }
   });
@@ -606,7 +616,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ upgrade });
     } catch (error) {
-      console.error('Error fetching upgrade:', error);
+      logger.error('Error fetching upgrade', { error });
       res.status(500).json({ error: 'Failed to fetch upgrade' });
     }
   });
@@ -627,7 +637,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ upgrade: updatedUpgrade });
     } catch (error) {
-      console.error('Error updating upgrade:', error);
+      logger.error('Error updating upgrade', { error });
       res.status(500).json({ error: 'Failed to update upgrade' });
     }
   });
@@ -646,7 +656,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json({ success: true, message: 'Upgrade deleted' });
     } catch (error) {
-      console.error('Error deleting upgrade:', error);
+      logger.error('Error deleting upgrade', { error });
       res.status(500).json({ error: 'Failed to delete upgrade' });
     }
   });
@@ -658,7 +668,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const characters = getCharactersFromMemory(includeHidden);
       res.json({ characters });
     } catch (error) {
-      console.error('Error fetching characters for admin:', error);
+      logger.error('Error fetching characters for admin', { error });
       res.status(500).json({ error: 'Failed to fetch characters' });
     }
   });
@@ -677,7 +687,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ character, message: 'Character created, saved to JSON and DB' });
     } catch (error) {
-      console.error('Error creating character:', error);
+      logger.error('Error creating character', { error });
       res.status(500).json({ error: 'Failed to create character' });
     }
   });
@@ -693,7 +703,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ character });
     } catch (error) {
-      console.error('Error fetching character:', error);
+      logger.error('Error fetching character', { error });
       res.status(500).json({ error: 'Failed to fetch character' });
     }
   });
@@ -714,7 +724,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ character: updatedCharacter });
     } catch (error) {
-      console.error('Error updating character:', error);
+      logger.error('Error updating character', { error });
       res.status(500).json({ error: 'Failed to update character' });
     }
   });
@@ -732,7 +742,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json({ success: true, message: 'Character deleted' });
     } catch (error) {
-      console.error('Error deleting character:', error);
+      logger.error('Error deleting character', { error });
       res.status(500).json({ error: 'Failed to delete character' });
     }
   });
@@ -743,7 +753,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const levels = getLevelsFromMemory();
       res.json({ levels });
     } catch (error) {
-      console.error('Error fetching levels for admin:', error);
+      logger.error('Error fetching levels for admin', { error });
       res.status(500).json({ error: 'Failed to fetch levels' });
     }
   });
@@ -762,7 +772,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ level, message: 'Level created, saved to JSON and DB' });
     } catch (error) {
-      console.error('Error creating level:', error);
+      logger.error('Error creating level', { error });
       res.status(500).json({ error: 'Failed to create level' });
     }
   });
@@ -778,7 +788,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ level: levelData });
     } catch (error) {
-      console.error('Error fetching level:', error);
+      logger.error('Error fetching level', { error });
       res.status(500).json({ error: 'Failed to fetch level' });
     }
   });
@@ -800,7 +810,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ level: updatedLevel });
     } catch (error) {
-      console.error('Error updating level:', error);
+      logger.error('Error updating level', { error });
       res.status(500).json({ error: 'Failed to update level' });
     }
   });
@@ -818,14 +828,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json({ success: true, message: 'Level deleted' });
     } catch (error) {
-      console.error('Error deleting level:', error);
+      logger.error('Error deleting level', { error });
       res.status(500).json({ error: 'Failed to delete level' });
     }
   });
 
-  console.log('🔧 Creating HTTP server...');
+  logger.info('Creating HTTP server...');
   const httpServer = createServer(app);
   
-  console.log('✅ All routes registered successfully');
+  logger.info('All routes registered successfully');
   return httpServer;
 }

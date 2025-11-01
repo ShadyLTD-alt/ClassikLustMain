@@ -1,0 +1,31 @@
+node_modules
+dist
+<<<<<<< HEAD
+.env
+logs/
+*.log
+=======
+.DS_Store
+*.tar.gz
+
+# Logs
+logs/
+*.log
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Database
+*.db
+*.sqlite
+
+# IDE
+.vscode/
+.idea/
+
+# Uploads
+uploads/
+!uploads/.gitkeep
+>>>>>>> f67e8a9c5e91ee5dafc302f22408418a55afde06
