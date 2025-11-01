@@ -4,7 +4,7 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
 export const players = pgTable("players", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   telegramId: text("telegramId").unique(),
   username: text("username").notNull(),
   points: integer("points").default(0).notNull(),
@@ -58,7 +58,7 @@ export const levels = pgTable("levels", {
 });
 
 export const playerUpgrades = pgTable("playerUpgrades", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   playerId: varchar("playerId").notNull().references(() => players.id, { onDelete: 'cascade' }),
   upgradeId: text("upgradeId").notNull().references(() => upgrades.id, { onDelete: 'cascade' }),
   level: integer("level").default(0).notNull(),
@@ -66,14 +66,14 @@ export const playerUpgrades = pgTable("playerUpgrades", {
 });
 
 export const playerCharacters = pgTable("playerCharacters", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   playerId: varchar("playerId").notNull().references(() => players.id, { onDelete: 'cascade' }),
   characterId: text("characterId").notNull().references(() => characters.id, { onDelete: 'cascade' }),
   unlockedAt: timestamp("unlockedAt").defaultNow().notNull(),
 });
 
 export const sessions = pgTable("sessions", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   playerId: varchar("playerId").notNull().references(() => players.id, { onDelete: 'cascade' }),
   token: text("token").notNull().unique(),
   expiresAt: timestamp("expiresAt").notNull(),
