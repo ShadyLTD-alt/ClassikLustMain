@@ -30,11 +30,11 @@ function App() {
   const [userData, setUserData] = useState<any>(null);
 
   useEffect(() => {
-<<<<<<< HEAD
+
     let isMounted = true;
-=======
+
     console.log("🔥 [CLIENT] App useEffect triggered - starting auth check");
->>>>>>> f67e8a9c5e91ee5dafc302f22408418a55afde06
+
     
     const checkAuth = async () => {
       console.log('🚀 [v3.2] CLIENT App.tsx checkAuth starting...');
@@ -44,7 +44,7 @@ function App() {
         // Test basic connectivity first
         console.log('🏥 [v3.2] Testing server connectivity...');
         try {
-<<<<<<< HEAD
+
           if (!isMounted) return;
           setLoadingProgress(30);
           
@@ -52,12 +52,12 @@ function App() {
             headers: {
               'Authorization': `Bearer ${sessionToken}`
             }
-=======
+
           const healthResponse = await fetch('/api/health');
           console.log('🏥 [v3.2] Health check result:', {
             status: healthResponse.status,
             ok: healthResponse.ok
->>>>>>> f67e8a9c5e91ee5dafc302f22408418a55afde06
+
           });
         } catch (healthError) {
           console.error('💀 [v3.2] CRITICAL: Cannot reach server!', healthError);
@@ -66,7 +66,7 @@ function App() {
           return;
         }
 
-<<<<<<< HEAD
+
           if (!isMounted) return;
           setLoadingProgress(60);
           
@@ -82,7 +82,7 @@ function App() {
             return;
           } else {
             console.log('❌ [v3.0] Session invalid, clearing token');
-=======
+
         const WebApp = (window as any).Telegram?.WebApp;
         console.log('📱 [v3.2] Telegram WebApp check:', {
           exists: !!WebApp,
@@ -135,12 +135,12 @@ function App() {
             }
           } catch (error) {
             console.error('💥 [v3.2] Session check failed:', error);
->>>>>>> f67e8a9c5e91ee5dafc302f22408418a55afde06
+
             localStorage.removeItem('sessionToken');
           }
         }
 
-<<<<<<< HEAD
+
       // If we have Telegram initData, try to authenticate
       if (WebApp?.initData) {
         console.log('🔄 [v3.0] Attempting Telegram auth with initData');
@@ -170,7 +170,7 @@ function App() {
             return;
           } else {
             console.log('❌ [v3.0] Telegram auth failed');
-=======
+
         // Try Telegram auto-auth if available
         if (WebApp?.initData) {
           console.log('🔄 [v3.2] Attempting Telegram auth with initData');
@@ -202,18 +202,18 @@ function App() {
             }
           } catch (error) {
             console.error('💥 [v3.2] Telegram auth error:', error);
->>>>>>> f67e8a9c5e91ee5dafc302f22408418a55afde06
+
           }
         } else {
           console.log('ℹ️ [v3.2] No initData available for Telegram auth');
         }
 
-<<<<<<< HEAD
+
       console.log('🔐 [v3.0] No valid session found, showing login screen');
       if (!isMounted) return;
       setLoadingProgress(100);
       setAuthState('unauthenticated');
-=======
+
         // Ensure we always transition out of loading state
         console.log('🔐 [v3.2] No valid session found, showing login screen');
         setLoadingProgress(100);
@@ -224,7 +224,6 @@ function App() {
         setLoadingProgress(100);
         setAuthState('unauthenticated');
       }
->>>>>>> f67e8a9c5e91ee5dafc302f22408418a55afde06
     };
 
     checkAuth();
@@ -241,35 +240,35 @@ function App() {
     setAuthState('authenticated');
   };
 
-<<<<<<< HEAD
+
   console.log('🎨 [v3.0] App render - authState:', authState, 'progress:', loadingProgress);
   console.log('🎨 [v3.0] Current time:', new Date().toISOString());
 
   if (authState === 'loading') {
     console.log('🔄 [v3.0] Rendering LoadingScreen');
-=======
+
   console.log(`🔍 [CLIENT] Current auth state: ${authState}, progress: ${loadingProgress}`);
 
   if (authState === 'loading') {
     console.log('⏳ [CLIENT] Rendering LoadingScreen');
->>>>>>> f67e8a9c5e91ee5dafc302f22408418a55afde06
+
     return <LoadingScreen progress={loadingProgress} />;
   }
 
   if (authState === 'login' || authState === 'unauthenticated') {
-<<<<<<< HEAD
+
     console.log('🔐 [v3.0] Rendering LoginScreen');
     return <LoginScreen onLogin={handleLogin} />;
   }
 
   console.log('🎮 [v3.0] Rendering Game with userData:', userData?.username);
-=======
+
     console.log('🔐 [CLIENT] Rendering LoginScreen');
     return <LoginScreen onLogin={handleLogin} />;
   }
 
   console.log('🎮 [CLIENT] Rendering Game');
->>>>>>> f67e8a9c5e91ee5dafc302f22408418a55afde06
+
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
