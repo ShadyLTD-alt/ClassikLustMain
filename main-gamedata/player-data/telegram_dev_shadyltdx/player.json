@@ -2,12 +2,12 @@
   "id": "3ebdbb63-ab1e-4627-a6f7-ade838705e96",
   "telegramId": "dev_shadyltdx",
   "username": "ShadyLTDx",
-  "points": "16.00",
-  "energy": 994,
+  "points": "417.20",
+  "energy": 1000,
   "maxEnergy": 1000,
   "level": 2,
   "experience": 0,
-  "passiveIncomeRate": 10,
+  "passiveIncomeRate": 20,
   "isAdmin": true,
   "selectedCharacterId": null,
   "displayImage": null,
@@ -19,6 +19,6 @@
   "unlockedCharacters": [
     "starter"
   ],
-  "lastLogin": "2025-11-01T09:18:31.647Z",
+  "lastLogin": "2025-11-01T09:26:46.132Z",
   "lastEnergyUpdate": "2025-11-01T08:20:31.393Z"
 }
