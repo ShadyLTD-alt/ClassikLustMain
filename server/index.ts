@@ -1,9 +1,9 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { syncAllGameData } from "./utils/dataLoader";
 import path from "path";
 import { fileURLToPath } from "url";
-import { syncAllGameData } from "./utils/dataLoader";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -54,6 +54,7 @@ app.use((req, res, next) => {
 
 (async () => {
   // Sync game data from JSON files to database on startup
+  // This is now done non-blocking after server starts
   // await syncAllGameData(); // This line is removed to make sync non-blocking
 
   const server = await registerRoutes(app);

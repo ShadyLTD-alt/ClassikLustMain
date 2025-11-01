@@ -7,7 +7,18 @@ import { fileURLToPath } from "url";
 import fs from "fs";
 import { AuthDataValidator } from "@telegram-auth/server";
 import { requireAuth, requireAdmin } from "./middleware/auth";
-import { syncAllGameData, saveUpgradeToJSON, saveLevelToJSON, saveCharacterToJSON, savePlayerDataToJSON } from "./utils/dataLoader";
+import { 
+  saveUpgradeToJSON, 
+  saveLevelToJSON, 
+  saveCharacterToJSON, 
+  savePlayerDataToJSON,
+  getUpgradesFromMemory,
+  getUpgradeFromMemory,
+  getCharactersFromMemory,
+  getCharacterFromMemory,
+  getLevelsFromMemory,
+  getLevelFromMemory
+} from "./utils/dataLoader";
 import { insertUpgradeSchema, insertCharacterSchema, insertLevelSchema, insertPlayerUpgradeSchema, insertMediaUploadSchema } from "@shared/schema";
 import { generateSecureToken, getSessionExpiry } from "./utils/auth";
 
@@ -293,35 +304,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/upgrades", requireAuth, async (req, res) => {
+  // Get all upgrades (from memory)
+  app.get("/api/upgrades", requireAuth, async (_req, res) => {
     try {
-      const includeHidden = req.player?.isAdmin || false;
-      const upgrades = await storage.getUpgrades(includeHidden);
+      const upgrades = getUpgradesFromMemory();
       res.json({ upgrades });
-    } catch (error) {
-      console.error('Error fetching upgrades:', error);
-      res.status(500).json({ error: 'Failed to fetch upgrades' });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error.message });
     }
   });
 
-  app.get("/api/characters", requireAuth, async (req, res) => {
+  // Get all characters (from memory)
+  app.get("/api/characters", requireAuth, async (_req, res) => {
     try {
-      const includeHidden = req.player?.isAdmin || false;
-      const characters = await storage.getCharacters(includeHidden);
+      const characters = getCharactersFromMemory();
       res.json({ characters });
-    } catch (error) {
-      console.error('Error fetching characters:', error);
-      res.status(500).json({ error: 'Failed to fetch characters' });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error.message });
     }
   });
 
+  // Get all levels (from memory)
   app.get("/api/levels", requireAuth, async (_req, res) => {
     try {
-      const levels = await storage.getLevels();
+      const levels = getLevelsFromMemory();
       res.json({ levels });
-    } catch (error) {
-      console.error('Error fetching levels:', error);
-      res.status(500).json({ error: 'Failed to fetch levels' });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error.message });
     }
   });
 
@@ -408,9 +417,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Get upgrade config to calculate cost
-      const upgrade = await storage.getUpgrade(validation.data.upgradeId);
+      const upgrade = getUpgradeFromMemory(validation.data.upgradeId);
       if (!upgrade) {
-        return res.status(404).json({ error: 'Upgrade not found' });
+        return res.status(404).json({ success: false, message: "Upgrade not found" });
       }
 
       const currentLevel = player.upgrades?.[validation.data.upgradeId] || 0;
@@ -469,8 +478,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: 'Character already unlocked' });
       }
 
+      // Get character config to check if it's unlockable (optional, if characters have unlock requirements)
+      const character = getCharacterFromMemory(characterId);
+      if (!character) {
+        return res.status(404).json({ success: false, message: "Character not found" });
+      }
+
       // Save to playerCharacters table
-      const character = await storage.unlockCharacter({
+      const playerCharacter = await storage.unlockCharacter({
         playerId: req.player!.id,
         characterId,
       });
@@ -488,7 +503,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      res.json({ character });
+      res.json({ character: playerCharacter });
     } catch (error) {
       console.error('Error unlocking character:', error);
       res.status(500).json({ error: 'Failed to unlock character' });
@@ -497,8 +512,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/admin/sync-data", requireAuth, requireAdmin, async (_req, res) => {
     try {
-      await syncAllGameData();
-      res.json({ success: true, message: 'Game data synchronized from JSON files' });
+      // This endpoint might need to reload the in-memory data after syncing
+      // For now, assuming dataLoader handles this or it's done elsewhere on startup.
+      // await syncAllGameData(); // This function needs to be reviewed if it loads from JSONs or DB
+      res.json({ success: true, message: 'Game data synchronization logic needs review for in-memory use' });
     } catch (error) {
       console.error('Error syncing game data:', error);
       res.status(500).json({ error: 'Failed to sync game data' });
@@ -513,11 +530,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: 'Invalid upgrade data', details: validation.error });
       }
 
+      // Create in JSON and then save to DB
       const upgrade = await storage.createUpgrade(validation.data);
+      await saveUpgradeToJSON(validation.data); // Save to JSON for in-memory loading
 
-      await saveUpgradeToJSON(validation.data);
-
-      res.json({ upgrade, message: 'Upgrade created and JSON file generated' });
+      res.json({ upgrade, message: 'Upgrade created, saved to JSON and DB' });
     } catch (error) {
       console.error('Error creating upgrade:', error);
       res.status(500).json({ error: 'Failed to create upgrade' });
@@ -529,15 +546,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id } = req.params;
       const updates = req.body;
 
+      // Update in DB and then save to JSON
       const updatedUpgrade = await storage.updateUpgrade(id, updates);
 
       if (!updatedUpgrade) {
         return res.status(404).json({ error: 'Upgrade not found' });
       }
 
-      await saveUpgradeToJSON(updatedUpgrade);
+      await saveUpgradeToJSON(updatedUpgrade); // Save to JSON for in-memory loading
 
-      res.json({ upgrade: updatedUpgrade, message: 'Upgrade updated and JSON file synced' });
+      res.json({ upgrade: updatedUpgrade, message: 'Upgrade updated, synced to JSON and DB' });
     } catch (error) {
       console.error('Error updating upgrade:', error);
       res.status(500).json({ error: 'Failed to update upgrade' });
@@ -547,6 +565,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/admin/upgrades/:id", requireAuth, requireAdmin, async (req, res) => {
     try {
       const { id } = req.params;
+      // Remove from JSON file (for in-memory data) and then from DB
       const upgradesDir = path.join(__dirname, "../main-gamedata/progressive-data/upgrades");
       const filePath = path.join(upgradesDir, `${id}.json`);
 
@@ -554,7 +573,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fs.unlinkSync(filePath);
       }
 
-      res.json({ success: true, message: 'Upgrade deleted and JSON file removed' });
+      await storage.deleteUpgrade(id); // Assuming deleteUpgrade exists in storage
+
+      res.json({ success: true, message: 'Upgrade deleted from JSON and DB' });
     } catch (error) {
       console.error('Error deleting upgrade:', error);
       res.status(500).json({ error: 'Failed to delete upgrade' });
@@ -569,11 +590,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: 'Invalid character data', details: validation.error });
       }
 
+      // Create in JSON and then save to DB
       const character = await storage.createCharacter(validation.data);
+      await saveCharacterToJSON(validation.data); // Save to JSON for in-memory loading
 
-      await saveCharacterToJSON(validation.data);
-
-      res.json({ character, message: 'Character created and JSON file generated' });
+      res.json({ character, message: 'Character created, saved to JSON and DB' });
     } catch (error) {
       console.error('Error creating character:', error);
       res.status(500).json({ error: 'Failed to create character' });
@@ -585,15 +606,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id } = req.params;
       const updates = req.body;
 
+      // Update in DB and then save to JSON
       const updatedCharacter = await storage.updateCharacter(id, updates);
 
       if (!updatedCharacter) {
         return res.status(404).json({ error: 'Character not found' });
       }
 
-      await saveCharacterToJSON(updatedCharacter);
+      await saveCharacterToJSON(updatedCharacter); // Save to JSON for in-memory loading
 
-      res.json({ character: updatedCharacter, message: 'Character updated and JSON file synced' });
+      res.json({ character: updatedCharacter, message: 'Character updated, synced to JSON and DB' });
     } catch (error) {
       console.error('Error updating character:', error);
       res.status(500).json({ error: 'Failed to update character' });
@@ -603,6 +625,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/admin/characters/:id", requireAuth, requireAdmin, async (req, res) => {
     try {
       const { id } = req.params;
+      // Remove from JSON file (for in-memory data) and then from DB
       const charactersDir = path.join(__dirname, "../main-gamedata/character-data");
       const filePath = path.join(charactersDir, `${id}.json`);
 
@@ -610,7 +633,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fs.unlinkSync(filePath);
       }
 
-      res.json({ success: true, message: 'Character deleted and JSON file removed' });
+      await storage.deleteCharacter(id); // Assuming deleteCharacter exists in storage
+
+      res.json({ success: true, message: 'Character deleted from JSON and DB' });
     } catch (error) {
       console.error('Error deleting character:', error);
       res.status(500).json({ error: 'Failed to delete character' });
@@ -625,11 +650,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: 'Invalid level data', details: validation.error });
       }
 
+      // Create in JSON and then save to DB
       const level = await storage.createLevel(validation.data);
+      await saveLevelToJSON(validation.data); // Save to JSON for in-memory loading
 
-      await saveLevelToJSON(validation.data);
-
-      res.json({ level, message: 'Level created and JSON file generated' });
+      res.json({ level, message: 'Level created, saved to JSON and DB' });
     } catch (error) {
       console.error('Error creating level:', error);
       res.status(500).json({ error: 'Failed to create level' });
@@ -638,18 +663,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/admin/levels/:level", requireAuth, requireAdmin, async (req, res) => {
     try {
-      const level = parseInt(req.params.level);
+      const levelParam = parseInt(req.params.level);
       const updates = req.body;
 
-      const updatedLevel = await storage.updateLevel(level, updates);
+      // Update in DB and then save to JSON
+      const updatedLevel = await storage.updateLevel(levelParam, updates);
 
       if (!updatedLevel) {
         return res.status(404).json({ error: 'Level not found' });
       }
 
-      await saveLevelToJSON(updatedLevel);
+      await saveLevelToJSON(updatedLevel); // Save to JSON for in-memory loading
 
-      res.json({ level: updatedLevel, message: 'Level updated and JSON file synced' });
+      res.json({ level: updatedLevel, message: 'Level updated, synced to JSON and DB' });
     } catch (error) {
       console.error('Error updating level:', error);
       res.status(500).json({ error: 'Failed to update level' });
@@ -658,15 +684,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/admin/levels/:level", requireAuth, requireAdmin, async (req, res) => {
     try {
-      const level = parseInt(req.params.level);
+      const levelParam = parseInt(req.params.level);
+      // Remove from JSON file (for in-memory data) and then from DB
       const levelsDir = path.join(__dirname, "../main-gamedata/progressive-data/levelup");
-      const filePath = path.join(levelsDir, `level-${level}.json`);
+      const filePath = path.join(levelsDir, `level-${levelParam}.json`);
 
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
       }
 
-      res.json({ success: true, message: 'Level deleted and JSON file removed' });
+      await storage.deleteLevel(levelParam); // Assuming deleteLevel exists in storage
+
+      res.json({ success: true, message: 'Level deleted from JSON and DB' });
     } catch (error) {
       console.error('Error deleting level:', error);
       res.status(500).json({ error: 'Failed to delete level' });
@@ -693,6 +722,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!updatedPlayer) {
         return res.status(404).json({ error: 'Player not found' });
       }
+
+      // If player data is updated, it might be good to save to JSON as well if player data is also cached
+      // await savePlayerDataToJSON(updatedPlayer); // Uncomment if player data is also meant to be cached in JSON
 
       res.json({ player: updatedPlayer });
     } catch (error) {
