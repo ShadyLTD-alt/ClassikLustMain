@@ -14,6 +14,8 @@ import {
   type InsertLevel,
   type PlayerUpgrade,
   type InsertPlayerUpgrade,
+  type PlayerLevelUp,
+  type InsertPlayerLevelUp,
   type PlayerCharacter,
   type InsertPlayerCharacter,
   type Session,
@@ -29,33 +31,23 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error("SUPABASE_URL and SUPABASE_ANON_KEY environment variables must be set");
 }
 
-// Validate URL format
 if (!supabaseUrl.startsWith('http://') && !supabaseUrl.startsWith('https://')) {
   throw new Error(`Invalid SUPABASE_URL format: "${supabaseUrl}". Must start with http:// or https://`);
 }
 
-// Initialize Supabase client
-export const supabase = createClient(
-  supabaseUrl,
-  supabaseAnonKey
-);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// Get the connection string for Drizzle
-// DATABASE_URL should contain the PostgreSQL connection pooler URL from Supabase
 const connectionString = process.env.DATABASE_URL;
-
 if (!connectionString) {
   throw new Error("DATABASE_URL must be set for database connection");
 }
 
-// Validate it's a postgres connection string
 if (!connectionString.startsWith('postgres://') && !connectionString.startsWith('postgresql://')) {
   throw new Error(`Invalid DATABASE_URL format: must start with postgresql://`);
 }
 
-// Use postgres.js for Drizzle with Supabase with connection pooling settings
 const client = postgres(connectionString, {
-  max: 1, // Limit connections in serverless environment
+  max: 1,
   idle_timeout: 20,
   connect_timeout: 10,
 });
@@ -90,6 +82,10 @@ export interface IStorage {
   getPlayerUpgrade(playerId: string, upgradeId: string): Promise<PlayerUpgrade | undefined>;
   setPlayerUpgrade(data: InsertPlayerUpgrade): Promise<PlayerUpgrade>;
   updatePlayerUpgrade(playerId: string, upgradeId: string, level: number): Promise<PlayerUpgrade | undefined>;
+  
+  getPlayerLevelUps(playerId: string): Promise<PlayerLevelUp[]>;
+  getPlayerLevelUp(playerId: string, level: number): Promise<PlayerLevelUp | undefined>;
+  createPlayerLevelUp(data: InsertPlayerLevelUp): Promise<PlayerLevelUp>;
   
   getPlayerCharacters(playerId: string): Promise<(PlayerCharacter & { character: Character })[]>;
   unlockCharacter(data: InsertPlayerCharacter): Promise<PlayerCharacter>;
@@ -146,12 +142,10 @@ export class DatabaseStorage implements IStorage {
 
   async createUpgrade(upgrade: InsertUpgrade): Promise<Upgrade> {
     try {
-      // Try to insert, or update if exists
       const result = await db.insert(schema.upgrades).values(upgrade).returning();
       return result[0];
     } catch (error: any) {
-      if (error?.code === '23505') { // Unique constraint violation
-        // Update existing instead
+      if (error?.code === '23505') {
         const result = await db.update(schema.upgrades).set(upgrade).where(eq(schema.upgrades.id, upgrade.id)).returning();
         return result[0];
       }
@@ -186,8 +180,7 @@ export class DatabaseStorage implements IStorage {
       const result = await db.insert(schema.characters).values(character).returning();
       return result[0];
     } catch (error: any) {
-      if (error?.code === '23505') { // Unique constraint violation
-        // Update existing instead
+      if (error?.code === '23505') {
         const result = await db.update(schema.characters).set(character).where(eq(schema.characters.id, character.id)).returning();
         return result[0];
       }
@@ -219,8 +212,7 @@ export class DatabaseStorage implements IStorage {
       const result = await db.insert(schema.levels).values(levelData).returning();
       return result[0];
     } catch (error: any) {
-      if (error?.code === '23505') { // Unique constraint violation
-        // Update existing instead
+      if (error?.code === '23505') {
         const result = await db.update(schema.levels).set(levelData).where(eq(schema.levels.level, levelData.level)).returning();
         return result[0];
       }
@@ -268,7 +260,7 @@ export class DatabaseStorage implements IStorage {
     if (existing) {
       const result = await db
         .update(schema.playerUpgrades)
-        .set({ level: data.level, updatedAt: new Date() })
+        .set({ level: data.level, type: data.type, updatedAt: new Date() })
         .where(eq(schema.playerUpgrades.id, existing.id))
         .returning();
       return result[0];
@@ -286,6 +278,27 @@ export class DatabaseStorage implements IStorage {
       .set({ level, updatedAt: new Date() })
       .where(eq(schema.playerUpgrades.id, existing.id))
       .returning();
+    return result[0];
+  }
+
+  async getPlayerLevelUps(playerId: string): Promise<PlayerLevelUp[]> {
+    return await db.select().from(schema.playerLevelUps).where(eq(schema.playerLevelUps.playerId, playerId));
+  }
+
+  async getPlayerLevelUp(playerId: string, level: number): Promise<PlayerLevelUp | undefined> {
+    const result = await db
+      .select()
+      .from(schema.playerLevelUps)
+      .where(and(
+        eq(schema.playerLevelUps.playerId, playerId),
+        eq(schema.playerLevelUps.level, level)
+      ))
+      .limit(1);
+    return result[0];
+  }
+
+  async createPlayerLevelUp(data: InsertPlayerLevelUp): Promise<PlayerLevelUp> {
+    const result = await db.insert(schema.playerLevelUps).values(data).returning();
     return result[0];
   }
 
