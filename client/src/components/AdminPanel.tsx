@@ -999,6 +999,7 @@ export default function AdminPanel() {
                     </Button>
                   </div>
                 </CardContent>
+              </div>
             </DialogContent>
           </Dialog>
         )}
