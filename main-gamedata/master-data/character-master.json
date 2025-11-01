@@ -36,13 +36,9 @@
     {
       "id": "aria",
       "name": "Aria",
-      "description": "A melodic mage who weaves magic through song",
       "unlockLevel": 7,
-      "rarity": "rare",
-      "defaultImage": "",
-      "avatarImage": "",
-      "displayImage": "",
-      "isHidden": false
+      "description": "A melodic mage who weaves magic through song test",
+      "rarity": "rare"
     }
   ]
 }

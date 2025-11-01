@@ -4,14 +4,13 @@
       "id": "perTap",
       "name": "Points Per Tap",
       "description": "Increases points earned per tap",
-      "type": "perTap",
-      "icon": "Hand",
       "maxLevel": 30,
       "baseCost": 10,
       "costMultiplier": 1.15,
       "baseValue": 1,
       "valueIncrement": 1,
-      "isHidden": false
+      "icon": "Hand",
+      "type": "perTap"
     },
     {
       "id": "perHour",
