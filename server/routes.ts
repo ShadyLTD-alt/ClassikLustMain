@@ -117,11 +117,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     console.log('🛠️ Dev auth request received');
+    console.log('📦 Request body:', req.body);
 
     try {
       const { username } = req.body;
 
       if (!username || username.trim().length === 0) {
+        console.log('❌ No username provided');
         return res.status(400).json({ error: 'Username is required' });
       }
 
@@ -170,6 +172,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       console.error('💥 Dev auth error:', error);
+      console.error('📍 Error stack:', (error as Error).stack);
       res.status(500).json({ error: 'Authentication failed', details: (error as Error).message });
     }
   });

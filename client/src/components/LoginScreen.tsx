@@ -31,13 +31,25 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
     setDevError(null);
 
     try {
+      console.log('🔄 Attempting dev login with username:', devUsername);
       const response = await fetch('/api/auth/dev', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: devUsername }),
       });
 
+      console.log('📡 Response status:', response.status);
+      console.log('📡 Response headers:', response.headers);
+
+      if (!response.ok) {
+        const text = await response.text();
+        console.error('❌ Server error:', text);
+        setDevError(`Server error: ${response.status}`);
+        return;
+      }
+
       const data = await response.json();
+      console.log('📦 Response data:', data);
 
       if (data.success && data.player && data.sessionToken) {
         console.log('✅ Dev login successful');
@@ -46,7 +58,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
         setDevError(data.error || 'Login failed');
       }
     } catch (error: any) {
-      console.error('Dev login error:', error);
+      console.error('💥 Dev login error:', error);
       setDevError(error.message || 'Login failed');
     } finally {
       setIsDevLoading(false);
