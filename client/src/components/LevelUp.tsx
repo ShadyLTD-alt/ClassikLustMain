@@ -1,0 +1,234 @@
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { CheckCircle, Lock, TrendingUp, X } from "lucide-react";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/context/AuthContext";
+
+interface LevelUpProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+export default function LevelUp({ isOpen, onClose }: LevelUpProps) {
+  const [isLevelingUp, setIsLevelingUp] = useState(false);
+  const { toast } = useToast();
+  
+  // Fetch player data
+  const { data: player } = useQuery({
+    queryKey: ['/api/player/me'],
+    queryFn: async () => {
+      const response = await apiRequest('GET', '/api/player/me');
+      return await response.json();
+    },
+    enabled: isOpen
+  });
+
+  // Fetch next level info
+  const { data: nextLevelData } = useQuery({
+    queryKey: ['/api/levels', player?.level + 1],
+    queryFn: async () => {
+      if (!player) return null;
+      const response = await apiRequest('GET', `/api/levels/${player.level + 1}`);
+      if (!response.ok) return null;
+      return await response.json();
+    },
+    enabled: isOpen && !!player
+  });
+
+  // Fetch upgrades for requirement checking
+  const { data: upgradesData } = useQuery({
+    queryKey: ['/api/upgrades'],
+    queryFn: async () => {
+      const response = await apiRequest('GET', '/api/upgrades');
+      return await response.json();
+    },
+    enabled: isOpen
+  });
+
+  if (!player || !nextLevelData?.level) {
+    return (
+      <Dialog open={isOpen} onOpenChange={onClose}>
+        <DialogContent className="max-w-md bg-gray-900/95 backdrop-blur-lg text-white border-purple-500/50">
+          <DialogHeader>
+            <div className="flex items-center justify-between">
+              <DialogTitle className="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                Level Up
+              </DialogTitle>
+              <Button variant="ghost" size="sm" onClick={onClose}>
+                <X className="w-5 h-5" />
+              </Button>
+            </div>
+          </DialogHeader>
+          <div className="text-center py-8">
+            <p className="text-gray-400">Maximum level reached!</p>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  const nextLevel = nextLevelData.level;
+  const cost = nextLevel.cost || 100;
+  const canAfford = player.points >= cost;
+  const requirements = nextLevel.requirements || [];
+  const unlocks = nextLevel.unlocks || [];
+  const upgrades = upgradesData?.upgrades || [];
+
+  // Check if requirements are met
+  const requirementsMet = requirements.every((req: any) => {
+    const playerUpgradeLevel = player.upgrades?.[req.upgradeId] || 0;
+    return playerUpgradeLevel >= req.minLevel;
+  });
+
+  const canLevelUp = canAfford && requirementsMet;
+
+  const handleLevelUp = async () => {
+    if (!canLevelUp || isLevelingUp) return;
+    
+    setIsLevelingUp(true);
+    try {
+      const response = await apiRequest('POST', '/api/player/level-up');
+      
+      if (response.ok) {
+        toast({
+          title: "Level Up!",
+          description: `Congratulations! You've reached level ${nextLevel.level}`,
+        });
+        onClose();
+      } else {
+        throw new Error('Failed to level up');
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to level up. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLevelingUp(false);
+    }
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-md bg-gray-900/95 backdrop-blur-lg text-white border-purple-500/50">
+        <DialogHeader>
+          <div className="flex items-center justify-between">
+            <DialogTitle className="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+              Level Up - Level {nextLevel.level}
+            </DialogTitle>
+            <Button variant="ghost" size="sm" onClick={onClose}>
+              <X className="w-5 h-5" />
+            </Button>
+          </div>
+          <p className="text-center text-sm text-gray-400">
+            Current Level: {player.level} | Cost: <span className="text-purple-400 font-semibold">{cost}</span> points
+          </p>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {/* Requirements Section */}
+          {requirements.length > 0 && (
+            <Card className="bg-black/40 border-purple-500/30">
+              <CardContent className="p-4">
+                <h3 className="font-semibold mb-3 flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-purple-400" />
+                  Requirements
+                </h3>
+                <div className="space-y-2">
+                  {requirements.map((req: any, index: number) => {
+                    const upgrade = upgrades.find((u: any) => u.id === req.upgradeId);
+                    const playerLevel = player.upgrades?.[req.upgradeId] || 0;
+                    const isMet = playerLevel >= req.minLevel;
+                    
+                    return (
+                      <div key={index} className="flex items-center justify-between p-2 rounded bg-gray-800/50">
+                        <div className="flex items-center gap-2">
+                          {isMet ? (
+                            <CheckCircle className="w-4 h-4 text-green-400" />
+                          ) : (
+                            <Lock className="w-4 h-4 text-red-400" />
+                          )}
+                          <span className={isMet ? 'text-green-400' : 'text-red-400'}>
+                            {upgrade?.name || req.upgradeId}
+                          </span>
+                        </div>
+                        <Badge 
+                          variant="secondary" 
+                          className={`text-xs ${
+                            isMet 
+                              ? 'bg-green-600/20 text-green-400' 
+                              : 'bg-red-600/20 text-red-400'
+                          }`}
+                        >
+                          {playerLevel}/{req.minLevel}
+                        </Badge>
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Unlocks Section */}
+          {unlocks.length > 0 && (
+            <Card className="bg-black/40 border-purple-500/30">
+              <CardContent className="p-4">
+                <h3 className="font-semibold mb-3 text-yellow-400">Unlocks at Level {nextLevel.level}</h3>
+                <div className="space-y-2">
+                  {unlocks.map((unlock: string, index: number) => (
+                    <div key={index} className="flex items-center gap-2 p-2 rounded bg-yellow-600/10">
+                      <CheckCircle className="w-4 h-4 text-yellow-400" />
+                      <span className="text-yellow-400">{unlock}</span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Level Up Button */}
+          <Button
+            onClick={handleLevelUp}
+            disabled={!canLevelUp || isLevelingUp}
+            className={`w-full py-3 text-lg font-semibold ${
+              canLevelUp
+                ? 'bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800'
+                : 'bg-gray-600 cursor-not-allowed'
+            }`}
+          >
+            {isLevelingUp ? (
+              <div className="flex items-center gap-2">
+                <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+                Leveling up...
+              </div>
+            ) : canLevelUp ? (
+              'Level Up Now!'
+            ) : !canAfford ? (
+              `Need ${cost - player.points} more points`
+            ) : (
+              'Requirements not met'
+            )}
+          </Button>
+
+          {/* Current Status */}
+          <div className="text-center text-sm text-gray-400 space-y-1">
+            <div>Your Points: <span className="text-purple-400 font-semibold">{Math.floor(player.points)}</span></div>
+            <div>Cost: <span className="text-purple-400 font-semibold">{cost}</span></div>
+            {canAfford ? (
+              <div className="text-green-400">✓ You have enough points!</div>
+            ) : (
+              <div className="text-red-400">✗ Not enough points</div>
+            )}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
