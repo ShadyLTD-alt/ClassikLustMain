@@ -38,11 +38,16 @@ export const supabase = createClient(
 );
 
 // Get the connection string for Drizzle
-// Use the SUPABASE_URL secret which should be the full database connection string
-const connectionString = process.env.SUPABASE_URL || process.env.DATABASE_URL;
+// DATABASE_URL should contain the PostgreSQL connection pooler URL from Supabase
+const connectionString = process.env.DATABASE_URL;
 
 if (!connectionString) {
-  throw new Error("SUPABASE_URL or DATABASE_URL must be set for database connection");
+  throw new Error("DATABASE_URL must be set for database connection");
+}
+
+// Validate it's a postgres connection string
+if (!connectionString.startsWith('postgres://') && !connectionString.startsWith('postgresql://')) {
+  throw new Error(`Invalid DATABASE_URL format: must start with postgresql://`);
 }
 
 // Use postgres.js for Drizzle with Supabase with connection pooling settings
