@@ -24,6 +24,8 @@ function App() {
   const [userData, setUserData] = useState<any>(null);
 
   useEffect(() => {
+    let isMounted = true;
+    
     const checkAuth = async () => {
       console.log('🚀 [v3.0] App.tsx checkAuth starting...');
       console.log('⏰ Current timestamp:', new Date().toISOString());
@@ -51,22 +53,33 @@ function App() {
 
       if (sessionToken) {
         try {
+          if (!isMounted) return;
           setLoadingProgress(30);
+          
           const response = await fetch('/api/auth/me', {
             headers: {
               'Authorization': `Bearer ${sessionToken}`
             }
           });
 
+          if (!isMounted) return;
           setLoadingProgress(60);
+          
           if (response.ok) {
             const data = await response.json();
             console.log('📦 [v3.0] Player data received:', data.player?.username);
+            
+            if (!isMounted) return;
             setUserData(data.player);
             setLoadingProgress(100);
-            console.log('🎯 [v3.0] About to set authState to authenticated');
-            setAuthState('authenticated');
-            console.log('✅ [v3.0] Session valid, authState updated to:', 'authenticated');
+            
+            // Use setTimeout to ensure state updates are processed
+            setTimeout(() => {
+              if (!isMounted) return;
+              console.log('🎯 [v3.0] Setting authState to authenticated NOW');
+              setAuthState('authenticated');
+              console.log('✅ [v3.0] authState set to authenticated');
+            }, 0);
             return;
           } else {
             console.log('❌ [v3.0] Session invalid, clearing token');
@@ -81,7 +94,9 @@ function App() {
       // If we have Telegram initData, try to authenticate
       if (WebApp?.initData) {
         console.log('🔄 [v3.0] Attempting Telegram auth with initData');
+        if (!isMounted) return;
         setLoadingProgress(40);
+        
         try {
           const response = await fetch('/api/auth/telegram', {
             method: 'POST',
@@ -89,15 +104,24 @@ function App() {
             body: JSON.stringify({ initData: WebApp.initData })
           });
 
+          if (!isMounted) return;
           setLoadingProgress(70);
+          
           if (response.ok) {
             const data = await response.json();
             localStorage.setItem('sessionToken', data.sessionToken);
+            
+            if (!isMounted) return;
             setLoadingProgress(90);
             setUserData(data.player);
             setLoadingProgress(100);
-            setAuthState('authenticated');
-            console.log('✅ [v3.0] Telegram auto-auth successful');
+            
+            setTimeout(() => {
+              if (!isMounted) return;
+              console.log('🎯 [v3.0] Setting authState to authenticated NOW (Telegram)');
+              setAuthState('authenticated');
+              console.log('✅ [v3.0] Telegram auto-auth successful');
+            }, 0);
             return;
           } else {
             console.log('❌ [v3.0] Telegram auth failed');
@@ -110,11 +134,19 @@ function App() {
       }
 
       console.log('🔐 [v3.0] No valid session found, showing login screen');
+      if (!isMounted) return;
       setLoadingProgress(100);
-      setAuthState('unauthenticated');
+      setTimeout(() => {
+        if (!isMounted) return;
+        setAuthState('unauthenticated');
+      }, 0);
     };
 
     checkAuth();
+    
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const handleLogin = (sessionToken: string, playerData: any) => {
