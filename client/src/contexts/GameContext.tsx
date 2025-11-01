@@ -79,119 +79,66 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
   // Load player data from server on mount
   useEffect(() => {
-    const loadPlayerData = async () => {
+    const loadAllData = async () => {
       const sessionToken = localStorage.getItem('sessionToken');
       if (!sessionToken) {
+        console.log('❌ No session token, skipping data load');
         setIsInitialized(true);
         return;
       }
 
       try {
-        const response = await fetch('/api/player/me', {
-          headers: {
-            'Authorization': `Bearer ${sessionToken}`
-          }
-        });
+        console.log('🔄 Starting to load all game data...');
+        
+        // Load all data in parallel for faster loading
+        const [playerRes, upgradesRes, charactersRes, levelsRes, mediaRes] = await Promise.all([
+          fetch('/api/player/me', {
+            headers: { 'Authorization': `Bearer ${sessionToken}` }
+          }),
+          fetch('/api/upgrades', {
+            headers: { 'Authorization': `Bearer ${sessionToken}` }
+          }),
+          fetch('/api/characters', {
+            headers: { 'Authorization': `Bearer ${sessionToken}` }
+          }),
+          fetch('/api/levels', {
+            headers: { 'Authorization': `Bearer ${sessionToken}` }
+          }),
+          fetch('/api/media', {
+            headers: { 'Authorization': `Bearer ${sessionToken}` }
+          })
+        ]);
 
-        if (response.ok) {
-          const data = await response.json();
-          const player = data.player;
+        // Parse responses
+        const [playerData, upgradesData, charactersData, levelsData, mediaData] = await Promise.all([
+          playerRes.ok ? playerRes.json() : null,
+          upgradesRes.ok ? upgradesRes.json() : null,
+          charactersRes.ok ? charactersRes.json() : null,
+          levelsRes.ok ? levelsRes.json() : null,
+          mediaRes.ok ? mediaRes.json() : null
+        ]);
 
-          // Update state with server data
-          setState(prev => ({
-            ...prev,
-            points: typeof player.points === 'string' ? parseFloat(player.points) : player.points,
-            energy: player.energy || prev.energy,
-            maxEnergy: player.maxEnergy || prev.maxEnergy,
-            level: player.level || prev.level,
-            selectedCharacterId: player.selectedCharacterId || prev.selectedCharacterId,
-            selectedImageId: player.selectedImageId || prev.selectedImageId,
-            displayImage: player.displayImage || prev.displayImage, // Load displayImage from server
-            upgrades: player.upgrades || {},
-            unlockedCharacters: Array.isArray(player.unlockedCharacters) ? player.unlockedCharacters : ['starter'],
-            passiveIncomeRate: player.passiveIncomeRate || 0,
-            isAdmin: player.isAdmin || false
-          }));
-
-          console.log('✅ Loaded player data from server:', {
-            points: player.points,
-            energy: player.energy,
-            level: player.level,
-            upgrades: player.upgrades,
-            passiveIncomeRate: player.passiveIncomeRate
-          });
-        }
-      } catch (error) {
-        console.error('Failed to load player data:', error);
-      } finally {
-        setIsInitialized(true);
-      }
-    };
-
-    const loadGameConfig = async () => {
-      const sessionToken = localStorage.getItem('sessionToken');
-      if (!sessionToken) return;
-
-      try {
-        // Load upgrades
-        const upgradesResponse = await fetch('/api/upgrades', {
-          headers: {
-            'Authorization': `Bearer ${sessionToken}`
-          }
-        });
-
-        if (upgradesResponse.ok) {
-          const upgradesData = await upgradesResponse.json();
-          setUpgrades(upgradesData.upgrades || []);
-          console.log('✅ Loaded upgrades from server:', upgradesData.upgrades?.length);
+        // Set upgrades first
+        if (upgradesData?.upgrades) {
+          setUpgrades(upgradesData.upgrades);
+          console.log('✅ Loaded upgrades:', upgradesData.upgrades.length);
         }
 
-        // Load characters
-        const charactersResponse = await fetch('/api/characters', {
-          headers: {
-            'Authorization': `Bearer ${sessionToken}`
-          }
-        });
-
-        if (charactersResponse.ok) {
-          const charactersData = await charactersResponse.json();
-          setCharacters(charactersData.characters || []);
-          console.log('✅ Loaded characters from server:', charactersData.characters?.length);
+        // Set characters
+        if (charactersData?.characters) {
+          setCharacters(charactersData.characters);
+          console.log('✅ Loaded characters:', charactersData.characters.length);
         }
 
-        // Load levels
-        const levelsResponse = await fetch('/api/levels', {
-          headers: {
-            'Authorization': `Bearer ${sessionToken}`
-          }
-        });
-
-        if (levelsResponse.ok) {
-          const levelsData = await levelsResponse.json();
-          setLevelConfigs(levelsData.levels || []);
-          console.log('✅ Loaded levels from server:', levelsData.levels?.length);
+        // Set levels
+        if (levelsData?.levels) {
+          setLevelConfigs(levelsData.levels);
+          console.log('✅ Loaded levels:', levelsData.levels.length);
         }
-      } catch (error) {
-        console.error('Failed to load game configuration:', error);
-      }
-    };
 
-    const loadMediaUploads = async () => {
-      const sessionToken = localStorage.getItem('sessionToken');
-      if (!sessionToken) return;
-
-      try {
-        const response = await fetch('/api/media', {
-          headers: {
-            'Authorization': `Bearer ${sessionToken}`
-          }
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          const mediaUploads = data.media || [];
-
-          const imageConfigs: ImageConfig[] = mediaUploads.map((media: any) => ({
+        // Set media
+        if (mediaData?.media) {
+          const imageConfigs: ImageConfig[] = mediaData.media.map((media: any) => ({
             id: media.id,
             characterId: media.characterId,
             url: media.url,
@@ -200,18 +147,39 @@ export function GameProvider({ children }: { children: ReactNode }) {
             poses: media.poses || [],
             isHidden: media.isHidden || false
           }));
-
           setImages(imageConfigs);
-          console.log('✅ Loaded media uploads from server:', imageConfigs.length);
+          console.log('✅ Loaded media:', imageConfigs.length);
         }
+
+        // Set player data last
+        if (playerData?.player) {
+          const player = playerData.player;
+          setState(prev => ({
+            ...prev,
+            points: typeof player.points === 'string' ? parseFloat(player.points) : player.points,
+            energy: player.energy || prev.energy,
+            maxEnergy: player.maxEnergy || prev.maxEnergy,
+            level: player.level || prev.level,
+            selectedCharacterId: player.selectedCharacterId || 'starter',
+            selectedImageId: player.selectedImageId || null,
+            displayImage: player.displayImage || null,
+            upgrades: player.upgrades || {},
+            unlockedCharacters: Array.isArray(player.unlockedCharacters) ? player.unlockedCharacters : ['starter'],
+            passiveIncomeRate: player.passiveIncomeRate || 0,
+            isAdmin: player.isAdmin || false
+          }));
+          console.log('✅ Loaded player data:', player.username);
+        }
+
+        console.log('✅ All game data loaded successfully');
       } catch (error) {
-        console.error('Failed to load media uploads:', error);
+        console.error('❌ Failed to load game data:', error);
+      } finally {
+        setIsInitialized(true);
       }
     };
 
-    loadPlayerData();
-    loadGameConfig();
-    loadMediaUploads();
+    loadAllData();
   }, []);
 
   // Recalculate passive income, max energy, and regen when upgrades change

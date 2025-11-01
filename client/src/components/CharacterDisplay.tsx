@@ -45,7 +45,7 @@ export default function CharacterDisplay() {
     <div className="flex flex-col items-center justify-center flex-1 p-8">
       <div className="mb-4">
         <Badge variant="secondary" className="text-lg px-4 py-1">
-          {selectedCharacter?.name || 'Unknown'}
+          {selectedCharacter?.name || 'Loading...'}
         </Badge>
       </div>
 

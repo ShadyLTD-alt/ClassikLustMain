@@ -19,32 +19,33 @@ function Router() {
 }
 
 function App() {
-  const [authState, setAuthState] = useState<'loading' | 'login' | 'authenticated'>('loading');
+  const [authState, setAuthState] = useState<'loading' | 'login' | 'authenticated' | 'unauthenticated'>('loading');
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [userData, setUserData] = useState<any>(null);
+
+  // Renamed state variables to match the original code's logic before the edit
+  const setPlayerData = setUserData;
+  const setAuthStatus = setAuthState;
 
   useEffect(() => {
     const checkAuth = async () => {
       console.log('🚀 [v3.0] App.tsx checkAuth starting...');
       console.log('⏰ Current timestamp:', new Date().toISOString());
-      setLoadingProgress(20);
 
-      const tg = (window as any).Telegram?.WebApp;
+      const WebApp = (window as any).Telegram?.WebApp;
       console.log('📱 [v3.0] Telegram WebApp check:', {
-        exists: !!tg,
-        hasInitData: !!tg?.initData,
-        initDataLength: tg?.initData?.length || 0,
-        platform: tg?.platform,
-        version: tg?.version
+        exists: !!WebApp,
+        hasInitData: !!WebApp?.initData,
+        initDataLength: WebApp?.initData?.length || 0,
+        platform: WebApp?.platform || 'unknown',
+        version: WebApp?.version || '6.0'
       });
 
-      if (tg) {
+      if (WebApp) {
         console.log('🔧 Telegram WebApp ready() called');
-        tg.ready();
-        tg.expand();
+        WebApp.ready();
+        WebApp.expand();
       }
-
-      setLoadingProgress(40);
 
       const sessionToken = localStorage.getItem('sessionToken');
       console.log('🔑 [v3.0] Session token check:', {
@@ -53,60 +54,59 @@ function App() {
       });
 
       if (sessionToken) {
-        console.log('🔄 [v3.0] Validating existing session...');
         try {
-          const response = await fetch("/api/auth/me", {
+          setLoadingProgress(30);
+          const response = await fetch('/api/auth/me', {
             headers: {
-              'Authorization': `Bearer ${sessionToken}`,
-            },
+              'Authorization': `Bearer ${sessionToken}`
+            }
           });
 
+          setLoadingProgress(60);
           if (response.ok) {
             const data = await response.json();
-            console.log('✅ [v3.0] Session valid! Player:', data.player.username);
-            // localStorage.setItem('playerData', JSON.stringify(data.player)); // Removed: local storage is no longer the source of truth
-            setUserData(data.player);
+            setLoadingProgress(90);
+            setPlayerData(data.player);
+            setAuthStatus('authenticated');
+            console.log('✅ [v3.0] Session valid, user authenticated');
             setLoadingProgress(100);
-            setTimeout(() => setAuthState('authenticated'), 500);
             return;
           } else {
-            console.log('⚠️ [v3.0] Session invalid, clearing...');
+            console.log('❌ [v3.0] Session invalid, clearing token');
             localStorage.removeItem('sessionToken');
-            // localStorage.removeItem('playerData'); // Removed: local storage is no longer the source of truth
           }
         } catch (error) {
-          console.error('💥 [v3.0] Session validation failed:', error);
+          console.error('💥 [v3.0] Session check failed:', error);
           localStorage.removeItem('sessionToken');
-          // localStorage.removeItem('playerData'); // Removed: local storage is no longer the source of truth
         }
       }
 
-      setLoadingProgress(60);
-
-      if (tg && tg.initData && tg.initData.length > 0) {
-        console.log('🔑 [v3.0] Attempting Telegram auth...');
-        setLoadingProgress(70);
+      // If we have Telegram initData, try to authenticate
+      if (WebApp?.initData) {
+        console.log('🔄 [v3.0] Attempting Telegram auth with initData');
+        setLoadingProgress(40);
         try {
-          const response = await fetch("/api/auth/telegram", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ initData: tg.initData }),
+          const response = await fetch('/api/auth/telegram', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ initData: WebApp.initData })
           });
-          const data = await response.json();
 
-          if (data.success && data.player && data.sessionToken) {
-            console.log('🎉 Telegram auth successful!');
+          setLoadingProgress(70);
+          if (response.ok) {
+            const data = await response.json();
             localStorage.setItem('sessionToken', data.sessionToken);
-            // localStorage.setItem('playerData', JSON.stringify(data.player)); // Removed: local storage is no longer the source of truth
-            setUserData(data.player);
+            setLoadingProgress(90);
+            setPlayerData(data.player);
+            setAuthStatus('authenticated');
+            console.log('✅ [v3.0] Telegram auto-auth successful');
             setLoadingProgress(100);
-            setTimeout(() => setAuthState('authenticated'), 500);
             return;
           } else {
-            console.log('⚠️ Telegram auth unsuccessful:', data);
+            console.log('❌ [v3.0] Telegram auth failed');
           }
         } catch (error) {
-          console.error('💥 Telegram auth failed:', error);
+          console.error('💥 [v3.0] Telegram auth error:', error);
         }
       } else {
         console.log('ℹ️ [v3.0] No initData available for Telegram auth');
@@ -114,7 +114,7 @@ function App() {
 
       console.log('🔐 [v3.0] No valid session found, showing login screen');
       setLoadingProgress(100);
-      setTimeout(() => setAuthState('login'), 500);
+      setAuthStatus('unauthenticated');
     };
 
     checkAuth();
@@ -122,16 +122,15 @@ function App() {
 
   const handleLogin = (sessionToken: string, playerData: any) => {
     localStorage.setItem('sessionToken', sessionToken);
-    // localStorage.setItem('playerData', JSON.stringify(playerData)); // Removed: local storage is no longer the source of truth
-    setUserData(playerData);
-    setAuthState('authenticated');
+    setPlayerData(playerData);
+    setAuthState('authenticated'); // Directly set authState to authenticated on successful login
   };
 
   if (authState === 'loading') {
     return <LoadingScreen progress={loadingProgress} />;
   }
 
-  if (authState === 'login') {
+  if (authState === 'login' || authState === 'unauthenticated') { // Treat unauthenticated as needing login
     return <LoginScreen onLogin={handleLogin} />;
   }
 
