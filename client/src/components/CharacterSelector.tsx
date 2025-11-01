@@ -4,21 +4,19 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { 
   Lock, 
   Unlock, 
   Crown,
   Star,
   Heart,
-  ImageIcon,
+ Image as ImageIcon,
   User,
-  Gallery,
   X
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/context/AuthContext";
 import type { Character } from "@shared/schema";
 import CharacterGallery from "./CharacterGallery";
 
@@ -33,27 +31,27 @@ export default function CharacterSelector({ isOpen, onClose }: CharacterSelector
   const [filter, setFilter] = useState<'all' | 'unlocked' | 'locked' | 'vip'>('all');
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { user } = useAuth();
 
   // Fetch player data to get current character and telegram info
   const { data: player } = useQuery({
-    queryKey: ['/api/player/me'],
-    queryFn: async () => {
-      const response = await apiRequest('GET', '/api/player/me');
-      return await response.json();
-    },
-    enabled: isOpen
+  queryKey: ['/api/player/me'],
+  queryFn: async () => {
+  const res = await apiRequest('GET', '/api/player/me');
+  return await res.json();
+  },
+  enabled: isOpen
   });
 
-  // Fetch characters
-  const { data: characters = [], isLoading: charactersLoading } = useQuery({
-    queryKey: ['/api/characters'],
-    queryFn: async () => {
-      const response = await apiRequest('GET', '/api/characters');
-      return await response.json();
-    },
-    enabled: isOpen
+  const { data: charactersData } = useQuery({
+  queryKey: ['/api/characters'],
+  queryFn: async () => {
+  const res = await apiRequest('GET', '/api/characters');
+  return await res.json();
+  },
+  enabled: isOpen
   });
+
+  const characters: Character[] = charactersData?.characters || [];
 
   // Character selection mutation
   const selectCharacterMutation = useMutation({
@@ -181,7 +179,7 @@ export default function CharacterSelector({ isOpen, onClose }: CharacterSelector
                   }}
                   className="border-purple-400/50 text-purple-400 hover:bg-purple-600/20"
                 >
-                  <Gallery className="w-4 h-4 mr-2" />
+                  <ImageIcon className="w-4 h-4 mr-2" />
                   View Gallery
                 </Button>
               )}
@@ -286,7 +284,7 @@ export default function CharacterSelector({ isOpen, onClose }: CharacterSelector
                                 setShowImageGallery(true);
                               }}
                             >
-                              <Gallery className="w-3 h-3 mr-1" />
+                              <ImageIcon className="w-3 h-3 mr-1" />
                               Gallery
                             </Button>
                           )}
