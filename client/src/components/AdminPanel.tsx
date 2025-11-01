@@ -998,7 +998,7 @@ export default function AdminPanel() {
                       Delete
                     </Button>
                   </div>
-                </div>
+                </CardContent>
             </DialogContent>
           </Dialog>
         )}
