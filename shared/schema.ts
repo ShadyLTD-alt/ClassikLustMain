@@ -68,7 +68,7 @@ export const playerUpgrades = pgTable("playerUpgrades", {
   id: varchar("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   playerId: varchar("playerId").notNull().references(() => players.id, { onDelete: 'cascade' }),
   upgradeId: text("upgradeId").notNull().references(() => upgrades.id, { onDelete: 'cascade' }), // perTap, perHour, etc.
-  type: text("type").notNull(), // Store upgrade type for fast filtering
+  type: text("type"), // Store upgrade type for fast filtering - NULLABLE
   level: integer("level").default(0).notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 }, (table) => ({
