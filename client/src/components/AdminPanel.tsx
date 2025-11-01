@@ -16,8 +16,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import ImageUploader from '@/components/ImageUploader';
 import type { UpgradeConfig, CharacterConfig, LevelConfig, ThemeConfig } from '@shared/gameConfig';
-import upgradeTemplates from '@/game-data/upgrade-templates.json';
-import characterMaster from '@/game-data/character-master.json';
+import upgradeTemplates from '../../../main-gamedata/upgrade-templates.json';
+import characterMaster from '../../../main-gamedata/character-master.json';
 
 export default function AdminPanel() {
   const { state, upgrades, characters, levelConfigs, theme, updateUpgradeConfig, updateCharacterConfig, updateLevelConfig, updateTheme, deleteUpgrade, deleteCharacter, deleteLevel, resetGame } = useGame();
