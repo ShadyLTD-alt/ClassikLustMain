@@ -16,8 +16,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import ImageUploader from '@/components/ImageUploader';
 import type { UpgradeConfig, CharacterConfig, LevelConfig, ThemeConfig } from '@shared/gameConfig';
-import upgradeMaster from '../../../main-gamedata/master-data/upgrades-master.json';
-import characterMaster from '../../../main-gamedata/master-data/character-master.json';
+import upgradeMaster from '@master/upgrades-master.json';
+import characterMaster from '@master/character-master.json';
 
 export default function AdminPanel() {
   const { state, upgrades, characters, levelConfigs, theme, updateUpgradeConfig, updateCharacterConfig, updateLevelConfig, updateTheme, deleteUpgrade, deleteCharacter, deleteLevel, resetGame } = useGame();
@@ -44,7 +44,9 @@ export default function AdminPanel() {
         headers['x-admin-token'] = adminToken;
       }
       
-      const response = await fetch('/api/admin/players', { headers });
+      const response = await fetch('/api/admin/players', {
+        headers
+      });
       if (!response.ok) throw new Error('Failed to fetch players');
       return response.json();
     }
@@ -91,7 +93,11 @@ export default function AdminPanel() {
         headers['x-admin-token'] = adminToken;
       }
       
-      const response = await fetch(url, { method, headers, body: JSON.stringify(upgrade) });
+      const response = await fetch(url, {
+        method,
+        headers,
+        body: JSON.stringify(upgrade)
+      });
       if (!response.ok) throw new Error('Failed to save upgrade');
       return response.json();
     },
@@ -118,7 +124,11 @@ export default function AdminPanel() {
         headers['x-admin-token'] = adminToken;
       }
       
-      const response = await fetch(url, { method, headers, body: JSON.stringify(character) });
+      const response = await fetch(url, {
+        method,
+        headers,
+        body: JSON.stringify(character)
+      });
       if (!response.ok) throw new Error('Failed to save character');
       return response.json();
     },
@@ -145,7 +155,11 @@ export default function AdminPanel() {
         headers['x-admin-token'] = adminToken;
       }
       
-      const response = await fetch(url, { method, headers, body: JSON.stringify(level) });
+      const response = await fetch(url, {
+        method,
+        headers,
+        body: JSON.stringify(level)
+      });
       if (!response.ok) throw new Error('Failed to save level');
       return response.json();
     },
@@ -189,7 +203,12 @@ export default function AdminPanel() {
   };
 
   const handleExportConfig = () => {
-    const config = { upgrades, characters, levelConfigs, timestamp: new Date().toISOString() };
+    const config = {
+      upgrades,
+      characters,
+      levelConfigs,
+      timestamp: new Date().toISOString()
+    };
     const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -201,44 +220,94 @@ export default function AdminPanel() {
 
   const handleDeleteUpgrade = async (upgradeId: string) => {
     try {
-      const headers: Record<string, string> = { 'Authorization': `Bearer ${localStorage.getItem('sessionToken')}` };
-      if (adminToken) headers['x-admin-token'] = adminToken;
-      await fetch(`/api/admin/upgrades/${upgradeId}`, { method: 'DELETE', headers });
+      const headers: Record<string, string> = {
+        'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`
+      };
+      
+      if (adminToken) {
+        headers['x-admin-token'] = adminToken;
+      }
+      
+      await fetch(`/api/admin/upgrades/${upgradeId}`, {
+        method: 'DELETE',
+        headers
+      });
       deleteUpgrade(upgradeId);
       setEditingUpgrade(null);
-      toast({ title: 'Success', description: 'Upgrade deleted and JSON file removed' });
-    } catch {
-      toast({ title: 'Error', description: 'Failed to delete upgrade', variant: 'destructive' });
+      toast({
+        title: "Success",
+        description: "Upgrade deleted and JSON file removed"
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete upgrade",
+        variant: "destructive"
+      });
     }
   };
 
   const handleDeleteCharacter = async (characterId: string) => {
     try {
-      const headers: Record<string, string> = { 'Authorization': `Bearer ${localStorage.getItem('sessionToken')}` };
-      if (adminToken) headers['x-admin-token'] = adminToken;
-      await fetch(`/api/admin/characters/${characterId}`, { method: 'DELETE', headers });
+      const headers: Record<string, string> = {
+        'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`
+      };
+      
+      if (adminToken) {
+        headers['x-admin-token'] = adminToken;
+      }
+      
+      await fetch(`/api/admin/characters/${characterId}`, {
+        method: 'DELETE',
+        headers
+      });
       deleteCharacter(characterId);
       setEditingCharacter(null);
-      toast({ title: 'Success', description: 'Character deleted and JSON file removed' });
-    } catch {
-      toast({ title: 'Error', description: 'Failed to delete character', variant: 'destructive' });
+      toast({
+        title: "Success",
+        description: "Character deleted and JSON file removed"
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete character",
+        variant: "destructive"
+      });
     }
   };
 
   const handleDeleteLevel = async (level: number) => {
     try {
-      const headers: Record<string, string> = { 'Authorization': `Bearer ${localStorage.getItem('sessionToken')}` };
-      if (adminToken) headers['x-admin-token'] = adminToken;
-      await fetch(`/api/admin/levels/${level}`, { method: 'DELETE', headers });
+      const headers: Record<string, string> = {
+        'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`
+      };
+      
+      if (adminToken) {
+        headers['x-admin-token'] = adminToken;
+      }
+      
+      await fetch(`/api/admin/levels/${level}`, {
+        method: 'DELETE',
+        headers
+      });
       deleteLevel(level);
       setEditingLevel(null);
-      toast({ title: 'Success', description: 'Level deleted and JSON file removed' });
-    } catch {
-      toast({ title: 'Error', description: 'Failed to delete level', variant: 'destructive' });
+      toast({
+        title: "Success",
+        description: "Level deleted and JSON file removed"
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete level",
+        variant: "destructive"
+      });
     }
   };
 
+  // Safe template access with fallback
   const templates = (upgradeMaster as any)?.upgrades ?? [];
+  const characterTemplates = (characterMaster as any)?.characters ?? [];
 
   return (
     <Dialog>
@@ -279,7 +348,10 @@ export default function AdminPanel() {
                   <div className="space-y-4">
                     <div>
                       <Label>Select Template</Label>
-                      <Select value={createTemplate} onValueChange={setCreateTemplate}>
+                      <Select
+                        value={createTemplate}
+                        onValueChange={setCreateTemplate}
+                      >
                         <SelectTrigger data-testid="select-upgrade-template">
                           <SelectValue placeholder="Choose a template..." />
                         </SelectTrigger>
@@ -333,7 +405,12 @@ export default function AdminPanel() {
                     <CardHeader>
                       <div className="flex justify-between items-center">
                         <h3 className="font-semibold">{upgrade.name}</h3>
-                        <Button variant="outline" size="sm" onClick={() => setEditingUpgrade(upgrade)} data-testid={`button-edit-upgrade-${upgrade.id}`}>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setEditingUpgrade(upgrade)}
+                          data-testid={`button-edit-upgrade-${upgrade.id}`}
+                        >
                           Edit
                         </Button>
                       </div>
@@ -353,44 +430,94 @@ export default function AdminPanel() {
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <Label>Name</Label>
-                        <Input value={editingUpgrade.name} onChange={(e) => setEditingUpgrade({ ...editingUpgrade, name: e.target.value })} data-testid="input-upgrade-name" />
+                        <Input
+                          value={editingUpgrade.name}
+                          onChange={(e) => setEditingUpgrade({ ...editingUpgrade, name: e.target.value })}
+                          data-testid="input-upgrade-name"
+                        />
                       </div>
                       <div>
                         <Label>Max Level</Label>
-                        <Input type="number" value={editingUpgrade.maxLevel} onChange={(e) => setEditingUpgrade({ ...editingUpgrade, maxLevel: parseInt(e.target.value) })} data-testid="input-upgrade-maxlevel" />
+                        <Input
+                          type="number"
+                          value={editingUpgrade.maxLevel}
+                          onChange={(e) => setEditingUpgrade({ ...editingUpgrade, maxLevel: parseInt(e.target.value) })}
+                          data-testid="input-upgrade-maxlevel"
+                        />
                       </div>
                       <div>
                         <Label>Base Cost</Label>
-                        <Input type="number" value={editingUpgrade.baseCost} onChange={(e) => setEditingUpgrade({ ...editingUpgrade, baseCost: parseFloat(e.target.value) })} data-testid="input-upgrade-basecost" />
+                        <Input
+                          type="number"
+                          value={editingUpgrade.baseCost}
+                          onChange={(e) => setEditingUpgrade({ ...editingUpgrade, baseCost: parseFloat(e.target.value) })}
+                          data-testid="input-upgrade-basecost"
+                        />
                       </div>
                       <div>
                         <Label>Cost Multiplier</Label>
-                        <Input type="number" step="0.01" value={editingUpgrade.costMultiplier} onChange={(e) => setEditingUpgrade({ ...editingUpgrade, costMultiplier: parseFloat(e.target.value) })} data-testid="input-upgrade-costmult" />
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={editingUpgrade.costMultiplier}
+                          onChange={(e) => setEditingUpgrade({ ...editingUpgrade, costMultiplier: parseFloat(e.target.value) })}
+                          data-testid="input-upgrade-costmult"
+                        />
                       </div>
                       <div>
                         <Label>Base Value</Label>
-                        <Input type="number" value={editingUpgrade.baseValue} onChange={(e) => setEditingUpgrade({ ...editingUpgrade, baseValue: parseFloat(e.target.value) })} data-testid="input-upgrade-basevalue" />
+                        <Input
+                          type="number"
+                          value={editingUpgrade.baseValue}
+                          onChange={(e) => setEditingUpgrade({ ...editingUpgrade, baseValue: parseFloat(e.target.value) })}
+                          data-testid="input-upgrade-basevalue"
+                        />
                       </div>
                       <div>
                         <Label>Value Increment</Label>
-                        <Input type="number" step="0.1" value={editingUpgrade.valueIncrement} onChange={(e) => setEditingUpgrade({ ...editingUpgrade, valueIncrement: parseFloat(e.target.value) })} data-testid="input-upgrade-valueinc" />
+                        <Input
+                          type="number"
+                          step="0.1"
+                          value={editingUpgrade.valueIncrement}
+                          onChange={(e) => setEditingUpgrade({ ...editingUpgrade, valueIncrement: parseFloat(e.target.value) })}
+                          data-testid="input-upgrade-valueinc"
+                        />
                       </div>
                       <div>
                         <Label>Passive Income Time (Minutes)</Label>
-                        <Input type="number" value={editingUpgrade.passiveIncomeTime || 0} onChange={(e) => setEditingUpgrade({ ...editingUpgrade, passiveIncomeTime: parseInt(e.target.value) || 0 })} data-testid="input-upgrade-passive-time" />
+                        <Input
+                          type="number"
+                          value={editingUpgrade.passiveIncomeTime || 0}
+                          onChange={(e) => setEditingUpgrade({ ...editingUpgrade, passiveIncomeTime: parseInt(e.target.value) || 0 })}
+                          data-testid="input-upgrade-passive-time"
+                        />
                       </div>
                     </div>
                     <div>
                       <Label>Description</Label>
-                      <Textarea value={editingUpgrade.description} onChange={(e) => setEditingUpgrade({ ...editingUpgrade, description: e.target.value })} data-testid="input-upgrade-desc" />
+                      <Textarea
+                        value={editingUpgrade.description}
+                        onChange={(e) => setEditingUpgrade({ ...editingUpgrade, description: e.target.value })}
+                        data-testid="input-upgrade-desc"
+                      />
                     </div>
                     <div className="flex gap-4">
                       <div className="flex items-center space-x-2">
-                        <Checkbox id="upgrade-vip" checked={editingUpgrade.isVip || false} onCheckedChange={(checked) => setEditingUpgrade({ ...editingUpgrade, isVip: checked as boolean })} data-testid="checkbox-upgrade-vip" />
+                        <Checkbox
+                          id="upgrade-vip"
+                          checked={editingUpgrade.isVip || false}
+                          onCheckedChange={(checked) => setEditingUpgrade({ ...editingUpgrade, isVip: checked as boolean })}
+                          data-testid="checkbox-upgrade-vip"
+                        />
                         <Label htmlFor="upgrade-vip">VIP Upgrade</Label>
                       </div>
                       <div className="flex items-center space-x-2">
-                        <Checkbox id="upgrade-event" checked={editingUpgrade.isEvent || false} onCheckedChange={(checked) => setEditingUpgrade({ ...editingUpgrade, isEvent: checked as boolean })} data-testid="checkbox-upgrade-event" />
+                        <Checkbox
+                          id="upgrade-event"
+                          checked={editingUpgrade.isEvent || false}
+                          onCheckedChange={(checked) => setEditingUpgrade({ ...editingUpgrade, isEvent: checked as boolean })}
+                          data-testid="checkbox-upgrade-event"
+                        />
                         <Label htmlFor="upgrade-event">Event Upgrade</Label>
                       </div>
                     </div>
@@ -402,7 +529,15 @@ export default function AdminPanel() {
                       <Button variant="outline" onClick={() => setEditingUpgrade(null)}>
                         Cancel
                       </Button>
-                      <Button variant="destructive" onClick={() => { if (confirm(`Delete upgrade "${editingUpgrade.name}"?`)) { handleDeleteUpgrade(editingUpgrade.id); } }} data-testid="button-delete-upgrade">
+                      <Button
+                        variant="destructive"
+                        onClick={() => {
+                          if (confirm(`Delete upgrade "${editingUpgrade.name}"?`)) {
+                            handleDeleteUpgrade(editingUpgrade.id);
+                          }
+                        }}
+                        data-testid="button-delete-upgrade"
+                      >
                         <X className="w-4 h-4 mr-2" />
                         Delete
                       </Button>
@@ -413,4 +548,626 @@ export default function AdminPanel() {
             )}
           </TabsContent>
 
-          {/* Characters and Levels tabs remain unchanged below */}
+          <TabsContent value="characters" className="space-y-4">
+            <div className="flex justify-end mb-3">
+              <Dialog open={showCreateCharacter} onOpenChange={setShowCreateCharacter}>
+                <DialogTrigger asChild>
+                  <Button data-testid="button-create-character">
+                    <Plus className="w-4 h-4 mr-2" />
+                    Create Character
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Create New Character</DialogTitle>
+                    <DialogDescription>Enter character information to create a new character</DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div className="space-y-4">
+                      <div>
+                        <Label>Character Name</Label>
+                        <Input placeholder="Enter character name" id="new-char-name" />
+                      </div>
+                      <div>
+                        <Label>Description</Label>
+                        <Textarea placeholder="Enter description" id="new-char-desc" />
+                      </div>
+                      <Button
+                        onClick={() => {
+                          const nameInput = document.getElementById('new-char-name') as HTMLInputElement;
+                          const descInput = document.getElementById('new-char-desc') as HTMLTextAreaElement;
+                          const template = characterTemplates[0] || {
+                            name: "New Character",
+                            description: "A mysterious character waiting to be discovered",
+                            unlockLevel: 1,
+                            rarity: "common",
+                            defaultImage: "",
+                            avatarImage: "",
+                            displayImage: ""
+                          };
+                          setEditingCharacter({
+                            id: `character-${Date.now()}`,
+                            name: nameInput?.value || template.name,
+                            description: descInput?.value || template.description,
+                            unlockLevel: template.unlockLevel,
+                            rarity: template.rarity as any,
+                            defaultImage: template.defaultImage,
+                            avatarImage: template.avatarImage,
+                            displayImage: template.displayImage
+                          });
+                          setShowCreateCharacter(false);
+                        }}
+                        className="w-full"
+                      >
+                        Create
+                      </Button>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </div>
+            <ScrollArea className="h-[450px]">
+              <div className="space-y-3 pr-4">
+                {characters.map(character => (
+                  <Card key={character.id}>
+                    <CardHeader>
+                      <div className="flex justify-between items-center">
+                        <h3 className="font-semibold">{character.name}</h3>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setEditingCharacter(character)}
+                          data-testid={`button-edit-character-${character.id}`}
+                        >
+                          Edit
+                        </Button>
+                      </div>
+                    </CardHeader>
+                    {editingCharacter?.id === character.id && (
+                      <CardContent className="space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <Label>Name</Label>
+                            <Input
+                              value={editingCharacter.name}
+                              onChange={(e) => setEditingCharacter({ ...editingCharacter, name: e.target.value })}
+                              data-testid="input-character-name"
+                            />
+                          </div>
+                          <div>
+                            <Label>Unlock Level</Label>
+                            <Input
+                              type="number"
+                              value={editingCharacter.unlockLevel}
+                              onChange={(e) => setEditingCharacter({ ...editingCharacter, unlockLevel: parseInt(e.target.value) })}
+                              data-testid="input-character-unlock"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <Label>Description</Label>
+                          <Textarea
+                            value={editingCharacter.description}
+                            onChange={(e) => setEditingCharacter({ ...editingCharacter, description: e.target.value })}
+                            data-testid="input-character-desc"
+                          />
+                        </div>
+                        <div>
+                          <Label>Avatar Image URL (for top-left icon)</Label>
+                          <Input
+                            value={editingCharacter.avatarImage}
+                            onChange={(e) => setEditingCharacter({ ...editingCharacter, avatarImage: e.target.value })}
+                            placeholder="URL for avatar image"
+                          />
+                        </div>
+                        <div>
+                          <Label>Display Image URL (default character image)</Label>
+                          <Input
+                            value={editingCharacter.displayImage}
+                            onChange={(e) => setEditingCharacter({ ...editingCharacter, displayImage: e.target.value })}
+                            placeholder="URL for display image"
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <Button onClick={handleSaveCharacter} data-testid="button-save-character">
+                            <Save className="w-4 h-4 mr-2" />
+                            Save
+                          </Button>
+                          <Button variant="outline" onClick={() => setEditingCharacter(null)}>
+                            Cancel
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (confirm(`Delete character "${editingCharacter.name}"?`)) {
+                                handleDeleteCharacter(editingCharacter.id);
+                              }
+                            }}
+                            data-testid={`button-delete-character-${character.id}`}
+                          >
+                            <X className="w-4 h-4 mr-2" />
+                            Delete
+                          </Button>
+                        </div>
+                      </CardContent>
+                    )}
+                  </Card>
+                ))}
+              </div>
+            </ScrollArea>
+          </TabsContent>
+
+          <TabsContent value="levels" className="space-y-4">
+            <div className="flex justify-end mb-3">
+              <Button
+                onClick={() => {
+                  const existingLevels = levelConfigs.map(l => l.level).sort((a, b) => a - b);
+                  let nextLevel = 1;
+                  for (let i = 0; i < existingLevels.length; i++) {
+                    if (existingLevels[i] !== i + 1) {
+                      nextLevel = i + 1;
+                      break;
+                    }
+                  }
+                  if (nextLevel === 1 && existingLevels.length > 0) {
+                    nextLevel = Math.max(...existingLevels) + 1;
+                  }
+
+                  const newLevel = {
+                    level: nextLevel,
+                    experienceRequired: 100 * nextLevel,
+                    requirements: [],
+                    unlocks: []
+                  };
+                  setEditingLevel(newLevel);
+                  setTimeout(() => {
+                    document.getElementById('level-edit-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  }, 100);
+                }}
+                data-testid="button-create-level"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Create Level
+              </Button>
+            </div>
+            <ScrollArea className="h-[350px]">
+              <div className="space-y-3 pr-4">
+                {levelConfigs.map(levelConfig => (
+                  <Card key={levelConfig.level} className={editingLevel?.level === levelConfig.level ? 'border-primary' : ''}>
+                    <CardHeader>
+                      <div className="flex justify-between items-center">
+                        <h3 className="font-semibold">Level {levelConfig.level}</h3>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setEditingLevel(levelConfig)}
+                          data-testid={`button-edit-level-${levelConfig.level}`}
+                        >
+                          Edit
+                        </Button>
+                      </div>
+                    </CardHeader>
+                  </Card>
+                ))}
+              </div>
+            </ScrollArea>
+
+            {editingLevel && (
+              <Dialog open={!!editingLevel} onOpenChange={(open) => !open && setEditingLevel(null)}>
+                <DialogContent className="max-w-2xl">
+                  <DialogHeader>
+                    <DialogTitle>Editing: Level {editingLevel.level}</DialogTitle>
+                  </DialogHeader>
+                  <div id="level-edit-form" className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label>Level Number</Label>
+                        <Input
+                          type="number"
+                          min="1"
+                          value={editingLevel.level}
+                          onChange={(e) => setEditingLevel({ ...editingLevel, level: parseInt(e.target.value) || 1 })}
+                          data-testid="input-level-number"
+                        />
+                      </div>
+                      <div>
+                        <Label>Experience Required</Label>
+                        <Input
+                          type="number"
+                          value={editingLevel.experienceRequired || 100}
+                          onChange={(e) => setEditingLevel({ ...editingLevel, experienceRequired: parseInt(e.target.value) })}
+                          data-testid="input-level-experience"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <Label>Requirements</Label>
+                      {(editingLevel.requirements || []).map((req: any, idx: number) => (
+                        <div key={idx} className="flex gap-2 mb-2">
+                          <Input
+                            value={req}
+                            onChange={(e) => {
+                              const newReqs = [...(editingLevel.requirements || [])];
+                              newReqs[idx] = e.target.value;
+                              setEditingLevel({ ...editingLevel, requirements: newReqs });
+                            }}
+                            placeholder="Requirement description"
+                            data-testid={`input-req-${idx}`}
+                          />
+                          <Button
+                            variant="destructive"
+                            size="icon"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingLevel({
+                                ...editingLevel,
+                                requirements: (editingLevel.requirements || []).filter((_, i) => i !== idx)
+                              });
+                            }}
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      ))}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setEditingLevel({
+                            ...editingLevel,
+                            requirements: [...(editingLevel.requirements || []), "New requirement"]
+                          });
+                        }}
+                        data-testid="button-add-requirement"
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        Add Requirement
+                      </Button>
+                    </div>
+
+                    <div>
+                      <Label>Unlocks</Label>
+                      {(editingLevel.unlocks || []).map((unlock: string, idx: number) => (
+                        <div key={idx} className="flex gap-2 mb-2">
+                          <Input
+                            value={unlock}
+                            onChange={(e) => {
+                              const newUnlocks = [...(editingLevel.unlocks || [])];
+                              newUnlocks[idx] = e.target.value;
+                              setEditingLevel({ ...editingLevel, unlocks: newUnlocks });
+                            }}
+                            data-testid={`input-unlock-${idx}`}
+                          />
+                          <Button
+                            variant="destructive"
+                            size="icon"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingLevel({
+                                ...editingLevel,
+                                unlocks: (editingLevel.unlocks || []).filter((_, i) => i !== idx)
+                              });
+                            }}
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      ))}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setEditingLevel({
+                            ...editingLevel,
+                            unlocks: [...(editingLevel.unlocks || []), 'New unlock']
+                          });
+                        }}
+                        data-testid="button-add-unlock"
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        Add Unlock
+                      </Button>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <Button onClick={handleSaveLevel} data-testid="button-save-level">
+                        <Save className="w-4 h-4 mr-2" />
+                        Save
+                      </Button>
+                      <Button variant="outline" onClick={() => setEditingLevel(null)}>
+                        Cancel
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (confirm(`Delete Level ${editingLevel.level}? This cannot be undone.`)) {
+                            handleDeleteLevel(editingLevel.level);
+                          }
+                        }}
+                        data-testid="button-delete-level"
+                      >
+                        <X className="w-4 h-4 mr-2" />
+                        Delete
+                      </Button>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            )}
+          </TabsContent>
+
+          <TabsContent value="images" className="space-y-4">
+            <ScrollArea className="h-[500px]">
+              <div className="space-y-3 pr-4">
+                <ImageUploader adminMode={true} />
+              </div>
+            </ScrollArea>
+          </TabsContent>
+
+          <TabsContent value="players" className="space-y-4">
+            {!adminToken ? (
+              <Card>
+                <CardHeader>
+                  <h3 className="font-semibold">Admin Token Required</h3>
+                  <p className="text-sm text-muted-foreground">Enter your ADMIN_TOKEN to manage players</p>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div>
+                    <Label htmlFor="admin-token">Admin Token</Label>
+                    <Input
+                      id="admin-token"
+                      type="password"
+                      placeholder="Enter ADMIN_TOKEN"
+                      value={adminToken}
+                      onChange={(e) => {
+                        setAdminToken(e.target.value);
+                        localStorage.setItem('adminToken', e.target.value);
+                      }}
+                      data-testid="input-admin-token"
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    This token is used to authenticate admin API requests for player management.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <>
+                <Card>
+                  <CardHeader>
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <h3 className="font-semibold flex items-center gap-2">
+                          <Users className="w-5 h-5" />
+                          Player Management
+                        </h3>
+                        <p className="text-sm text-muted-foreground">
+                          View and edit player stats
+                        </p>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setAdminToken('');
+                          localStorage.removeItem('adminToken');
+                        }}
+                      >
+                        Clear Token
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    {playersLoading ? (
+                      <p className="text-muted-foreground">Loading players...</p>
+                    ) : !playersData?.players || playersData.players.length === 0 ? (
+                      <p className="text-muted-foreground">No players found. Players will appear here when they authenticate via Telegram.</p>
+                    ) : (
+                      <ScrollArea className="h-[400px]">
+                        <div className="space-y-3 pr-4">
+                          {playersData.players.map((player: any) => (
+                            <Card key={player.id} className={editingPlayer?.id === player.id ? 'border-primary' : ''}>
+                              <CardHeader>
+                                <div className="flex justify-between items-center">
+                                  <div>
+                                    <h4 className="font-semibold">{player.username}</h4>
+                                    <p className="text-xs text-muted-foreground">
+                                      ID: {player.id} | Telegram: {player.telegramId || 'N/A'}
+                                    </p>
+                                  </div>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setEditingPlayer(player)}
+                                    data-testid={`button-edit-player-${player.id}`}
+                                  >
+                                    Edit
+                                  </Button>
+                                </div>
+                              </CardHeader>
+                              {editingPlayer?.id === player.id && (
+                                <CardContent className="space-y-3">
+                                  <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                      <Label>Points</Label>
+                                      <Input
+                                        type="number"
+                                        value={editingPlayer.points}
+                                        onChange={(e) => setEditingPlayer({ ...editingPlayer, points: parseInt(e.target.value) || 0 })}
+                                        data-testid="input-player-points"
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label>Energy</Label>
+                                      <Input
+                                        type="number"
+                                        value={editingPlayer.energy}
+                                        onChange={(e) => setEditingPlayer({ ...editingPlayer, energy: parseInt(e.target.value) || 0 })}
+                                        data-testid="input-player-energy"
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label>Max Energy</Label>
+                                      <Input
+                                        type="number"
+                                        value={editingPlayer.maxEnergy}
+                                        onChange={(e) => setEditingPlayer({ ...editingPlayer, maxEnergy: parseInt(e.target.value) || 0 })}
+                                        data-testid="input-player-max-energy"
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label>Level</Label>
+                                      <Input
+                                        type="number"
+                                        value={editingPlayer.level}
+                                        onChange={(e) => setEditingPlayer({ ...editingPlayer, level: parseInt(e.target.value) || 1 })}
+                                        data-testid="input-player-level"
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label>Passive Income Rate</Label>
+                                      <Input
+                                        type="number"
+                                        value={editingPlayer.passiveIncomeRate}
+                                        onChange={(e) => setEditingPlayer({ ...editingPlayer, passiveIncomeRate: parseInt(e.target.value) || 0 })}
+                                        data-testid="input-player-passive-income"
+                                      />
+                                    </div>
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <Button
+                                      onClick={() => updatePlayerMutation.mutate({
+                                        id: editingPlayer.id,
+                                        updates: {
+                                          points: editingPlayer.points,
+                                          energy: editingPlayer.energy,
+                                          maxEnergy: editingPlayer.maxEnergy,
+                                          level: editingPlayer.level,
+                                          passiveIncomeRate: editingPlayer.passiveIncomeRate
+                                        }
+                                      })}
+                                      disabled={updatePlayerMutation.isPending}
+                                      data-testid="button-save-player"
+                                    >
+                                      <Save className="w-4 h-4 mr-2" />
+                                      {updatePlayerMutation.isPending ? 'Saving...' : 'Save'}
+                                    </Button>
+                                    <Button variant="outline" onClick={() => setEditingPlayer(null)}>
+                                      Cancel
+                                    </Button>
+                                  </div>
+                                </CardContent>
+                              )}
+                            </Card>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                    )}
+                  </CardContent>
+                </Card>
+              </>
+            )}
+          </TabsContent>
+
+          <TabsContent value="theme" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <h3 className="font-semibold">Theme Customization</h3>
+                <p className="text-sm text-muted-foreground">Customize colors using HSL format (H S% L%)</p>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Primary Color</Label>
+                    <Input
+                      value={editingTheme?.primary || theme.primary}
+                      onChange={(e) => setEditingTheme({ ...(editingTheme || theme), primary: e.target.value })}
+                      placeholder="270 60% 50%"
+                      data-testid="input-theme-primary"
+                    />
+                  </div>
+                  <div>
+                    <Label>Secondary Color</Label>
+                    <Input
+                      value={editingTheme?.secondary || theme.secondary}
+                      onChange={(e) => setEditingTheme({ ...(editingTheme || theme), secondary: e.target.value })}
+                      placeholder="240 5% 26%"
+                      data-testid="input-theme-secondary"
+                    />
+                  </div>
+                  <div>
+                    <Label>Accent Color</Label>
+                    <Input
+                      value={editingTheme?.accent || theme.accent}
+                      onChange={(e) => setEditingTheme({ ...(editingTheme || theme), accent: e.target.value })}
+                      placeholder="280 65% 60%"
+                      data-testid="input-theme-accent"
+                    />
+                  </div>
+                  <div>
+                    <Label>Background Color</Label>
+                    <Input
+                      value={editingTheme?.background || theme.background}
+                      onChange={(e) => setEditingTheme({ ...(editingTheme || theme), background: e.target.value })}
+                      placeholder="240 10% 8%"
+                      data-testid="input-theme-background"
+                    />
+                  </div>
+                  <div>
+                    <Label>Card Color</Label>
+                    <Input
+                      value={editingTheme?.card || theme.card}
+                      onChange={(e) => setEditingTheme({ ...(editingTheme || theme), card: e.target.value })}
+                      placeholder="240 8% 12%"
+                      data-testid="input-theme-card"
+                    />
+                  </div>
+                  <div>
+                    <Label>Muted Color</Label>
+                    <Input
+                      value={editingTheme?.muted || theme.muted}
+                      onChange={(e) => setEditingTheme({ ...(editingTheme || theme), muted: e.target.value })}
+                      placeholder="240 5% 20%"
+                      data-testid="input-theme-muted"
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button onClick={handleSaveTheme} data-testid="button-save-theme">
+                    <Save className="w-4 h-4 mr-2" />
+                    Apply Theme
+                  </Button>
+                  <Button variant="outline" onClick={() => setEditingTheme(null)}>
+                    Cancel
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <h3 className="font-semibold">Game Management</h3>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Button onClick={handleExportConfig} variant="outline" className="w-full" data-testid="button-export-config">
+                  <Save className="w-4 h-4 mr-2" />
+                  Export Configuration
+                </Button>
+                <p className="text-sm text-muted-foreground">
+                  Warning: Resetting will delete all game progress and return to default settings.
+                </p>
+                <Button variant="destructive" onClick={handleResetGame} data-testid="button-reset-game">
+                  <RotateCcw className="w-4 h-4 mr-2" />
+                  Reset Game
+                </Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      </DialogContent>
+    </Dialog>
+  );
+}
