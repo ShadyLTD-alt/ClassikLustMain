@@ -50,8 +50,23 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
+    const savedPlayer = localStorage.getItem('playerData');
+    let playerId = '';
+
+    if (savedPlayer) {
+      try {
+        const playerData = JSON.parse(savedPlayer);
+        playerId = playerData.id;
+      } catch (error) {
+        console.error('Failed to parse player data:', error);
+      }
+    }
+
     const res = await fetch(queryKey.join("/") as string, {
       credentials: "include",
+      headers: {
+        'x-player-id': playerId,
+      },
     });
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {
