@@ -57,7 +57,7 @@ export const levels = pgTable("levels", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
-export const playerUpgrades = pgTable("playerUpgrades", {
+export const playerUpgrades = pgTable("player_upgrades", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   playerId: varchar("playerId").notNull().references(() => players.id, { onDelete: 'cascade' }),
   upgradeId: text("upgradeId").notNull().references(() => upgrades.id, { onDelete: 'cascade' }),
@@ -65,11 +65,19 @@ export const playerUpgrades = pgTable("playerUpgrades", {
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
-export const playerCharacters = pgTable("playerCharacters", {
+export const playerCharacters = pgTable("player_characters", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   playerId: varchar("playerId").notNull().references(() => players.id, { onDelete: 'cascade' }),
   characterId: text("characterId").notNull().references(() => characters.id, { onDelete: 'cascade' }),
   unlockedAt: timestamp("unlockedAt").defaultNow().notNull(),
+});
+
+export const sessions = pgTable("sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  playerId: varchar("playerId").notNull().references(() => players.id, { onDelete: 'cascade' }),
+  token: text("token").notNull().unique(),
+  expiresAt: timestamp("expiresAt").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
 export const insertPlayerSchema = createInsertSchema(players).omit({
@@ -101,6 +109,11 @@ export const insertPlayerCharacterSchema = createInsertSchema(playerCharacters).
   unlockedAt: true,
 });
 
+export const insertSessionSchema = createInsertSchema(sessions).omit({
+  id: true,
+  createdAt: true,
+});
+
 export type Player = typeof players.$inferSelect;
 export type InsertPlayer = z.infer<typeof insertPlayerSchema>;
 
@@ -118,3 +131,6 @@ export type InsertPlayerUpgrade = z.infer<typeof insertPlayerUpgradeSchema>;
 
 export type PlayerCharacter = typeof playerCharacters.$inferSelect;
 export type InsertPlayerCharacter = z.infer<typeof insertPlayerCharacterSchema>;
+
+export type Session = typeof sessions.$inferSelect;
+export type InsertSession = z.infer<typeof insertSessionSchema>;

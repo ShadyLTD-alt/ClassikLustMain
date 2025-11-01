@@ -12,36 +12,38 @@ declare module 'express-serve-static-core' {
   }
 }
 
-export function requireAuth(req: Request, res: Response, next: NextFunction) {
-  const playerId = req.headers['x-player-id'] as string;
+export async function requireAuth(req: Request, res: Response, next: NextFunction) {
+  const sessionToken = req.headers['authorization']?.replace('Bearer ', '');
   
-  if (!playerId) {
+  if (!sessionToken) {
     return res.status(401).json({ 
       error: 'Authentication required', 
       message: 'You must be logged in to access this resource. Please authenticate with Telegram.' 
     });
   }
   
-  storage.getPlayer(playerId).then(player => {
-    if (!player) {
+  try {
+    const session = await storage.getSessionByToken(sessionToken);
+    
+    if (!session) {
       return res.status(401).json({ 
-        error: 'Invalid player', 
-        message: 'Player not found. Please log in again.' 
+        error: 'Invalid session', 
+        message: 'Your session has expired or is invalid. Please log in again.' 
       });
     }
     
     req.player = {
-      id: player.id,
-      telegramId: player.telegramId,
-      username: player.username,
-      isAdmin: player.isAdmin,
+      id: session.player.id,
+      telegramId: session.player.telegramId,
+      username: session.player.username,
+      isAdmin: session.player.isAdmin,
     };
     
     next();
-  }).catch(error => {
+  } catch (error) {
     console.error('Auth error:', error);
     res.status(500).json({ error: 'Authentication failed' });
-  });
+  }
 }
 
 export function requireAdmin(req: Request, res: Response, next: NextFunction) {

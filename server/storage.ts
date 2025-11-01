@@ -1,6 +1,6 @@
 
 import { createClient } from '@supabase/supabase-js';
-import { eq, and } from "drizzle-orm";
+import { eq, and, lt } from "drizzle-orm";
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from "@shared/schema";
@@ -17,6 +17,8 @@ import {
   type InsertPlayerUpgrade,
   type PlayerCharacter,
   type InsertPlayerCharacter,
+  type Session,
+  type InsertSession,
 } from "@shared/schema";
 
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -88,6 +90,11 @@ export interface IStorage {
   getPlayerCharacters(playerId: string): Promise<(PlayerCharacter & { character: Character })[]>;
   unlockCharacter(data: InsertPlayerCharacter): Promise<PlayerCharacter>;
   hasCharacter(playerId: string, characterId: string): Promise<boolean>;
+  
+  createSession(data: InsertSession): Promise<Session>;
+  getSessionByToken(token: string): Promise<(Session & { player: Player }) | undefined>;
+  deleteSession(token: string): Promise<void>;
+  cleanupExpiredSessions(): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -186,7 +193,7 @@ export class DatabaseStorage implements IStorage {
       .where(eq(schema.playerUpgrades.playerId, playerId));
     
     return results.map(row => ({
-      ...row.playerUpgrades,
+      ...row.player_upgrades,
       upgrade: row.upgrades!,
     }));
   }
@@ -237,7 +244,7 @@ export class DatabaseStorage implements IStorage {
       .where(eq(schema.playerCharacters.playerId, playerId));
     
     return results.map(row => ({
-      ...row.playerCharacters,
+      ...row.player_characters,
       character: row.characters!,
     }));
   }
@@ -257,6 +264,43 @@ export class DatabaseStorage implements IStorage {
       ))
       .limit(1);
     return result.length > 0;
+  }
+
+  async createSession(data: InsertSession): Promise<Session> {
+    const result = await db.insert(schema.sessions).values(data).returning();
+    return result[0];
+  }
+
+  async getSessionByToken(token: string): Promise<(Session & { player: Player }) | undefined> {
+    const results = await db
+      .select()
+      .from(schema.sessions)
+      .leftJoin(schema.players, eq(schema.sessions.playerId, schema.players.id))
+      .where(eq(schema.sessions.token, token))
+      .limit(1);
+    
+    if (results.length === 0 || !results[0].players) {
+      return undefined;
+    }
+
+    const session = results[0].sessions;
+    if (new Date(session.expiresAt) < new Date()) {
+      await this.deleteSession(token);
+      return undefined;
+    }
+
+    return {
+      ...session,
+      player: results[0].players,
+    };
+  }
+
+  async deleteSession(token: string): Promise<void> {
+    await db.delete(schema.sessions).where(eq(schema.sessions.token, token));
+  }
+
+  async cleanupExpiredSessions(): Promise<void> {
+    await db.delete(schema.sessions).where(lt(schema.sessions.expiresAt, new Date()));
   }
 }
 

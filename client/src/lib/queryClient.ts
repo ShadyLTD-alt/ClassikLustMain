@@ -11,29 +11,25 @@ export async function apiRequest(
   endpoint: string,
   options?: RequestInit,
 ): Promise<Response> {
-  // Get player data from localStorage
-  const savedPlayer = localStorage.getItem('playerData');
-  let playerId = '';
-
-  if (savedPlayer) {
-    try {
-      const playerData = JSON.parse(savedPlayer);
-      playerId = playerData.id;
-    } catch (error) {
-      console.error('Failed to parse player data:', error);
-    }
-  }
+  const sessionToken = localStorage.getItem('sessionToken');
 
   const response = await fetch(endpoint, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      'x-player-id': playerId,
+      ...(sessionToken ? { 'Authorization': `Bearer ${sessionToken}` } : {}),
       ...options?.headers,
     },
   });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      localStorage.removeItem('sessionToken');
+      localStorage.removeItem('playerData');
+      window.location.reload();
+      throw new Error('Session expired. Please log in again.');
+    }
+
     if (response.status >= 500) {
       throw new Error(`${response.status}: ${response.statusText}`);
     }
@@ -50,27 +46,23 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    const savedPlayer = localStorage.getItem('playerData');
-    let playerId = '';
-
-    if (savedPlayer) {
-      try {
-        const playerData = JSON.parse(savedPlayer);
-        playerId = playerData.id;
-      } catch (error) {
-        console.error('Failed to parse player data:', error);
-      }
-    }
+    const sessionToken = localStorage.getItem('sessionToken');
 
     const res = await fetch(queryKey.join("/") as string, {
       credentials: "include",
       headers: {
-        'x-player-id': playerId,
+        ...(sessionToken ? { 'Authorization': `Bearer ${sessionToken}` } : {}),
       },
     });
 
-    if (unauthorizedBehavior === "returnNull" && res.status === 401) {
-      return null;
+    if (res.status === 401) {
+      localStorage.removeItem('sessionToken');
+      localStorage.removeItem('playerData');
+      if (unauthorizedBehavior === "returnNull") {
+        return null;
+      }
+      window.location.reload();
+      throw new Error('Session expired. Please log in again.');
     }
 
     await throwIfResNotOk(res);

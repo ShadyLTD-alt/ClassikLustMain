@@ -9,6 +9,7 @@ import { AuthDataValidator } from "@telegram-auth/server";
 import { requireAuth, requireAdmin } from "./middleware/auth";
 import { syncAllGameData, saveUpgradeToJSON, saveLevelToJSON, saveCharacterToJSON } from "./utils/dataLoader";
 import { insertUpgradeSchema, insertCharacterSchema, insertLevelSchema, insertPlayerUpgradeSchema } from "@shared/schema";
+import { generateSecureToken, getSessionExpiry } from "./utils/auth";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -71,6 +72,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     const fileUrl = `/uploads/characters/${characterName}/${imageType}/${req.file.filename}`;
     res.json({ url: fileUrl });
+  });
+
+  app.get("/api/auth/me", requireAuth, async (req, res) => {
+    try {
+      const player = await storage.getPlayer(req.player!.id);
+      if (!player) {
+        return res.status(404).json({ error: 'Player not found' });
+      }
+      res.json({ success: true, player });
+    } catch (error) {
+      console.error('Error fetching current player:', error);
+      res.status(500).json({ error: 'Failed to fetch player data' });
+    }
   });
 
   app.post("/api/auth/telegram", async (req, res) => {
@@ -142,10 +156,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
+      const sessionToken = generateSecureToken();
+      const session = await storage.createSession({
+        playerId: player.id,
+        token: sessionToken,
+        expiresAt: getSessionExpiry(),
+      });
+
       console.log('🎉 Auth successful for player:', player.username);
       res.json({
         success: true,
         player,
+        sessionToken,
       });
     } catch (error) {
       console.error('💥 Telegram auth error:', error);
