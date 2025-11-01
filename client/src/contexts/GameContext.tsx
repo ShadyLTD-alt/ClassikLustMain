@@ -66,39 +66,43 @@ const INITIAL_STATE: GameState = {
 };
 
 export function GameProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<GameState>(() => {
-    const saved = localStorage.getItem('gameState');
-    return saved ? { ...INITIAL_STATE, ...JSON.parse(saved) } : INITIAL_STATE;
-  });
-
-  const [upgrades, setUpgrades] = useState<UpgradeConfig[]>(() => {
-    const saved = localStorage.getItem('upgradeConfigs');
-    return saved ? JSON.parse(saved) : DEFAULT_UPGRADES;
-  });
-
-  const [characters, setCharacters] = useState<CharacterConfig[]>(() => {
-    const saved = localStorage.getItem('characterConfigs');
-    return saved ? JSON.parse(saved) : DEFAULT_CHARACTERS;
-  });
-
-  const [images, setImages] = useState<ImageConfig[]>(() => {
-    const saved = localStorage.getItem('imageConfigs');
-    return saved ? JSON.parse(saved) : [];
-  });
-
-  const [levelConfigs, setLevelConfigs] = useState<LevelConfig[]>(() => {
-    const saved = localStorage.getItem('levelConfigs');
-    return saved ? JSON.parse(saved) : DEFAULT_LEVEL_CONFIGS;
-  });
-
-  const [theme, setTheme] = useState<ThemeConfig>(() => {
-    const saved = localStorage.getItem('themeConfig');
-    return saved ? JSON.parse(saved) : DEFAULT_THEME;
-  });
+  const [state, setState] = useState<GameState>(INITIAL_STATE);
+  const [upgrades, setUpgrades] = useState<UpgradeConfig[]>(DEFAULT_UPGRADES);
+  const [characters, setCharacters] = useState<CharacterConfig[]>(DEFAULT_CHARACTERS);
+  const [images, setImages] = useState<ImageConfig[]>([]);
+  const [levelConfigs, setLevelConfigs] = useState<LevelConfig[]>(DEFAULT_LEVEL_CONFIGS);
+  const [theme, setTheme] = useState<ThemeConfig>(DEFAULT_THEME);
+  const [pendingPurchases, setPendingPurchases] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     applyTheme(theme);
   }, [theme]);
+
+  // Save state before user leaves/refreshes
+  useEffect(() => {
+    const handleBeforeUnload = async (e: BeforeUnloadEvent) => {
+      const sessionToken = localStorage.getItem('sessionToken');
+      if (sessionToken) {
+        // Use sendBeacon for reliable save on page unload
+        const data = JSON.stringify({
+          points: state.points,
+          energy: state.energy,
+          passiveIncomeRate: state.passiveIncomeRate,
+          upgrades: state.upgrades,
+          unlockedCharacters: state.unlockedCharacters,
+          level: state.level,
+          maxEnergy: state.maxEnergy,
+          energyRegenRate: state.energyRegenRate
+        });
+        
+        const blob = new Blob([data], { type: 'application/json' });
+        navigator.sendBeacon('/api/player/me', blob);
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [state]);
 
   useEffect(() => {
     let syncCounter = 0;
@@ -180,6 +184,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
   }, [upgrades, characters]);
 
   const purchaseUpgrade = useCallback(async (upgradeId: string) => {
+    // Prevent duplicate purchases
+    if (pendingPurchases.has(upgradeId)) {
+      return false;
+    }
+
     const upgrade = upgrades.find(u => u.id === upgradeId);
     if (!upgrade) return false;
 
@@ -191,9 +200,12 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
     const newLevel = currentLevel + 1;
 
-    // Save to database first
+    // Mark as pending
+    setPendingPurchases(prev => new Set(prev).add(upgradeId));
+
+    // Save to database first (pessimistic update)
     try {
-      await fetch('/api/player/upgrades', {
+      const response = await fetch('/api/player/upgrades', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -204,61 +216,63 @@ export function GameProvider({ children }: { children: ReactNode }) {
           level: newLevel
         })
       });
-    } catch (err) {
-      console.error('Failed to save upgrade to DB:', err);
-      return false;
-    }
 
-    setState(prev => {
-      const newUpgrades = { ...prev.upgrades, [upgradeId]: newLevel };
+      if (!response.ok) {
+        throw new Error('Failed to purchase upgrade');
+      }
 
-      const perHourUpgrades = upgrades.filter(u => u.type === 'perHour');
-      let newPassiveRate = 0;
-      perHourUpgrades.forEach(u => {
-        const lvl = newUpgrades[u.id] || 0;
-        newPassiveRate += calculateUpgradeValue(u, lvl);
-      });
+      // Only update state after successful server response
+      setState(prev => {
+        const newUpgrades = { ...prev.upgrades, [upgradeId]: newLevel };
 
-      const energyUpgrades = upgrades.filter(u => u.type === 'energyMax' && u.id === 'energy-capacity');
-      let newMaxEnergy = 1000;
-      energyUpgrades.forEach(u => {
-        const lvl = newUpgrades[u.id] || 0;
-        newMaxEnergy = calculateUpgradeValue(u, lvl);
-      });
+        const perHourUpgrades = upgrades.filter(u => u.type === 'perHour');
+        let newPassiveRate = 0;
+        perHourUpgrades.forEach(u => {
+          const lvl = newUpgrades[u.id] || 0;
+          newPassiveRate += calculateUpgradeValue(u, lvl);
+        });
 
-      const regenUpgrades = upgrades.filter(u => u.type === 'energyMax' && u.id === 'energy-regen');
-      let newRegenRate = 1;
-      regenUpgrades.forEach(u => {
-        const lvl = newUpgrades[u.id] || 0;
-        newRegenRate = calculateUpgradeValue(u, lvl);
-      });
+        const energyUpgrades = upgrades.filter(u => u.type === 'energyMax' && u.id === 'energy-capacity');
+        let newMaxEnergy = 1000;
+        energyUpgrades.forEach(u => {
+          const lvl = newUpgrades[u.id] || 0;
+          newMaxEnergy = calculateUpgradeValue(u, lvl);
+        });
 
-      // Sync passive income rate to database
-      fetch('/api/player/me', {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`
-        },
-        body: JSON.stringify({
+        const regenUpgrades = upgrades.filter(u => u.type === 'energyMax' && u.id === 'energy-regen');
+        let newRegenRate = 1;
+        regenUpgrades.forEach(u => {
+          const lvl = newUpgrades[u.id] || 0;
+          newRegenRate = calculateUpgradeValue(u, lvl);
+        });
+
+        return {
+          ...prev,
+          points: prev.points - cost,
+          upgrades: newUpgrades,
           passiveIncomeRate: newPassiveRate,
           maxEnergy: newMaxEnergy,
-          upgrades: newUpgrades
-        })
-      }).catch(err => console.error('Failed to sync passive income to DB:', err));
+          energyRegenRate: newRegenRate
+        };
+      });
 
-      return {
-        ...prev,
-        points: prev.points - cost,
-        upgrades: newUpgrades,
-        passiveIncomeRate: newPassiveRate,
-        maxEnergy: newMaxEnergy,
-        energyRegenRate: newRegenRate
-      };
-    });
+      setPendingPurchases(prev => {
+        const next = new Set(prev);
+        next.delete(upgradeId);
+        return next;
+      });
 
-    return true;
-  }, [state.upgrades, state.points, upgrades]);
+      return true;
+    } catch (err) {
+      console.error('Failed to save upgrade to DB:', err);
+      setPendingPurchases(prev => {
+        const next = new Set(prev);
+        next.delete(upgradeId);
+        return next;
+      });
+      return false;
+    }
+  }, [state.upgrades, state.points, upgrades, pendingPurchases]);
 
   const selectCharacter = useCallback(async (characterId: string) => {
     if (state.unlockedCharacters.includes(characterId)) {

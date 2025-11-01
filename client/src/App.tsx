@@ -1,4 +1,3 @@
-
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -29,30 +28,30 @@ function App() {
       console.log('🚀 [v3.0] App.tsx checkAuth starting...');
       console.log('⏰ Current timestamp:', new Date().toISOString());
       setLoadingProgress(20);
-      
+
       const tg = (window as any).Telegram?.WebApp;
-      console.log('📱 [v3.0] Telegram WebApp check:', { 
-        exists: !!tg, 
+      console.log('📱 [v3.0] Telegram WebApp check:', {
+        exists: !!tg,
         hasInitData: !!tg?.initData,
         initDataLength: tg?.initData?.length || 0,
         platform: tg?.platform,
         version: tg?.version
       });
-      
+
       if (tg) {
         console.log('🔧 Telegram WebApp ready() called');
         tg.ready();
         tg.expand();
       }
-      
+
       setLoadingProgress(40);
-      
+
       const sessionToken = localStorage.getItem('sessionToken');
       console.log('🔑 [v3.0] Session token check:', {
         exists: !!sessionToken,
         length: sessionToken?.length || 0
       });
-      
+
       if (sessionToken) {
         console.log('🔄 [v3.0] Validating existing session...');
         try {
@@ -61,11 +60,11 @@ function App() {
               'Authorization': `Bearer ${sessionToken}`,
             },
           });
-          
+
           if (response.ok) {
             const data = await response.json();
             console.log('✅ [v3.0] Session valid! Player:', data.player.username);
-            localStorage.setItem('playerData', JSON.stringify(data.player));
+            // localStorage.setItem('playerData', JSON.stringify(data.player)); // Removed: local storage is no longer the source of truth
             setUserData(data.player);
             setLoadingProgress(100);
             setTimeout(() => setAuthState('authenticated'), 500);
@@ -73,17 +72,17 @@ function App() {
           } else {
             console.log('⚠️ [v3.0] Session invalid, clearing...');
             localStorage.removeItem('sessionToken');
-            localStorage.removeItem('playerData');
+            // localStorage.removeItem('playerData'); // Removed: local storage is no longer the source of truth
           }
         } catch (error) {
           console.error('💥 [v3.0] Session validation failed:', error);
           localStorage.removeItem('sessionToken');
-          localStorage.removeItem('playerData');
+          // localStorage.removeItem('playerData'); // Removed: local storage is no longer the source of truth
         }
       }
-      
+
       setLoadingProgress(60);
-      
+
       if (tg && tg.initData && tg.initData.length > 0) {
         console.log('🔑 [v3.0] Attempting Telegram auth...');
         setLoadingProgress(70);
@@ -94,11 +93,11 @@ function App() {
             body: JSON.stringify({ initData: tg.initData }),
           });
           const data = await response.json();
-          
+
           if (data.success && data.player && data.sessionToken) {
             console.log('🎉 Telegram auth successful!');
             localStorage.setItem('sessionToken', data.sessionToken);
-            localStorage.setItem('playerData', JSON.stringify(data.player));
+            // localStorage.setItem('playerData', JSON.stringify(data.player)); // Removed: local storage is no longer the source of truth
             setUserData(data.player);
             setLoadingProgress(100);
             setTimeout(() => setAuthState('authenticated'), 500);
@@ -112,7 +111,7 @@ function App() {
       } else {
         console.log('ℹ️ [v3.0] No initData available for Telegram auth');
       }
-      
+
       console.log('🔐 [v3.0] No valid session found, showing login screen');
       setLoadingProgress(100);
       setTimeout(() => setAuthState('login'), 500);
@@ -123,7 +122,7 @@ function App() {
 
   const handleLogin = (sessionToken: string, playerData: any) => {
     localStorage.setItem('sessionToken', sessionToken);
-    localStorage.setItem('playerData', JSON.stringify(playerData));
+    // localStorage.setItem('playerData', JSON.stringify(playerData)); // Removed: local storage is no longer the source of truth
     setUserData(playerData);
     setAuthState('authenticated');
   };

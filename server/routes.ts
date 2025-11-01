@@ -316,7 +316,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (updatedPlayer) {
         await savePlayerDataToJSON(updatedPlayer);
       }
-      res.json({ player: updatedPlayer });
+      
+      // Handle sendBeacon requests (no response expected)
+      if (req.headers['content-type']?.includes('text/plain')) {
+        res.status(204).end();
+      } else {
+        res.json({ player: updatedPlayer });
+      }
     } catch (error) {
       console.error('Error updating player:', error);
       res.status(500).json({ error: 'Failed to update player' });
@@ -344,19 +350,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: 'Invalid upgrade data', details: validation.error });
       }
 
+      // Get current player state and validate purchase
+      const player = await storage.getPlayer(req.player!.id);
+      if (!player) {
+        return res.status(404).json({ error: 'Player not found' });
+      }
+
+      // Get upgrade config to calculate cost
+      const upgrade = await storage.getUpgrade(validation.data.upgradeId);
+      if (!upgrade) {
+        return res.status(404).json({ error: 'Upgrade not found' });
+      }
+
+      const currentLevel = player.upgrades?.[validation.data.upgradeId] || 0;
+      const cost = Math.floor(upgrade.baseCost * Math.pow(upgrade.costMultiplier, currentLevel));
+      
+      // Validate player has enough points
+      const playerPoints = typeof player.points === 'string' ? parseFloat(player.points) : player.points;
+      if (playerPoints < cost) {
+        return res.status(400).json({ error: 'Insufficient points' });
+      }
+
+      // Validate level increment
+      if (validation.data.level !== currentLevel + 1) {
+        return res.status(400).json({ error: 'Invalid level increment' });
+      }
+
       // Save to playerUpgrades table
       const playerUpgrade = await storage.setPlayerUpgrade(validation.data);
 
-      // Also update the player's upgrades JSONB field
-      const player = await storage.getPlayer(req.player!.id);
-      if (player) {
-        const upgrades = player.upgrades || {};
-        upgrades[validation.data.upgradeId] = validation.data.level;
-        
-        const updatedPlayer = await storage.updatePlayer(req.player!.id, { upgrades });
-        if (updatedPlayer) {
-          await savePlayerDataToJSON(updatedPlayer);
-        }
+      // Update player's upgrades JSONB field and deduct points
+      const upgrades = player.upgrades || {};
+      upgrades[validation.data.upgradeId] = validation.data.level;
+      
+      const updatedPlayer = await storage.updatePlayer(req.player!.id, { 
+        upgrades,
+        points: playerPoints - cost
+      });
+      
+      if (updatedPlayer) {
+        await savePlayerDataToJSON(updatedPlayer);
       }
 
       res.json({ upgrade: playerUpgrade });
