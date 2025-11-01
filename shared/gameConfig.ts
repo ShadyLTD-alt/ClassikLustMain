@@ -52,9 +52,11 @@ export interface LevelRequirement {
 
 export interface LevelConfig {
   level: number;
+  // Cost to level up (points); keep XP dormant but available
   cost: number;
-  requirements: LevelRequirement[];
-  unlocks: string[];
+  experienceRequired?: number; // optional for future use
+  requirements: LevelRequirement[]; // pulled from master upgrades
+  unlocks: string[]; // free-form strings or IDs
 }
 
 export interface ThemeConfig {
@@ -65,9 +67,6 @@ export interface ThemeConfig {
   card: string;
   muted: string;
 }
-
-// All upgrade, character, and level data should be loaded from JSON files only
-// No default/mock data in this config file
 
 export const DEFAULT_THEME: ThemeConfig = {
   primary: '270 60% 50%',
