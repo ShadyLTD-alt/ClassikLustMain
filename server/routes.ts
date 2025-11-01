@@ -86,7 +86,7 @@
                       categoriesObj.vip ? 'vip' : null,
                       categoriesObj.event ? 'event' : null,
                       categoriesObj.random ? 'random' : null
-                    ].filter(Boolean),
+                    ].filter(Boolean) as string[],
                     poses: JSON.parse(body.poses),
                     isHidden: body.isHidden === 'true',
                     chatEnable: body.chatEnable === 'true',
@@ -376,7 +376,7 @@
       if (updates.unlockedCharacters) {
         const current = Array.isArray(currentPlayer.unlockedCharacters) ? currentPlayer.unlockedCharacters : [];
         const incoming = Array.isArray(updates.unlockedCharacters) ? updates.unlockedCharacters : [];
-        updates.unlockedCharacters = [...new Set([...current, ...incoming])];
+        updates.unlockedCharacters = Array.from(new Set([...current, ...incoming]));
       }
 
       const updatedPlayer = await storage.updatePlayer(req.player!.id, updates);
