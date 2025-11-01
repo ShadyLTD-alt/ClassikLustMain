@@ -82,6 +82,18 @@ export const sessions = pgTable("sessions", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
+export const mediaUploads = pgTable("mediaUploads", {
+  id: varchar("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  characterId: text("characterId").notNull().references(() => characters.id, { onDelete: 'cascade' }),
+  url: text("url").notNull(),
+  type: text("type").notNull(),
+  unlockLevel: integer("unlockLevel").default(1).notNull(),
+  categories: text("categories").array().default(sql`'{}'::text[]`).notNull(),
+  poses: text("poses").array().default(sql`'{}'::text[]`).notNull(),
+  isHidden: boolean("isHidden").default(false).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
 export const insertPlayerSchema = createInsertSchema(players).omit({
   id: true,
   createdAt: true,
@@ -116,6 +128,11 @@ export const insertSessionSchema = createInsertSchema(sessions).omit({
   createdAt: true,
 });
 
+export const insertMediaUploadSchema = createInsertSchema(mediaUploads).omit({
+  id: true,
+  createdAt: true,
+});
+
 export type Player = typeof players.$inferSelect;
 export type InsertPlayer = z.infer<typeof insertPlayerSchema>;
 
@@ -136,3 +153,6 @@ export type InsertPlayerCharacter = z.infer<typeof insertPlayerCharacterSchema>;
 
 export type Session = typeof sessions.$inferSelect;
 export type InsertSession = z.infer<typeof insertSessionSchema>;
+
+export type MediaUpload = typeof mediaUploads.$inferSelect;
+export type InsertMediaUpload = z.infer<typeof insertMediaUploadSchema>;

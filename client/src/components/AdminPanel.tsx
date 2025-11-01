@@ -66,27 +66,96 @@ export default function AdminPanel() {
     }
   });
 
+  const saveUpgradeMutation = useMutation({
+    mutationFn: async (upgrade: UpgradeConfig) => {
+      const existing = upgrades.find(u => u.id === upgrade.id);
+      const method = existing ? 'PATCH' : 'POST';
+      const url = existing ? `/api/admin/upgrades/${upgrade.id}` : '/api/admin/upgrades';
+      
+      const response = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-token': adminToken
+        },
+        body: JSON.stringify(upgrade)
+      });
+      if (!response.ok) throw new Error('Failed to save upgrade');
+      return response.json();
+    },
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/upgrades'] });
+      updateUpgradeConfig(variables);
+      toast({ title: 'Upgrade saved', description: `${variables.name} has been saved and JSON file created.` });
+      setEditingUpgrade(null);
+    }
+  });
+
+  const saveCharacterMutation = useMutation({
+    mutationFn: async (character: CharacterConfig) => {
+      const existing = characters.find(c => c.id === character.id);
+      const method = existing ? 'PATCH' : 'POST';
+      const url = existing ? `/api/admin/characters/${character.id}` : '/api/admin/characters';
+      
+      const response = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-token': adminToken
+        },
+        body: JSON.stringify(character)
+      });
+      if (!response.ok) throw new Error('Failed to save character');
+      return response.json();
+    },
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/characters'] });
+      updateCharacterConfig(variables);
+      toast({ title: 'Character saved', description: `${variables.name} has been saved and JSON file created.` });
+      setEditingCharacter(null);
+    }
+  });
+
+  const saveLevelMutation = useMutation({
+    mutationFn: async (level: LevelConfig) => {
+      const existing = levelConfigs.find(l => l.level === level.level);
+      const method = existing ? 'PATCH' : 'POST';
+      const url = existing ? `/api/admin/levels/${level.level}` : '/api/admin/levels';
+      
+      const response = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-token': adminToken
+        },
+        body: JSON.stringify(level)
+      });
+      if (!response.ok) throw new Error('Failed to save level');
+      return response.json();
+    },
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/levels'] });
+      updateLevelConfig(variables);
+      toast({ title: 'Level config saved', description: `Level ${variables.level} has been saved and JSON file created.` });
+      setEditingLevel(null);
+    }
+  });
+
   if (!state.isAdmin) return null;
 
   const handleSaveUpgrade = () => {
     if (!editingUpgrade) return;
-    updateUpgradeConfig(editingUpgrade);
-    toast({ title: 'Upgrade saved', description: `${editingUpgrade.name} has been updated.` });
-    setEditingUpgrade(null);
+    saveUpgradeMutation.mutate(editingUpgrade);
   };
 
   const handleSaveCharacter = () => {
     if (!editingCharacter) return;
-    updateCharacterConfig(editingCharacter);
-    toast({ title: 'Character saved', description: `${editingCharacter.name} has been updated.` });
-    setEditingCharacter(null);
+    saveCharacterMutation.mutate(editingCharacter);
   };
 
   const handleSaveLevel = () => {
     if (!editingLevel) return;
-    updateLevelConfig(editingLevel);
-    toast({ title: 'Level config saved', description: `Level ${editingLevel.level} has been updated.` });
-    setEditingLevel(null);
+    saveLevelMutation.mutate(editingLevel);
   };
 
   const handleSaveTheme = () => {

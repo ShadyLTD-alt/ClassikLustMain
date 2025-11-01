@@ -125,7 +125,41 @@ export function GameProvider({ children }: { children: ReactNode }) {
       }
     };
 
+    const loadMediaUploads = async () => {
+      const sessionToken = localStorage.getItem('sessionToken');
+      if (!sessionToken) return;
+
+      try {
+        const response = await fetch('/api/media', {
+          headers: {
+            'Authorization': `Bearer ${sessionToken}`
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const mediaUploads = data.media || [];
+          
+          const imageConfigs: ImageConfig[] = mediaUploads.map((media: any) => ({
+            id: media.id,
+            characterId: media.characterId,
+            url: media.url,
+            unlockLevel: media.unlockLevel,
+            categories: media.categories || [],
+            poses: media.poses || [],
+            isHidden: media.isHidden || false
+          }));
+          
+          setImages(imageConfigs);
+          console.log('✅ Loaded media uploads from server:', imageConfigs.length);
+        }
+      } catch (error) {
+        console.error('Failed to load media uploads:', error);
+      }
+    };
+
     loadPlayerData();
+    loadMediaUploads();
   }, []);
 
   // Recalculate passive income, max energy, and regen when upgrades change
@@ -468,7 +502,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
         },
         body: JSON.stringify({
           level: nextLevel,
-          experience: newState.experience,
           unlockedCharacters: newState.unlockedCharacters
         })
       }).catch(err => console.error('Failed to sync level data to DB:', err));

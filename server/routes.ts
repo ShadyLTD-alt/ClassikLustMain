@@ -8,7 +8,7 @@ import fs from "fs";
 import { AuthDataValidator } from "@telegram-auth/server";
 import { requireAuth, requireAdmin } from "./middleware/auth";
 import { syncAllGameData, saveUpgradeToJSON, saveLevelToJSON, saveCharacterToJSON, savePlayerDataToJSON } from "./utils/dataLoader";
-import { insertUpgradeSchema, insertCharacterSchema, insertLevelSchema, insertPlayerUpgradeSchema } from "@shared/schema";
+import { insertUpgradeSchema, insertCharacterSchema, insertLevelSchema, insertPlayerUpgradeSchema, insertMediaUploadSchema } from "@shared/schema";
 import { generateSecureToken, getSessionExpiry } from "./utils/auth";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -49,29 +49,52 @@ const upload = multer({
 
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  app.post("/api/upload", requireAuth, upload.single("image"), (req, res) => {
+  app.post("/api/upload", requireAuth, upload.single("image"), async (req, res) => {
     if (!req.file) {
       return res.status(400).json({ error: "No file uploaded" });
     }
 
-    const characterName = req.body.characterName;
-    const imageType = req.body.imageType || 'character';
+    try {
+      const characterId = req.body.characterId;
+      const characterName = req.body.characterName;
+      const imageType = req.body.imageType || 'character';
+      const unlockLevel = parseInt(req.body.unlockLevel || '1', 10);
+      const categories = req.body.categories ? JSON.parse(req.body.categories) : [];
+      const poses = req.body.poses ? JSON.parse(req.body.poses) : [];
 
-    if (!characterName) {
-      fs.unlinkSync(req.file.path);
-      return res.status(400).json({ error: "Character name is required" });
+      if (!characterId || !characterName) {
+        fs.unlinkSync(req.file.path);
+        return res.status(400).json({ error: "Character ID and name are required" });
+      }
+
+      const finalDir = path.join(__dirname, "..", "uploads", "characters", characterName, imageType);
+      if (!fs.existsSync(finalDir)) {
+        fs.mkdirSync(finalDir, { recursive: true });
+      }
+
+      const finalPath = path.join(finalDir, req.file.filename);
+      fs.renameSync(req.file.path, finalPath);
+
+      const fileUrl = `/uploads/characters/${characterName}/${imageType}/${req.file.filename}`;
+
+      const mediaUpload = await storage.createMediaUpload({
+        characterId,
+        url: fileUrl,
+        type: imageType,
+        unlockLevel,
+        categories,
+        poses,
+        isHidden: false,
+      });
+
+      res.json({ url: fileUrl, media: mediaUpload });
+    } catch (error) {
+      if (req.file && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+      console.error('Error uploading file:', error);
+      res.status(500).json({ error: 'Failed to upload file' });
     }
-
-    const finalDir = path.join(__dirname, "..", "uploads", "characters", characterName, imageType);
-    if (!fs.existsSync(finalDir)) {
-      fs.mkdirSync(finalDir, { recursive: true });
-    }
-
-    const finalPath = path.join(finalDir, req.file.filename);
-    fs.renameSync(req.file.path, finalPath);
-
-    const fileUrl = `/uploads/characters/${characterName}/${imageType}/${req.file.filename}`;
-    res.json({ url: fileUrl });
   });
 
   app.get("/api/auth/me", requireAuth, async (req, res) => {
@@ -647,6 +670,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Error updating player:', error);
       res.status(500).json({ error: 'Failed to update player' });
+    }
+  });
+
+  app.get("/api/media", requireAuth, async (req, res) => {
+    try {
+      const characterId = req.query.characterId as string | undefined;
+      const includeHidden = req.player?.isAdmin || false;
+      const media = await storage.getMediaUploads(characterId, includeHidden);
+      res.json({ media });
+    } catch (error) {
+      console.error('Error fetching media uploads:', error);
+      res.status(500).json({ error: 'Failed to fetch media uploads' });
+    }
+  });
+
+  app.patch("/api/media/:id", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const updates = req.body;
+
+      const updatedMedia = await storage.updateMediaUpload(id, updates);
+
+      if (!updatedMedia) {
+        return res.status(404).json({ error: 'Media upload not found' });
+      }
+
+      res.json({ media: updatedMedia });
+    } catch (error) {
+      console.error('Error updating media upload:', error);
+      res.status(500).json({ error: 'Failed to update media upload' });
+    }
+  });
+
+  app.delete("/api/media/:id", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const media = await storage.getMediaUpload(id);
+
+      if (!media) {
+        return res.status(404).json({ error: 'Media upload not found' });
+      }
+
+      const filePath = path.join(__dirname, "..", media.url);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+
+      await storage.deleteMediaUpload(id);
+
+      res.json({ success: true, message: 'Media upload deleted' });
+    } catch (error) {
+      console.error('Error deleting media upload:', error);
+      res.status(500).json({ error: 'Failed to delete media upload' });
     }
   });
 

@@ -19,6 +19,8 @@ import {
   type InsertPlayerCharacter,
   type Session,
   type InsertSession,
+  type MediaUpload,
+  type InsertMediaUpload,
 } from "@shared/schema";
 
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -95,6 +97,12 @@ export interface IStorage {
   getSessionByToken(token: string): Promise<(Session & { player: Player }) | undefined>;
   deleteSession(token: string): Promise<void>;
   cleanupExpiredSessions(): Promise<void>;
+  
+  getMediaUploads(characterId?: string, includeHidden?: boolean): Promise<MediaUpload[]>;
+  getMediaUpload(id: string): Promise<MediaUpload | undefined>;
+  createMediaUpload(data: InsertMediaUpload): Promise<MediaUpload>;
+  updateMediaUpload(id: string, updates: Partial<MediaUpload>): Promise<MediaUpload | undefined>;
+  deleteMediaUpload(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -301,6 +309,43 @@ export class DatabaseStorage implements IStorage {
 
   async cleanupExpiredSessions(): Promise<void> {
     await db.delete(schema.sessions).where(lt(schema.sessions.expiresAt, new Date()));
+  }
+
+  async getMediaUploads(characterId?: string, includeHidden = false): Promise<MediaUpload[]> {
+    if (characterId) {
+      if (includeHidden) {
+        return await db.select().from(schema.mediaUploads).where(eq(schema.mediaUploads.characterId, characterId));
+      }
+      return await db.select().from(schema.mediaUploads).where(
+        and(
+          eq(schema.mediaUploads.characterId, characterId),
+          eq(schema.mediaUploads.isHidden, false)
+        )
+      );
+    }
+    if (includeHidden) {
+      return await db.select().from(schema.mediaUploads);
+    }
+    return await db.select().from(schema.mediaUploads).where(eq(schema.mediaUploads.isHidden, false));
+  }
+
+  async getMediaUpload(id: string): Promise<MediaUpload | undefined> {
+    const result = await db.select().from(schema.mediaUploads).where(eq(schema.mediaUploads.id, id)).limit(1);
+    return result[0];
+  }
+
+  async createMediaUpload(data: InsertMediaUpload): Promise<MediaUpload> {
+    const result = await db.insert(schema.mediaUploads).values(data).returning();
+    return result[0];
+  }
+
+  async updateMediaUpload(id: string, updates: Partial<MediaUpload>): Promise<MediaUpload | undefined> {
+    const result = await db.update(schema.mediaUploads).set(updates).where(eq(schema.mediaUploads.id, id)).returning();
+    return result[0];
+  }
+
+  async deleteMediaUpload(id: string): Promise<void> {
+    await db.delete(schema.mediaUploads).where(eq(schema.mediaUploads.id, id));
   }
 }
 
