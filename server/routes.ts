@@ -76,21 +76,34 @@
                 try {
                   const body = req.body;
                   const categoriesObj = JSON.parse(body.categories);
+                  const poses = JSON.parse(body.poses);
+                  
+                  const sanitizedCharacterName = body.characterName?.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 100);
+                  const allowedImageTypes = ['character', 'avatar', 'vip', 'other'];
+                  const imageType = allowedImageTypes.includes(body.imageType) ? body.imageType : 'character';
+                  
+                  if (!Array.isArray(poses) || !poses.every((p: any) => typeof p === 'string')) {
+                    fs.unlinkSync(req.file.path);
+                    return res.status(400).json({ error: "Poses must be an array of strings" });
+                  }
+                  
+                  const categories = [
+                    categoriesObj.nsfw ? 'nsfw' : null,
+                    categoriesObj.vip ? 'vip' : null,
+                    categoriesObj.event ? 'event' : null,
+                    categoriesObj.random ? 'random' : null
+                  ].filter((c): c is string => c !== null);
+                  
                   const parsedData = {
                     characterId: body.characterId,
-                    characterName: body.characterName,
-                    imageType: body.imageType as 'character' | 'avatar' | 'vip' | 'other',
-                    unlockLevel: parseInt(body.unlockLevel),
-                    categories: [
-                      categoriesObj.nsfw ? 'nsfw' : null,
-                      categoriesObj.vip ? 'vip' : null,
-                      categoriesObj.event ? 'event' : null,
-                      categoriesObj.random ? 'random' : null
-                    ].filter(Boolean) as string[],
-                    poses: JSON.parse(body.poses),
+                    characterName: sanitizedCharacterName,
+                    imageType: imageType as 'character' | 'avatar' | 'vip' | 'other',
+                    unlockLevel: parseInt(body.unlockLevel) || 1,
+                    categories,
+                    poses,
                     isHidden: body.isHidden === 'true',
                     chatEnable: body.chatEnable === 'true',
-                    chatSendPercent: parseInt(body.chatSendPercent) || 0
+                    chatSendPercent: Math.min(100, Math.max(0, parseInt(body.chatSendPercent) || 0))
                   };
 
                   console.log('📋 Parsed data:', parsedData);
