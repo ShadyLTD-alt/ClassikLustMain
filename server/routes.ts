@@ -294,6 +294,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         delete updates.isAdmin;
       }
 
+      // Get current player data to merge upgrades and unlockedCharacters
+      const currentPlayer = await storage.getPlayer(req.player!.id);
+      if (!currentPlayer) {
+        return res.status(404).json({ error: 'Player not found' });
+      }
+
+      // Merge upgrades if provided
+      if (updates.upgrades) {
+        updates.upgrades = { ...currentPlayer.upgrades, ...updates.upgrades };
+      }
+
+      // Merge unlockedCharacters if provided
+      if (updates.unlockedCharacters) {
+        const current = Array.isArray(currentPlayer.unlockedCharacters) ? currentPlayer.unlockedCharacters : [];
+        const incoming = Array.isArray(updates.unlockedCharacters) ? updates.unlockedCharacters : [];
+        updates.unlockedCharacters = [...new Set([...current, ...incoming])];
+      }
+
       const updatedPlayer = await storage.updatePlayer(req.player!.id, updates);
       if (updatedPlayer) {
         await savePlayerDataToJSON(updatedPlayer);
@@ -326,7 +344,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: 'Invalid upgrade data', details: validation.error });
       }
 
+      // Save to playerUpgrades table
       const playerUpgrade = await storage.setPlayerUpgrade(validation.data);
+
+      // Also update the player's upgrades JSONB field
+      const player = await storage.getPlayer(req.player!.id);
+      if (player) {
+        const upgrades = player.upgrades || {};
+        upgrades[validation.data.upgradeId] = validation.data.level;
+        
+        const updatedPlayer = await storage.updatePlayer(req.player!.id, { upgrades });
+        if (updatedPlayer) {
+          await savePlayerDataToJSON(updatedPlayer);
+        }
+      }
+
       res.json({ upgrade: playerUpgrade });
     } catch (error) {
       console.error('Error setting player upgrade:', error);
@@ -353,10 +385,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: 'Character already unlocked' });
       }
 
+      // Save to playerCharacters table
       const character = await storage.unlockCharacter({
         playerId: req.player!.id,
         characterId,
       });
+
+      // Also update the player's unlockedCharacters JSONB field
+      const player = await storage.getPlayer(req.player!.id);
+      if (player) {
+        const unlockedCharacters = Array.isArray(player.unlockedCharacters) ? player.unlockedCharacters : [];
+        if (!unlockedCharacters.includes(characterId)) {
+          unlockedCharacters.push(characterId);
+          const updatedPlayer = await storage.updatePlayer(req.player!.id, { unlockedCharacters });
+          if (updatedPlayer) {
+            await savePlayerDataToJSON(updatedPlayer);
+          }
+        }
+      }
 
       res.json({ character });
     } catch (error) {

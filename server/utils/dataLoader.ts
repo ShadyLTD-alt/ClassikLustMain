@@ -220,11 +220,20 @@ export async function savePlayerDataToJSON(player: Player): Promise<void> {
   
   await fs.mkdir(playerDir, { recursive: true });
   
+  // Ensure upgrades and unlockedCharacters are properly serialized
+  const upgrades = typeof player.upgrades === 'object' && player.upgrades !== null 
+    ? player.upgrades 
+    : {};
+  
+  const unlockedCharacters = Array.isArray(player.unlockedCharacters) 
+    ? player.unlockedCharacters 
+    : [];
+  
   const playerData = {
     id: player.id,
     telegramId: player.telegramId,
     username: player.username,
-    points: player.points,
+    points: typeof player.points === 'string' ? player.points : player.points.toString(),
     energy: player.energy,
     maxEnergy: player.maxEnergy,
     level: player.level,
@@ -233,8 +242,8 @@ export async function savePlayerDataToJSON(player: Player): Promise<void> {
     isAdmin: player.isAdmin,
     selectedCharacterId: player.selectedCharacterId,
     displayImage: player.displayImage,
-    upgrades: player.upgrades,
-    unlockedCharacters: player.unlockedCharacters,
+    upgrades,
+    unlockedCharacters,
     lastLogin: player.lastLogin,
     lastEnergyUpdate: player.lastEnergyUpdate,
   };

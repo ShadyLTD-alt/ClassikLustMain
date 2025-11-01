@@ -128,9 +128,12 @@ export function GameProvider({ children }: { children: ReactNode }) {
             },
             body: JSON.stringify({
               energy: newEnergy,
-              points: newPoints
+              points: newPoints,
+              passiveIncomeRate: prev.passiveIncomeRate,
+              upgrades: prev.upgrades,
+              unlockedCharacters: prev.unlockedCharacters
             })
-          }).catch(err => console.error('Failed to sync energy/points to DB:', err));
+          }).catch(err => console.error('Failed to sync to DB:', err));
         }
 
         return { ...prev, energy: newEnergy, points: newPoints };
@@ -230,6 +233,20 @@ export function GameProvider({ children }: { children: ReactNode }) {
         newRegenRate = calculateUpgradeValue(u, lvl);
       });
 
+      // Sync passive income rate to database
+      fetch('/api/player/me', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`
+        },
+        body: JSON.stringify({
+          passiveIncomeRate: newPassiveRate,
+          maxEnergy: newMaxEnergy,
+          upgrades: newUpgrades
+        })
+      }).catch(err => console.error('Failed to sync passive income to DB:', err));
+
       return {
         ...prev,
         points: prev.points - cost,
@@ -320,12 +337,30 @@ export function GameProvider({ children }: { children: ReactNode }) {
       return false;
     }
 
-    setState(prev => ({
-      ...prev,
-      level: nextLevel,
-      points: prev.points - levelConfig.cost,
-      unlockedCharacters: [...prev.unlockedCharacters, ...newUnlockedChars]
-    }));
+    setState(prev => {
+      const newState = {
+        ...prev,
+        level: nextLevel,
+        points: prev.points - levelConfig.cost,
+        unlockedCharacters: [...prev.unlockedCharacters, ...newUnlockedChars]
+      };
+
+      // Sync level data to database
+      fetch('/api/player/me', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`
+        },
+        body: JSON.stringify({
+          level: nextLevel,
+          experience: newState.experience,
+          unlockedCharacters: newState.unlockedCharacters
+        })
+      }).catch(err => console.error('Failed to sync level data to DB:', err));
+
+      return newState;
+    });
 
     return true;
   }, [canLevelUp, levelConfigs, characters, state.level, state.points, state.unlockedCharacters]);
