@@ -38,10 +38,19 @@ export const supabase = createClient(
 );
 
 // Get the connection string for Drizzle
-const connectionString = `postgresql://postgres.${process.env.SUPABASE_URL?.split('//')[1]?.split('.')[0]}:[YOUR-PASSWORD]@${process.env.SUPABASE_URL?.split('//')[1]}:5432/postgres`;
+// Use the SUPABASE_URL secret which should be the full database connection string
+const connectionString = process.env.SUPABASE_URL || process.env.DATABASE_URL;
 
-// Use postgres.js for Drizzle with Supabase
-const client = postgres(connectionString);
+if (!connectionString) {
+  throw new Error("SUPABASE_URL or DATABASE_URL must be set for database connection");
+}
+
+// Use postgres.js for Drizzle with Supabase with connection pooling settings
+const client = postgres(connectionString, {
+  max: 1, // Limit connections in serverless environment
+  idle_timeout: 20,
+  connect_timeout: 10,
+});
 export const db = drizzle(client, { schema });
 
 export interface IStorage {
