@@ -1,0 +1,44 @@
+{
+  "defaultPlayerState": {
+    "points": 0,
+    "energy": 1000,
+    "maxEnergy": 1000,
+    "level": 1,
+    "experience": 0,
+    "passiveIncomeRate": 0,
+    "upgrades": {},
+    "unlockedCharacters": ["shadow"],
+    "isAdmin": false,
+    "settings": {
+      "theme": "dark",
+      "notifications": true,
+      "autoSave": true
+    }
+  },
+  "playerDataStructure": {
+    "fields": {
+      "id": { "type": "uuid", "required": true },
+      "telegramId": { "type": "string", "required": true, "unique": true },
+      "username": { "type": "string", "required": true },
+      "points": { "type": "bigint", "default": 0 },
+      "energy": { "type": "integer", "default": 1000 },
+      "maxEnergy": { "type": "integer", "default": 1000 },
+      "level": { "type": "integer", "default": 1 },
+      "experience": { "type": "bigint", "default": 0 },
+      "passiveIncomeRate": { "type": "integer", "default": 0 },
+      "upgrades": { "type": "jsonb", "default": {} },
+      "unlockedCharacters": { "type": "jsonb", "default": ["shadow"] },
+      "isAdmin": { "type": "boolean", "default": false },
+      "createdAt": { "type": "timestamp", "auto": true },
+      "updatedAt": { "type": "timestamp", "auto": true },
+      "lastLogin": { "type": "timestamp", "nullable": true }
+    }
+  },
+  "syncSettings": {
+    "saveToJsonFirst": true,
+    "saveToDbOnChange": true,
+    "syncIntervalMinutes": 5,
+    "backupOnLevelUp": true,
+    "validateBeforeSave": true
+  }
+}
