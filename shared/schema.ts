@@ -15,6 +15,7 @@ export const players = pgTable("players", {
   passiveIncomeRate: integer("passiveIncomeRate").default(0).notNull(),
   isAdmin: boolean("isAdmin").default(false).notNull(),
   selectedCharacterId: text("selectedCharacterId"),
+  selectedImageId: text("selectedImageId"),
   displayImage: text("displayImage"),
   upgrades: jsonb("upgrades").default("{}").notNull().$type<Record<string, number>>(), // Store upgrade levels as { upgradeId: level }
   unlockedCharacters: jsonb("unlockedCharacters").default("[]").notNull().$type<string[]>(), // Store unlocked character IDs

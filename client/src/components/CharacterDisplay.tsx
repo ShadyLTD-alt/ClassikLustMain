@@ -13,7 +13,8 @@ export default function CharacterDisplay() {
     ? images.find(img => img.id === state.selectedImageId)
     : null;
 
-  const displayImage = selectedImage?.url || selectedCharacter?.defaultImage;
+  // Prioritize displayImage from state, then selected image, then character default
+  const displayImage = state.displayImage || selectedImage?.url || selectedCharacter?.defaultImage;
 
   const handleTap = (e: React.MouseEvent<HTMLDivElement>) => {
     if (state.energy < 1) return;

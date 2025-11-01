@@ -16,6 +16,7 @@ interface GameState {
   passiveIncomeCap: number;
   energyRegenRate: number;
   isAdmin: boolean;
+  displayImage: string | null; // Added displayImage field to GameState
 }
 
 interface GameContextType {
@@ -62,7 +63,8 @@ const INITIAL_STATE: GameState = {
   passiveIncomeRate: 0,
   passiveIncomeCap: 10000,
   energyRegenRate: 1,
-  isAdmin: false
+  isAdmin: false,
+  displayImage: null // Initialize displayImage to null
 };
 
 export function GameProvider({ children }: { children: ReactNode }) {
@@ -94,7 +96,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         if (response.ok) {
           const data = await response.json();
           const player = data.player;
-          
+
           // Update state with server data
           setState(prev => ({
             ...prev,
@@ -103,13 +105,14 @@ export function GameProvider({ children }: { children: ReactNode }) {
             maxEnergy: player.maxEnergy || prev.maxEnergy,
             level: player.level || prev.level,
             selectedCharacterId: player.selectedCharacterId || prev.selectedCharacterId,
-            selectedImageId: player.displayImage || prev.selectedImageId,
+            selectedImageId: player.selectedImageId || prev.selectedImageId,
+            displayImage: player.displayImage || prev.displayImage, // Load displayImage from server
             upgrades: player.upgrades || {},
             unlockedCharacters: Array.isArray(player.unlockedCharacters) ? player.unlockedCharacters : ['starter'],
             passiveIncomeRate: player.passiveIncomeRate || 0,
             isAdmin: player.isAdmin || false
           }));
-          
+
           console.log('✅ Loaded player data from server:', {
             points: player.points,
             energy: player.energy,
@@ -139,7 +142,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         if (response.ok) {
           const data = await response.json();
           const mediaUploads = data.media || [];
-          
+
           const imageConfigs: ImageConfig[] = mediaUploads.map((media: any) => ({
             id: media.id,
             characterId: media.characterId,
@@ -149,7 +152,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
             poses: media.poses || [],
             isHidden: media.isHidden || false
           }));
-          
+
           setImages(imageConfigs);
           console.log('✅ Loaded media uploads from server:', imageConfigs.length);
         }
@@ -203,7 +206,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
           energyRegenRate: newRegenRate
         };
       }
-      
+
       return prev;
     });
   }, [state.upgrades, upgrades, isInitialized]);
@@ -226,9 +229,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
           unlockedCharacters: state.unlockedCharacters,
           level: state.level,
           maxEnergy: state.maxEnergy,
-          energyRegenRate: state.energyRegenRate
+          energyRegenRate: state.energyRegenRate,
+          displayImage: state.displayImage // Save displayImage
         });
-        
+
         const blob = new Blob([data], { type: 'application/json' });
         navigator.sendBeacon('/api/player/me', blob);
       }
@@ -269,7 +273,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
               points: newPoints,
               passiveIncomeRate: prev.passiveIncomeRate,
               upgrades: prev.upgrades,
-              unlockedCharacters: prev.unlockedCharacters
+              unlockedCharacters: prev.unlockedCharacters,
+              displayImage: prev.displayImage // Sync displayImage
             })
           }).catch(err => console.error('Failed to sync to DB:', err));
         }
@@ -429,8 +434,28 @@ export function GameProvider({ children }: { children: ReactNode }) {
   }, [state.unlockedCharacters]);
 
   const selectImage = useCallback((imageId: string) => {
-    setState(prev => ({ ...prev, selectedImageId: imageId }));
-  }, []);
+    const selectedImg = images.find(img => img.id === imageId);
+    setState(prev => ({ 
+      ...prev, 
+      selectedImageId: imageId,
+      displayImage: selectedImg?.url || prev.displayImage
+    }));
+
+    // Update the player on the server with the new display image
+    if (selectedImg) {
+      fetch('/api/player/me', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`
+        },
+        body: JSON.stringify({ 
+          selectedImageId: imageId,
+          displayImage: selectedImg.url 
+        })
+      }).catch(err => console.error('Failed to update display image:', err));
+    }
+  }, [images]);
 
   const selectAvatar = useCallback((imageId: string) => {
     setState(prev => ({ ...prev, selectedAvatarId: imageId }));
