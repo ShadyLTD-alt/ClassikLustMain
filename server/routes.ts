@@ -1,328 +1,330 @@
-            import type { Express, Request, Response, NextFunction } from "express";
-            import { createServer, type Server } from "http";
-            import { storage } from "./storage";
-            import multer from "multer";
-            import path from "path";
-            import { fileURLToPath } from "url";
-            import fs from "fs";
-            import { AuthDataValidator } from "@telegram-auth/server";
-            import { requireAuth, requireAdmin } from "./middleware/auth";
-            import { 
-              saveUpgradeToJSON, 
-              saveLevelToJSON, 
-              saveCharacterToJSON, 
-              savePlayerDataToJSON,
-              getUpgradesFromMemory,
-              getUpgradeFromMemory,
-              getCharactersFromMemory,
-              getCharacterFromMemory,
-              getLevelsFromMemory,
-              getLevelFromMemory
-            } from "./utils/dataLoader";
-            import { insertUpgradeSchema, insertCharacterSchema, insertLevelSchema, insertPlayerUpgradeSchema, insertMediaUploadSchema } from "@shared/schema";
-            import { generateSecureToken, getSessionExpiry } from "./utils/auth";
+import type { Express, Request, Response, NextFunction } from "express";
+import { createServer, type Server } from "http";
+import { storage } from "./storage";
+import multer from "multer";
+import path from "path";
+import { fileURLToPath } from "url";
+import fs from "fs";
+import { AuthDataValidator } from "@telegram-auth/server";
+import { requireAuth, requireAdmin } from "./middleware/auth";
+import { 
+  saveUpgradeToJSON, 
+  saveLevelToJSON, 
+  saveCharacterToJSON, 
+  savePlayerDataToJSON,
+  getUpgradesFromMemory,
+  getUpgradeFromMemory,
+  getCharactersFromMemory,
+  getCharacterFromMemory,
+  getLevelsFromMemory,
+  getLevelFromMemory,
+  syncAllGameData
+} from "./utils/dataLoader";
+import { insertUpgradeSchema, insertCharacterSchema, insertLevelSchema, insertPlayerUpgradeSchema, insertMediaUploadSchema } from "@shared/schema";
+import { generateSecureToken, getSessionExpiry } from "./utils/auth";
 
-            const __filename = fileURLToPath(import.meta.url);
-            const __dirname = path.dirname(__filename);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-            const storageConfig = multer.diskStorage({
-              destination: function (req, _file, cb) {
-                // Character name will be available in req.body after multer processes the form
-                const uploadPath = path.join(__dirname, "..", "uploads", "temp");
+const storageConfig = multer.diskStorage({
+  destination: function (req, _file, cb) {
+    // Character name will be available in req.body after multer processes the form
+    const uploadPath = path.join(__dirname, "..", "uploads", "temp");
 
-                if (!fs.existsSync(uploadPath)) {
-                  fs.mkdirSync(uploadPath, { recursive: true });
-                }
+    if (!fs.existsSync(uploadPath)) {
+      fs.mkdirSync(uploadPath, { recursive: true });
+    }
 
-                cb(null, uploadPath);
-              },
-              filename: function (_req, file, cb) {
-                const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-                cb(null, uniqueSuffix + path.extname(file.originalname));
-              },
-            });
+    cb(null, uploadPath);
+  },
+  filename: function (_req, file, cb) {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(null, uniqueSuffix + path.extname(file.originalname));
+  },
+});
 
-            const upload = multer({
-              storage: storageConfig,
-              limits: { fileSize: 10 * 1024 * 1024 },
-              fileFilter: (_req, file, cb) => {
-                const allowedTypes = /jpeg|jpg|png|gif|webp/;
-                const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-                const mimetype = allowedTypes.test(file.mimetype);
+const upload = multer({
+  storage: storageConfig,
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowedTypes = /jpeg|jpg|png|gif|webp/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
 
-                if (mimetype && extname) {
-                  return cb(null, true);
-                } else {
-                  cb(new Error("Only image files are allowed"));
-                }
-              }
-            });
+    if (mimetype && extname) {
+      return cb(null, true);
+    } else {
+      cb(new Error("Only image files are allowed"));
+    }
+  }
+});
 
 
-            export async function registerRoutes(app: Express): Promise<Server> {
-              console.log('🔧 Initializing routes...');
+export async function registerRoutes(app: Express): Promise<Server> {
+  console.log('🔧 Initializing routes...');
 
-              console.log('📤 Setting up /api/upload route...');
-              app.post("/api/upload", requireAuth, upload.single("image"), async (req, res) => {
-                console.log('📤 Upload request received');
-                console.log('📦 Request body:', req.body);
-                console.log('📁 File:', req.file ? req.file.filename : 'No file');
+  console.log('📤 Setting up /api/upload route...');
+  app.post("/api/upload", requireAuth, upload.single("image"), async (req, res) => {
+    console.log('📤 Upload request received');
+    console.log('📦 Request body:', req.body);
+    console.log('📁 File:', req.file ? req.file.filename : 'No file');
 
-                if (!req.file) {
-                  console.error('❌ No file uploaded');
-                  return res.status(400).json({ error: "No file uploaded" });
-                }
+    if (!req.file) {
+      console.error('❌ No file uploaded');
+      return res.status(400).json({ error: "No file uploaded" });
+    }
 
-                try {
-                  const body = req.body;
-                  const categoriesObj = JSON.parse(body.categories);
-                  const poses = JSON.parse(body.poses);
-                  
-                  const sanitizedCharacterName = body.characterName?.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 100);
-                  const allowedImageTypes = ['character', 'avatar', 'vip', 'other'];
-                  const imageType = allowedImageTypes.includes(body.imageType) ? body.imageType : 'character';
-                  
-                  if (!Array.isArray(poses) || !poses.every((p: any) => typeof p === 'string')) {
-                    fs.unlinkSync(req.file.path);
-                    return res.status(400).json({ error: "Poses must be an array of strings" });
-                  }
-                  
-                  const categories = [
-                    categoriesObj.nsfw ? 'nsfw' : null,
-                    categoriesObj.vip ? 'vip' : null,
-                    categoriesObj.event ? 'event' : null,
-                    categoriesObj.random ? 'random' : null
-                  ].filter((c): c is string => c !== null);
-                  
-                  const parsedData = {
-                    characterId: body.characterId,
-                    characterName: sanitizedCharacterName,
-                    imageType: imageType as 'character' | 'avatar' | 'vip' | 'other',
-                    unlockLevel: parseInt(body.unlockLevel) || 1,
-                    categories,
-                    poses,
-                    isHidden: body.isHidden === 'true',
-                    chatEnable: body.chatEnable === 'true',
-                    chatSendPercent: Math.min(100, Math.max(0, parseInt(body.chatSendPercent) || 0))
-                  };
+    try {
+      const body = req.body;
+      const categoriesObj = JSON.parse(body.categories);
+      const poses = JSON.parse(body.poses);
+      
+      const sanitizedCharacterName = body.characterName?.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 100);
+      const allowedImageTypes = ['character', 'avatar', 'vip', 'other'];
+      const imageType = allowedImageTypes.includes(body.imageType) ? body.imageType : 'character';
+      
+      if (!Array.isArray(poses) || !poses.every((p: any) => typeof p === 'string')) {
+        fs.unlinkSync(req.file.path);
+        return res.status(400).json({ error: "Poses must be an array of strings" });
+      }
+      
+      const categories = [
+        categoriesObj.nsfw ? 'nsfw' : null,
+        categoriesObj.vip ? 'vip' : null,
+        categoriesObj.event ? 'event' : null,
+        categoriesObj.random ? 'random' : null
+      ].filter((c): c is string => c !== null);
+      
+      const parsedData = {
+        characterId: body.characterId,
+        characterName: sanitizedCharacterName,
+        imageType: imageType as 'character' | 'avatar' | 'vip' | 'other',
+        unlockLevel: parseInt(body.unlockLevel) || 1,
+        categories,
+        poses,
+        isHidden: body.isHidden === 'true',
+        chatEnable: body.chatEnable === 'true',
+        chatSendPercent: Math.min(100, Math.max(0, parseInt(body.chatSendPercent) || 0))
+      };
 
-                  console.log('📋 Parsed data:', parsedData);
+      console.log('📋 Parsed data:', parsedData);
 
-                  if (!parsedData.characterId || !parsedData.characterName) {
-                    console.error('❌ Missing character ID or name');
-                    fs.unlinkSync(req.file.path);
-                    return res.status(400).json({ error: "Character ID and name are required" });
-                  }
+      if (!parsedData.characterId || !parsedData.characterName) {
+        console.error('❌ Missing character ID or name');
+        fs.unlinkSync(req.file.path);
+        return res.status(400).json({ error: "Character ID and name are required" });
+      }
 
-                  const finalDir = path.join(__dirname, "..", "uploads", "characters", parsedData.characterName, parsedData.imageType);
-                  if (!fs.existsSync(finalDir)) {
-                    fs.mkdirSync(finalDir, { recursive: true });
-                    console.log('📁 Created directory:', finalDir);
-                  }
+      const finalDir = path.join(__dirname, "..", "uploads", "characters", parsedData.characterName, parsedData.imageType);
+      if (!fs.existsSync(finalDir)) {
+        fs.mkdirSync(finalDir, { recursive: true });
+        console.log('📁 Created directory:', finalDir);
+      }
 
-                  const finalPath = path.join(finalDir, req.file.filename);
-                  fs.renameSync(req.file.path, finalPath);
-                  console.log('✅ File moved to:', finalPath);
+      const finalPath = path.join(finalDir, req.file.filename);
+      fs.renameSync(req.file.path, finalPath);
+      console.log('✅ File moved to:', finalPath);
 
-                  const fileUrl = `/uploads/characters/${parsedData.characterName}/${parsedData.imageType}/${req.file.filename}`;
+      const fileUrl = `/uploads/characters/${parsedData.characterName}/${parsedData.imageType}/${req.file.filename}`;
 
-                  console.log('💾 Creating media upload in database...');
-                  const mediaUpload = await storage.createMediaUpload({
-                    characterId: parsedData.characterId,
-                    url: fileUrl,
-                    type: parsedData.imageType,
-                    unlockLevel: parsedData.unlockLevel,
-                    categories: parsedData.categories,
-                    poses: parsedData.poses,
-                    isHidden: parsedData.isHidden,
-                    chatEnable: parsedData.chatEnable,
-                    chatSendPercent: parsedData.chatSendPercent,
-                  });
+      console.log('💾 Creating media upload in database...');
+      const mediaUpload = await storage.createMediaUpload({
+        characterId: parsedData.characterId,
+        url: fileUrl,
+        type: parsedData.imageType,
+        unlockLevel: parsedData.unlockLevel,
+        categories: parsedData.categories,
+        poses: parsedData.poses,
+        isHidden: parsedData.isHidden,
+        chatEnable: parsedData.chatEnable,
+        chatSendPercent: parsedData.chatSendPercent,
+      });
 
-                  console.log('✅ Media upload created:', mediaUpload.id);
-                  res.json({ url: fileUrl, media: mediaUpload });
-                } catch (error) {
-                  if (req.file && fs.existsSync(req.file.path)) {
-                    fs.unlinkSync(req.file.path);
-                  }
-                  console.error('💥 Error uploading file:', error);
-                  res.status(500).json({ error: 'Failed to upload file', details: (error as Error).message });
-                }
-              });
+      console.log('✅ Media upload created:', mediaUpload.id);
+      res.json({ url: fileUrl, media: mediaUpload });
+    } catch (error) {
+      if (req.file && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+      console.error('💥 Error uploading file:', error);
+      res.status(500).json({ error: 'Failed to upload file', details: (error as Error).message });
+    }
+  });
 
-              console.log('🔐 Setting up auth routes...');
-              app.get("/api/auth/me", requireAuth, async (req, res) => {
-                try {
-                  const player = await storage.getPlayer(req.player!.id);
-                  if (!player) {
-                    return res.status(404).json({ error: 'Player not found' });
-                  }
-                  res.json({ success: true, player });
-                } catch (error) {
-                  console.error('Error fetching current player:', error);
-                  res.status(500).json({ error: 'Failed to fetch player data' });
-                }
-              });
+  console.log('🔐 Setting up auth routes...');
+  app.get("/api/auth/me", requireAuth, async (req, res) => {
+    try {
+      const player = await storage.getPlayer(req.player!.id);
+      if (!player) {
+        return res.status(404).json({ error: 'Player not found' });
+      }
+      res.json({ success: true, player });
+    } catch (error) {
+      console.error('Error fetching current player:', error);
+      res.status(500).json({ error: 'Failed to fetch player data' });
+    }
+  });
 
-              app.post("/api/auth/dev", async (req, res) => {
-                // Only allow in development mode
-                if (process.env.NODE_ENV === 'production') {
-                  return res.status(403).json({ error: 'Development login not available in production' });
-                }
+  app.post("/api/auth/dev", async (req, res) => {
+    // Only allow in development mode
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(403).json({ error: 'Development login not available in production' });
+    }
 
-                console.log('🛠️ Dev auth request received');
-                console.log('📦 Request body:', req.body);
+    console.log('🛠️ Dev auth request received');
+    console.log('📦 Request body:', req.body);
 
-                try {
-                  const { username } = req.body;
+    try {
+      const { username } = req.body;
 
-                  if (!username || username.trim().length === 0) {
-                    console.log('❌ No username provided');
-                    return res.status(400).json({ error: 'Username is required' });
-                  }
+      if (!username || username.trim().length === 0) {
+        console.log('❌ No username provided');
+        return res.status(400).json({ error: 'Username is required' });
+      }
 
-                  const sanitizedUsername = username.trim().substring(0, 50);
-                  const devTelegramId = `dev_${sanitizedUsername.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+      const sanitizedUsername = username.trim().substring(0, 50);
+      const devTelegramId = `dev_${sanitizedUsername.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
 
-                  console.log('👤 Dev login for:', sanitizedUsername);
+      console.log('👤 Dev login for:', sanitizedUsername);
 
-                  let player = await storage.getPlayerByTelegramId(devTelegramId);
+      let player = await storage.getPlayerByTelegramId(devTelegramId);
 
-                  if (!player) {
-                    console.log('➕ Creating new dev player...');
-                    player = await storage.createPlayer({
-                      telegramId: devTelegramId,
-                      username: sanitizedUsername,
-                      points: 0,
-                      energy: 1000,
-                      maxEnergy: 1000,
-                      level: 1,
-                      experience: 0,
-                      passiveIncomeRate: 0,
-                      isAdmin: false,
-                    });
-                    console.log('✅ New dev player created:', player.id);
-                    await savePlayerDataToJSON(player);
-                  } else {
-                    console.log('👋 Existing dev player found, updating last login...');
-                    await storage.updatePlayer(player.id, {
-                      lastLogin: new Date(),
-                    });
-                    await savePlayerDataToJSON(player);
-                  }
+      if (!player) {
+        console.log('➕ Creating new dev player...');
+        player = await storage.createPlayer({
+          telegramId: devTelegramId,
+          username: sanitizedUsername,
+          points: 0,
+          energy: 1000,
+          maxEnergy: 1000,
+          level: 1,
+          experience: 0,
+          passiveIncomeRate: 0,
+          isAdmin: false,
+        });
+        console.log('✅ New dev player created:', player.id);
+        await savePlayerDataToJSON(player);
+      } else {
+        console.log('👋 Existing dev player found, updating last login...');
+        await storage.updatePlayer(player.id, {
+          lastLogin: new Date(),
+        });
+        await savePlayerDataToJSON(player);
+      }
 
-                  const sessionToken = generateSecureToken();
-                  await storage.createSession({
-                    playerId: player.id,
-                    token: sessionToken,
-                    expiresAt: getSessionExpiry(),
-                  });
+      const sessionToken = generateSecureToken();
+      await storage.createSession({
+        playerId: player.id,
+        token: sessionToken,
+        expiresAt: getSessionExpiry(),
+      });
 
-                  console.log('🎉 Dev auth successful for player:', player.username);
-                  res.json({
-                    success: true,
-                    player,
-                    sessionToken,
-                  });
-                } catch (error) {
-                  console.error('💥 Dev auth error:', error);
-                  console.error('📍 Error stack:', (error as Error).stack);
-                  res.status(500).json({ error: 'Authentication failed', details: (error as Error).message });
-                }
-              });
+      console.log('🎉 Dev auth successful for player:', player.username);
+      res.json({
+        success: true,
+        player,
+        sessionToken,
+      });
+    } catch (error) {
+      console.error('💥 Dev auth error:', error);
+      console.error('📍 Error stack:', (error as Error).stack);
+      res.status(500).json({ error: 'Authentication failed', details: (error as Error).message });
+    }
+  });
 
-              console.log('📱 Setting up Telegram auth...');
-              app.post("/api/auth/telegram", async (req, res) => {
-                console.log('🔐 Telegram auth request received');
-                console.log('📦 Request body:', JSON.stringify(req.body, null, 2));
+  console.log('📱 Setting up Telegram auth...');
+  app.post("/api/auth/telegram", async (req, res) => {
+    console.log('🔐 Telegram auth request received');
+    console.log('📦 Request body:', JSON.stringify(req.body, null, 2));
 
-                try {
-                  const { initData } = req.body;
-                  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    try {
+      const { initData } = req.body;
+      const botToken = process.env.TELEGRAM_BOT_TOKEN;
 
-                  console.log('🔑 Bot token exists:', !!botToken);
-                  console.log('📝 InitData exists:', !!initData);
-                  console.log('📝 InitData length:', initData?.length || 0);
+      console.log('🔑 Bot token exists:', !!botToken);
+      console.log('📝 InitData exists:', !!initData);
+      console.log('📝 InitData length:', initData?.length || 0);
 
-                  if (!botToken) {
-                    console.error('❌ Missing TELEGRAM_BOT_TOKEN');
-                    return res.status(500).json({ error: 'Telegram authentication not configured' });
-                  }
+      if (!botToken) {
+        console.error('❌ Missing TELEGRAM_BOT_TOKEN');
+        return res.status(500).json({ error: 'Telegram authentication not configured' });
+      }
 
-                  if (!initData) {
-                    console.error('❌ Missing initData in request');
-                    return res.status(400).json({ error: 'Missing initData' });
-                  }
+      if (!initData) {
+        console.error('❌ Missing initData in request');
+        return res.status(400).json({ error: 'Missing initData' });
+      }
 
-                  console.log('🔍 Parsing initData...');
-                  const validator = new AuthDataValidator({ botToken });
-                  const dataMap = new Map(new URLSearchParams(initData).entries());
+      console.log('🔍 Parsing initData...');
+      const validator = new AuthDataValidator({ botToken });
+      const dataMap = new Map(new URLSearchParams(initData).entries());
 
-                  console.log('📊 Parsed data map entries:', Array.from(dataMap.entries()));
+      console.log('📊 Parsed data map entries:', Array.from(dataMap.entries()));
 
-                  console.log('✅ Validating Telegram data...');
-                  const validationResult = await validator.validate(dataMap);
+      console.log('✅ Validating Telegram data...');
+      const validationResult = await validator.validate(dataMap);
 
-                  console.log('📋 Validation result:', JSON.stringify(validationResult, null, 2));
+      console.log('📋 Validation result:', JSON.stringify(validationResult, null, 2));
 
-                  if (!validationResult || !validationResult.id) {
-                    console.error('❌ Invalid validation result or missing ID');
-                    return res.status(401).json({ error: 'Invalid Telegram authentication' });
-                  }
+      if (!validationResult || !validationResult.id) {
+        console.error('❌ Invalid validation result or missing ID');
+        return res.status(401).json({ error: 'Invalid Telegram authentication' });
+      }
 
-                  const telegramId = validationResult.id.toString();
-                  console.log('👤 Telegram ID:', telegramId);
+      const telegramId = validationResult.id.toString();
+      console.log('👤 Telegram ID:', telegramId);
 
-                  if (!telegramId) {
-                    console.error('❌ Failed to extract Telegram ID');
-                    return res.status(400).json({ error: 'Missing Telegram user ID' });
-                  }
+      if (!telegramId) {
+        console.error('❌ Failed to extract Telegram ID');
+        return res.status(400).json({ error: 'Missing Telegram user ID' });
+      }
 
-                  console.log('🔍 Looking up player by Telegram ID...');
-                  let player = await storage.getPlayerByTelegramId(telegramId);
+      console.log('🔍 Looking up player by Telegram ID...');
+      let player = await storage.getPlayerByTelegramId(telegramId);
 
-                  if (!player) {
-                    console.log('➕ Creating new player...');
-                    player = await storage.createPlayer({
-                      telegramId,
-                      username: (validationResult as any).username || (validationResult as any).first_name || 'TelegramUser',
-                      points: 0,
-                      energy: 1000,
-                      maxEnergy: 1000,
-                      level: 1,
-                      passiveIncomeRate: 0,
-                      isAdmin: false,
-                    });
-                    console.log('✅ New player created:', player.id);
-                    await savePlayerDataToJSON(player);
-                  } else {
-                    console.log('👋 Existing player found, updating last login...');
-                    await storage.updatePlayer(player.id, {
-                      lastLogin: new Date(),
-                    });
-                    await savePlayerDataToJSON(player);
-                  }
+      if (!player) {
+        console.log('➕ Creating new player...');
+        player = await storage.createPlayer({
+          telegramId,
+          username: (validationResult as any).username || (validationResult as any).first_name || 'TelegramUser',
+          points: 0,
+          energy: 1000,
+          maxEnergy: 1000,
+          level: 1,
+          passiveIncomeRate: 0,
+          isAdmin: false,
+        });
+        console.log('✅ New player created:', player.id);
+        await savePlayerDataToJSON(player);
+      } else {
+        console.log('👋 Existing player found, updating last login...');
+        await storage.updatePlayer(player.id, {
+          lastLogin: new Date(),
+        });
+        await savePlayerDataToJSON(player);
+      }
 
-                  const sessionToken = generateSecureToken();
-                  const session = await storage.createSession({
-                    playerId: player.id,
-                    token: sessionToken,
-                    expiresAt: getSessionExpiry(),
-                  });
+      const sessionToken = generateSecureToken();
+      const session = await storage.createSession({
+        playerId: player.id,
+        token: sessionToken,
+        expiresAt: getSessionExpiry(),
+      });
 
-                  console.log('🎉 Auth successful for player:', player.username);
-                  res.json({
-                    success: true,
-                    player,
-                    sessionToken,
-                  });
-                } catch (error) {
-                  console.error('💥 Telegram auth error:', error);
-                  console.error('📍 Error stack:', (error as Error).stack);
-                  res.status(500).json({ error: 'Authentication failed', details: (error as Error).message });
-                }
-              });
-              console.log('⚙️ Setting up game data routes...');
+      console.log('🎉 Auth successful for player:', player.username);
+      res.json({
+        success: true,
+        player,
+        sessionToken,
+      });
+    } catch (error) {
+      console.error('💥 Telegram auth error:', error);
+      console.error('📍 Error stack:', (error as Error).stack);
+      res.status(500).json({ error: 'Authentication failed', details: (error as Error).message });
+    }
+  });
+
+  console.log('⚙️ Setting up game data routes...');
   // Get all upgrades (from memory)
   app.get("/api/upgrades", requireAuth, async (_req, res) => {
     try {
@@ -554,13 +556,23 @@
   console.log('👑 Setting up admin routes...');
   app.post("/api/admin/sync-data", requireAuth, requireAdmin, async (_req, res) => {
     try {
-      // This endpoint might need to reload the in-memory data after syncing
-      // For now, assuming dataLoader handles this or it's done elsewhere on startup.
-      // await syncAllGameData(); // This function needs to be reviewed if it loads from JSONs or DB
-      res.json({ success: true, message: 'Game data synchronization logic needs review for in-memory use' });
+      await syncAllGameData();
+      res.json({ success: true, message: 'Game data synchronized successfully' });
     } catch (error) {
       console.error('Error syncing game data:', error);
       res.status(500).json({ error: 'Failed to sync game data' });
+    }
+  });
+
+  // Admin upgrade routes
+  app.get("/api/admin/upgrades", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const includeHidden = req.query.includeHidden === 'true';
+      const upgrades = getUpgradesFromMemory(includeHidden);
+      res.json({ upgrades });
+    } catch (error) {
+      console.error('Error fetching upgrades for admin:', error);
+      res.status(500).json({ error: 'Failed to fetch upgrades' });
     }
   });
 
@@ -572,7 +584,7 @@
         return res.status(400).json({ error: 'Invalid upgrade data', details: validation.error });
       }
 
-      // Create in JSON and then save to DB
+      // Create in DB and then save to JSON
       const upgrade = await storage.createUpgrade(validation.data);
       await saveUpgradeToJSON(validation.data); // Save to JSON for in-memory loading
 
@@ -580,6 +592,22 @@
     } catch (error) {
       console.error('Error creating upgrade:', error);
       res.status(500).json({ error: 'Failed to create upgrade' });
+    }
+  });
+
+  app.get("/api/admin/upgrades/:id", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const upgrade = getUpgradeFromMemory(id);
+      
+      if (!upgrade) {
+        return res.status(404).json({ error: 'Upgrade not found' });
+      }
+
+      res.json({ upgrade });
+    } catch (error) {
+      console.error('Error fetching upgrade:', error);
+      res.status(500).json({ error: 'Failed to fetch upgrade' });
     }
   });
 
@@ -604,9 +632,200 @@
     }
   });
 
+  app.delete("/api/admin/upgrades/:id", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      const deleted = await storage.deleteUpgrade(id);
+      if (!deleted) {
+        return res.status(404).json({ error: 'Upgrade not found' });
+      }
+
+      // Note: You might want to also remove from JSON file here
+      // This would require implementing a removeUpgradeFromJSON function
+      
+      res.json({ success: true, message: 'Upgrade deleted' });
+    } catch (error) {
+      console.error('Error deleting upgrade:', error);
+      res.status(500).json({ error: 'Failed to delete upgrade' });
+    }
+  });
+
+  // Admin character routes
+  app.get("/api/admin/characters", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const includeHidden = req.query.includeHidden === 'true';
+      const characters = getCharactersFromMemory(includeHidden);
+      res.json({ characters });
+    } catch (error) {
+      console.error('Error fetching characters for admin:', error);
+      res.status(500).json({ error: 'Failed to fetch characters' });
+    }
+  });
+
+  app.post("/api/admin/characters", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const validation = insertCharacterSchema.safeParse(req.body);
+
+      if (!validation.success) {
+        return res.status(400).json({ error: 'Invalid character data', details: validation.error });
+      }
+
+      // Create in DB and then save to JSON
+      const character = await storage.createCharacter(validation.data);
+      await saveCharacterToJSON(validation.data); // Save to JSON for in-memory loading
+
+      res.json({ character, message: 'Character created, saved to JSON and DB' });
+    } catch (error) {
+      console.error('Error creating character:', error);
+      res.status(500).json({ error: 'Failed to create character' });
+    }
+  });
+
+  app.get("/api/admin/characters/:id", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const character = getCharacterFromMemory(id);
+      
+      if (!character) {
+        return res.status(404).json({ error: 'Character not found' });
+      }
+
+      res.json({ character });
+    } catch (error) {
+      console.error('Error fetching character:', error);
+      res.status(500).json({ error: 'Failed to fetch character' });
+    }
+  });
+
+  app.patch("/api/admin/characters/:id", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const updates = req.body;
+
+      // Update in DB and then save to JSON
+      const updatedCharacter = await storage.updateCharacter(id, updates);
+
+      if (!updatedCharacter) {
+        return res.status(404).json({ error: 'Character not found' });
+      }
+
+      await saveCharacterToJSON(updatedCharacter); // Save to JSON for in-memory loading
+
+      res.json({ character: updatedCharacter });
+    } catch (error) {
+      console.error('Error updating character:', error);
+      res.status(500).json({ error: 'Failed to update character' });
+    }
+  });
+
+  app.delete("/api/admin/characters/:id", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      const deleted = await storage.deleteCharacter(id);
+      if (!deleted) {
+        return res.status(404).json({ error: 'Character not found' });
+      }
+
+      // Note: You might want to also remove from JSON file here
+      
+      res.json({ success: true, message: 'Character deleted' });
+    } catch (error) {
+      console.error('Error deleting character:', error);
+      res.status(500).json({ error: 'Failed to delete character' });
+    }
+  });
+
+  // Admin level routes
+  app.get("/api/admin/levels", requireAuth, requireAdmin, async (_req, res) => {
+    try {
+      const levels = getLevelsFromMemory();
+      res.json({ levels });
+    } catch (error) {
+      console.error('Error fetching levels for admin:', error);
+      res.status(500).json({ error: 'Failed to fetch levels' });
+    }
+  });
+
+  app.post("/api/admin/levels", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const validation = insertLevelSchema.safeParse(req.body);
+
+      if (!validation.success) {
+        return res.status(400).json({ error: 'Invalid level data', details: validation.error });
+      }
+
+      // Create in DB and then save to JSON
+      const level = await storage.createLevel(validation.data);
+      await saveLevelToJSON(validation.data); // Save to JSON for in-memory loading
+
+      res.json({ level, message: 'Level created, saved to JSON and DB' });
+    } catch (error) {
+      console.error('Error creating level:', error);
+      res.status(500).json({ error: 'Failed to create level' });
+    }
+  });
+
+  app.get("/api/admin/levels/:level", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const level = parseInt(req.params.level);
+      const levelData = getLevelFromMemory(level);
+      
+      if (!levelData) {
+        return res.status(404).json({ error: 'Level not found' });
+      }
+
+      res.json({ level: levelData });
+    } catch (error) {
+      console.error('Error fetching level:', error);
+      res.status(500).json({ error: 'Failed to fetch level' });
+    }
+  });
+
+  app.patch("/api/admin/levels/:level", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const level = parseInt(req.params.level);
+      const updates = req.body;
+      updates.level = level; // Ensure level is set correctly
+
+      // Update in DB and then save to JSON
+      const updatedLevel = await storage.updateLevel(level, updates);
+
+      if (!updatedLevel) {
+        return res.status(404).json({ error: 'Level not found' });
+      }
+
+      await saveLevelToJSON(updatedLevel); // Save to JSON for in-memory loading
+
+      res.json({ level: updatedLevel });
+    } catch (error) {
+      console.error('Error updating level:', error);
+      res.status(500).json({ error: 'Failed to update level' });
+    }
+  });
+
+  app.delete("/api/admin/levels/:level", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const level = parseInt(req.params.level);
+      
+      const deleted = await storage.deleteLevel(level);
+      if (!deleted) {
+        return res.status(404).json({ error: 'Level not found' });
+      }
+
+      // Note: You might want to also remove from JSON file here
+      
+      res.json({ success: true, message: 'Level deleted' });
+    } catch (error) {
+      console.error('Error deleting level:', error);
+      res.status(500).json({ error: 'Failed to delete level' });
+    }
+  });
+
   console.log('🔧 Creating HTTP server...');
   const httpServer = createServer(app);
   
   console.log('✅ All routes registered successfully');
   return httpServer;
-            }
+}
