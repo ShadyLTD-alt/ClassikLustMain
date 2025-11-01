@@ -5,7 +5,6 @@ interface GameState {
   points: number;
   energy: number;
   maxEnergy: number;
-  level: number;
   selectedCharacterId: string;
   selectedImageId: string | null;
   selectedAvatarId: string | null;
@@ -67,7 +66,7 @@ const INITIAL_STATE: GameState = {
   displayImage: null // Initialize displayImage to null
 };
 
-export function GameProvider({ children }: { children: ReactNode }) {
+export function GameProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<GameState>(INITIAL_STATE);
   const [upgrades, setUpgrades] = useState<UpgradeConfig[]>([]);
   const [characters, setCharacters] = useState<CharacterConfig[]>([]);
@@ -89,7 +88,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
       try {
         console.log('🔄 Starting to load game data...');
-        
+
         // STEP 1: Load player data FIRST
         console.log('📥 Loading player data...');
         const playerRes = await fetch('/api/player/me', {
@@ -103,7 +102,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         }
 
         const playerData = await playerRes.json();
-        
+
         if (playerData?.player) {
           const player = playerData.player;
           setState(prev => ({
