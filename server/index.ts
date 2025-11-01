@@ -3,6 +3,7 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import path from "path";
 import { fileURLToPath } from "url";
+import { syncAllGameData } from "./utils/dataLoader";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -52,6 +53,9 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Sync game data from JSON files to database on startup
+  await syncAllGameData();
+
   const server = await registerRoutes(app);
 
   app.use("/uploads", express.static(path.join(__dirname, "..", "uploads")));

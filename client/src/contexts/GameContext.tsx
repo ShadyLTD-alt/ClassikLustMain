@@ -128,6 +128,54 @@ export function GameProvider({ children }: { children: ReactNode }) {
       }
     };
 
+    const loadGameConfig = async () => {
+      const sessionToken = localStorage.getItem('sessionToken');
+      if (!sessionToken) return;
+
+      try {
+        // Load upgrades
+        const upgradesResponse = await fetch('/api/upgrades', {
+          headers: {
+            'Authorization': `Bearer ${sessionToken}`
+          }
+        });
+
+        if (upgradesResponse.ok) {
+          const upgradesData = await upgradesResponse.json();
+          setUpgrades(upgradesData.upgrades || []);
+          console.log('✅ Loaded upgrades from server:', upgradesData.upgrades?.length);
+        }
+
+        // Load characters
+        const charactersResponse = await fetch('/api/characters', {
+          headers: {
+            'Authorization': `Bearer ${sessionToken}`
+          }
+        });
+
+        if (charactersResponse.ok) {
+          const charactersData = await charactersResponse.json();
+          setCharacters(charactersData.characters || []);
+          console.log('✅ Loaded characters from server:', charactersData.characters?.length);
+        }
+
+        // Load levels
+        const levelsResponse = await fetch('/api/levels', {
+          headers: {
+            'Authorization': `Bearer ${sessionToken}`
+          }
+        });
+
+        if (levelsResponse.ok) {
+          const levelsData = await levelsResponse.json();
+          setLevelConfigs(levelsData.levels || []);
+          console.log('✅ Loaded levels from server:', levelsData.levels?.length);
+        }
+      } catch (error) {
+        console.error('Failed to load game configuration:', error);
+      }
+    };
+
     const loadMediaUploads = async () => {
       const sessionToken = localStorage.getItem('sessionToken');
       if (!sessionToken) return;
@@ -162,6 +210,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     };
 
     loadPlayerData();
+    loadGameConfig();
     loadMediaUploads();
   }, []);
 
