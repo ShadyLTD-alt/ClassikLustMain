@@ -623,7 +623,9 @@ export default function ImageUploader({ adminMode = false }: ImageUploaderProps)
       <DialogContent className="max-w-4xl max-h-[80vh]">
         <DialogHeader>
           <DialogTitle>Image Gallery - {characters.find(c => c.id === selectedCharacterId)?.name}</DialogTitle>
-          <DialogDescription>Select an unlocked image to set as your display picture</DialogDescription>
+          <DialogDescription>
+            Select an unlocked image to set as your display picture
+          </DialogDescription>
         </DialogHeader>
         <UploaderContent />
       </DialogContent>
