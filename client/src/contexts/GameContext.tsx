@@ -27,11 +27,11 @@ interface GameContextType {
   levelConfigs: LevelConfig[];
   theme: ThemeConfig;
   tap: () => void;
-  purchaseUpgrade: (upgradeId: string) => boolean;
+  purchaseUpgrade: (upgradeId: string) => Promise<boolean>;
   selectCharacter: (characterId: string) => void;
   selectImage: (imageId: string) => void;
   selectAvatar: (imageId: string) => void;
-  levelUp: () => boolean;
+  levelUp: () => Promise<boolean>;
   canLevelUp: () => boolean;
   toggleAdmin: () => void;
   updateUpgradeConfig: (upgrade: UpgradeConfig) => void;
@@ -244,7 +244,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
   // Save state before user leaves/refreshes
   useEffect(() => {
-    const handleBeforeUnload = async (e: BeforeUnloadEvent) => {
+    const handleBeforeUnload = async () => {
       const sessionToken = localStorage.getItem('sessionToken');
       if (sessionToken) {
         // Use sendBeacon for reliable save on page unload
@@ -349,7 +349,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     });
   }, [upgrades, characters]);
 
-  const purchaseUpgrade = useCallback(async (upgradeId: string) => {
+  const purchaseUpgrade = useCallback(async (upgradeId: string): Promise<boolean> => {
     // Prevent duplicate purchases
     if (pendingPurchases.has(upgradeId)) {
       return false;
@@ -498,7 +498,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     return meetsRequirements && hasEnoughPoints;
   }, [state.level, state.points, state.upgrades, levelConfigs]);
 
-  const levelUp = useCallback(async () => {
+  const levelUp = useCallback(async (): Promise<boolean> => {
     if (!canLevelUp()) return false;
 
     const nextLevel = state.level + 1;
