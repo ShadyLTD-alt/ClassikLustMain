@@ -61,11 +61,12 @@ function App() {
           setLoadingProgress(60);
           if (response.ok) {
             const data = await response.json();
-            setLoadingProgress(90);
+            console.log('📦 [v3.0] Player data received:', data.player?.username);
             setUserData(data.player);
             setLoadingProgress(100);
+            console.log('🎯 [v3.0] About to set authState to authenticated');
             setAuthState('authenticated');
-            console.log('✅ [v3.0] Session valid, user authenticated');
+            console.log('✅ [v3.0] Session valid, authState updated to:', 'authenticated');
             return;
           } else {
             console.log('❌ [v3.0] Session invalid, clearing token');
@@ -123,14 +124,19 @@ function App() {
     setAuthState('authenticated');
   };
 
+  console.log('🎨 [v3.0] App render - authState:', authState, 'progress:', loadingProgress);
+
   if (authState === 'loading') {
+    console.log('🔄 [v3.0] Rendering LoadingScreen');
     return <LoadingScreen progress={loadingProgress} />;
   }
 
   if (authState === 'login' || authState === 'unauthenticated') {
+    console.log('🔐 [v3.0] Rendering LoginScreen');
     return <LoginScreen onLogin={handleLogin} />;
   }
 
+  console.log('🎮 [v3.0] Rendering Game');
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
