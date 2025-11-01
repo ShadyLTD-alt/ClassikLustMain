@@ -1,0 +1,48 @@
+{
+  "characters": [
+    {
+      "id": "shadow",
+      "name": "Shadow",
+      "description": "A mysterious character shrouded in darkness",
+      "unlockLevel": 1,
+      "rarity": "common",
+      "defaultImage": "",
+      "avatarImage": "",
+      "displayImage": "",
+      "isHidden": false
+    },
+    {
+      "id": "frost",
+      "name": "Frost",
+      "description": "An ice-cold warrior with crystalline powers",
+      "unlockLevel": 3,
+      "rarity": "common",
+      "defaultImage": "",
+      "avatarImage": "",
+      "displayImage": "",
+      "isHidden": false
+    },
+    {
+      "id": "stella",
+      "name": "Stella",
+      "description": "A radiant star guardian with celestial abilities",
+      "unlockLevel": 5,
+      "rarity": "rare",
+      "defaultImage": "",
+      "avatarImage": "",
+      "displayImage": "",
+      "isHidden": false
+    },
+    {
+      "id": "aria",
+      "name": "Aria",
+      "description": "A melodic mage who weaves magic through song",
+      "unlockLevel": 7,
+      "rarity": "rare",
+      "defaultImage": "",
+      "avatarImage": "",
+      "displayImage": "",
+      "isHidden": false
+    }
+  ]
+}
