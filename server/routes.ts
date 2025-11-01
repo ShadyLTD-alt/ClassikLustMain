@@ -85,34 +85,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post("/api/auth/telegram", async (req, res) => {
+    console.log('🔐 Telegram auth request received');
+    console.log('📦 Request body:', JSON.stringify(req.body, null, 2));
+    
     try {
       const { initData } = req.body;
       const botToken = process.env.TELEGRAM_BOT_TOKEN;
       
+      console.log('🔑 Bot token exists:', !!botToken);
+      console.log('📝 InitData exists:', !!initData);
+      console.log('📝 InitData length:', initData?.length || 0);
+      
       if (!botToken) {
+        console.error('❌ Missing TELEGRAM_BOT_TOKEN');
         return res.status(500).json({ error: 'Telegram authentication not configured' });
       }
       
       if (!initData) {
+        console.error('❌ Missing initData in request');
         return res.status(400).json({ error: 'Missing initData' });
       }
 
+      console.log('🔍 Parsing initData...');
       const validator = new AuthDataValidator({ botToken });
       const dataMap = new Map(new URLSearchParams(initData).entries());
+      
+      console.log('📊 Parsed data map entries:', Array.from(dataMap.entries()));
+      
+      console.log('✅ Validating Telegram data...');
       const validationResult = await validator.validate(dataMap);
       
+      console.log('📋 Validation result:', JSON.stringify(validationResult, null, 2));
+      
       if (!validationResult || !validationResult.id) {
+        console.error('❌ Invalid validation result or missing ID');
         return res.status(401).json({ error: 'Invalid Telegram authentication' });
       }
 
       const telegramId = validationResult.id.toString();
+      console.log('👤 Telegram ID:', telegramId);
+      
       if (!telegramId) {
+        console.error('❌ Failed to extract Telegram ID');
         return res.status(400).json({ error: 'Missing Telegram user ID' });
       }
 
+      console.log('🔍 Looking up player by Telegram ID...');
       let player = await storage.getPlayerByTelegramId(telegramId);
       
       if (!player) {
+        console.log('➕ Creating new player...');
         player = await storage.createPlayer({
           telegramId,
           username: (validationResult as any).username || (validationResult as any).first_name || 'TelegramUser',
@@ -123,19 +145,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
           passiveIncomeRate: 0,
           isAdmin: false,
         });
+        console.log('✅ New player created:', player.id);
       } else {
+        console.log('👋 Existing player found, updating last login...');
         await storage.updatePlayer(player.id, {
           lastLogin: new Date(),
         });
       }
 
+      console.log('🎉 Auth successful for player:', player.username);
       res.json({
         success: true,
         player,
       });
     } catch (error) {
-      console.error('Telegram auth error:', error);
-      res.status(500).json({ error: 'Authentication failed' });
+      console.error('💥 Telegram auth error:', error);
+      console.error('📍 Error stack:', (error as Error).stack);
+      res.status(500).json({ error: 'Authentication failed', details: (error as Error).message });
     }
   });
 
