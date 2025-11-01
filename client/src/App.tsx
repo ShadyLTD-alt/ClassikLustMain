@@ -30,12 +30,6 @@ function App() {
       console.log('🚀 App.tsx checkAuth starting...');
       setLoadingProgress(20);
       
-      // Check localStorage for saved player data
-      const savedPlayer = localStorage.getItem('playerData');
-      console.log('👤 Saved player:', savedPlayer);
-      
-      setLoadingProgress(50);
-      
       // Check if running in Telegram WebApp
       const tg = (window as any).Telegram?.WebApp;
       console.log('📱 Telegram WebApp check:', { 
@@ -52,58 +46,64 @@ function App() {
         tg.expand();
       }
       
-      if (tg && tg.initData && tg.initData.length > 0) {
-        console.log('✅ Telegram WebApp detected, attempting auto-auth...');
-        setLoadingProgress(70);
-        try {
-          console.log('📤 Sending auto-auth request...');
-          const response = await fetch("/api/auth/telegram", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ initData: tg.initData }),
-          });
-          console.log('📥 Auto-auth response status:', response.status);
-          const data = await response.json();
-          console.log('📦 Auto-auth response data:', data);
-          
-          if (data.success && data.player) {
-            console.log('🎉 Auto-auth successful!');
-            localStorage.setItem('playerData', JSON.stringify(data.player));
-            setUserData(data.player);
-            setLoadingProgress(100);
-            setTimeout(() => setAuthState('authenticated'), 500);
-            return;
-          } else {
-            console.log('⚠️ Auto-auth unsuccessful:', data);
-          }
-        } catch (error) {
-          console.error('💥 Auto-auth failed:', error);
-        }
-      } else {
-        console.log('ℹ️ Not in Telegram WebApp or no initData available');
-      }
+      setLoadingProgress(40);
       
-      setLoadingProgress(80);
+      // Check localStorage for saved player data FIRST
+      const savedPlayer = localStorage.getItem('playerData');
+      console.log('👤 Saved player exists:', !!savedPlayer);
       
-      // Try to use saved player data for auto-login
+      // If we have saved player data with telegramId, use it immediately
       if (savedPlayer) {
         try {
           const playerData = JSON.parse(savedPlayer);
-          // Only auto-login if we have a valid Telegram ID
-          if (playerData.telegramId) {
-            console.log('🔄 Auto-login with saved player:', playerData.username);
+          if (playerData.telegramId && playerData.id) {
+            console.log('✅ Valid saved session found for:', playerData.username);
             setUserData(playerData);
             setLoadingProgress(100);
             setTimeout(() => setAuthState('authenticated'), 500);
             return;
           } else {
-            console.log('⚠️ Saved player has no telegramId, clearing...');
+            console.log('⚠️ Saved player missing telegramId or id, clearing...');
             localStorage.removeItem('playerData');
           }
         } catch (error) {
           console.error('💥 Failed to parse saved player:', error);
           localStorage.removeItem('playerData');
         }
+      }
+      
+      setLoadingProgress(60);
+      
+      // Only try Telegram auth if we don't have a valid saved session
+      if (tg && tg.initData && tg.initData.length > 0) {
+        console.log('🔑 No saved session, attempting Telegram auth...');
+        setLoadingProgress(70);
+        try {
+          console.log('📤 Sending auth request...');
+          const response = await fetch("/api/auth/telegram", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ initData: tg.initData }),
+          });
+          console.log('📥 Auth response status:', response.status);
+          const data = await response.json();
+          console.log('📦 Auth response data:', data);
+          
+          if (data.success && data.player) {
+            console.log('🎉 Telegram auth successful!');
+            localStorage.setItem('playerData', JSON.stringify(data.player));
+            setUserData(data.player);
+            setLoadingProgress(100);
+            setTimeout(() => setAuthState('authenticated'), 500);
+            return;
+          } else {
+            console.log('⚠️ Telegram auth unsuccessful:', data);
+          }
+        } catch (error) {
+          console.error('💥 Telegram auth failed:', error);
+        }
+      } else {
+        console.log('ℹ️ No initData available for Telegram auth');
       }
       
       console.log('🔐 No valid session found, showing login screen');
