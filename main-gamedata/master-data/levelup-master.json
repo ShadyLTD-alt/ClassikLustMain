@@ -12,18 +12,86 @@
       "level": 2,
       "experienceRequired": 100,
       "requirements": [
-        "Reach 100 total points"
+        {
+          "0": "R",
+          "1": "e",
+          "2": "a",
+          "3": "c",
+          "4": "h",
+          "5": " ",
+          "6": "1",
+          "7": "0",
+          "8": "0",
+          "9": " ",
+          "10": "t",
+          "11": "o",
+          "12": "t",
+          "13": "a",
+          "14": "l",
+          "15": " ",
+          "16": "p",
+          "17": "o",
+          "18": "i",
+          "19": "n",
+          "20": "t",
+          "21": "s",
+          "minLevel": 3,
+          "upgradeId": "perHour"
+        }
       ],
       "unlocks": [
-        "Upgrade: Points Per Tap Level 2"
+        "New Character!"
       ]
     },
     {
       "level": 3,
       "experienceRequired": 250,
       "requirements": [
-        "Reach 250 total points",
-        "New requirement"
+        {
+          "0": "R",
+          "1": "e",
+          "2": "a",
+          "3": "c",
+          "4": "h",
+          "5": " ",
+          "6": "2",
+          "7": "5",
+          "8": "0",
+          "9": " ",
+          "10": "t",
+          "11": "o",
+          "12": "t",
+          "13": "a",
+          "14": "l",
+          "15": " ",
+          "16": "p",
+          "17": "o",
+          "18": "i",
+          "19": "n",
+          "20": "t",
+          "21": "s",
+          "minLevel": 5,
+          "upgradeId": "perTap"
+        },
+        {
+          "0": "N",
+          "1": "e",
+          "2": "w",
+          "3": " ",
+          "4": "r",
+          "5": "e",
+          "6": "q",
+          "7": "u",
+          "8": "i",
+          "9": "r",
+          "10": "e",
+          "11": "m",
+          "12": "e",
+          "13": "n",
+          "14": "t",
+          "minLevel": 8,
+          "upgradeId": "perTap"
+        }
       ],
       "unlocks": []
     },
