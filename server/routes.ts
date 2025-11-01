@@ -60,35 +60,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     try {
-      const characterId = req.body.characterId;
-      const characterName = req.body.characterName;
-      const imageType = req.body.imageType || 'character';
-      const unlockLevel = parseInt(req.body.unlockLevel || '1', 10);
-      const categories = req.body.categories ? JSON.parse(req.body.categories) : {};
-      const poses = req.body.poses ? JSON.parse(req.body.poses) : [];
-      const isHidden = req.body.isHidden === 'true';
-      const chatEnable = req.body.chatEnable === 'true';
-      const chatSendPercent = parseInt(req.body.chatSendPercent || '0', 10);
+      const body = req.body;
+      const categoriesObj = JSON.parse(body.categories);
+      const parsedData = {
+        characterId: body.characterId,
+        characterName: body.characterName,
+        imageType: body.imageType as 'character' | 'avatar' | 'vip' | 'other',
+        unlockLevel: parseInt(body.unlockLevel),
+        categories: [
+          categoriesObj.nsfw ? 'nsfw' : null,
+          categoriesObj.vip ? 'vip' : null,
+          categoriesObj.event ? 'event' : null,
+          categoriesObj.random ? 'random' : null
+        ].filter(Boolean),
+        poses: JSON.parse(body.poses),
+        isHidden: body.isHidden === 'true',
+        chatEnable: body.chatEnable === 'true',
+        chatSendPercent: parseInt(body.chatSendPercent) || 0
+      };
 
-      console.log('📋 Parsed data:', {
-        characterId,
-        characterName,
-        imageType,
-        unlockLevel,
-        categories,
-        poses,
-        isHidden,
-        chatEnable,
-        chatSendPercent
-      });
+      console.log('📋 Parsed data:', parsedData);
 
-      if (!characterId || !characterName) {
+      if (!parsedData.characterId || !parsedData.characterName) {
         console.error('❌ Missing character ID or name');
         fs.unlinkSync(req.file.path);
         return res.status(400).json({ error: "Character ID and name are required" });
       }
 
-      const finalDir = path.join(__dirname, "..", "uploads", "characters", characterName, imageType);
+      const finalDir = path.join(__dirname, "..", "uploads", "characters", parsedData.characterName, parsedData.imageType);
       if (!fs.existsSync(finalDir)) {
         fs.mkdirSync(finalDir, { recursive: true });
         console.log('📁 Created directory:', finalDir);
@@ -98,18 +97,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       fs.renameSync(req.file.path, finalPath);
       console.log('✅ File moved to:', finalPath);
 
-      const fileUrl = `/uploads/characters/${characterName}/${imageType}/${req.file.filename}`;
+      const fileUrl = `/uploads/characters/${parsedData.characterName}/${parsedData.imageType}/${req.file.filename}`;
 
       const mediaUpload = await storage.createMediaUpload({
-        characterId,
+        characterId: parsedData.characterId,
         url: fileUrl,
-        type: imageType,
-        unlockLevel,
-        categories,
-        poses,
-        isHidden,
-        chatEnable,
-        chatSendPercent,
+        type: parsedData.imageType,
+        unlockLevel: parsedData.unlockLevel,
+        categories: parsedData.categories,
+        poses: parsedData.poses,
+        isHidden: parsedData.isHidden,
+        chatEnable: parsedData.chatEnable,
+        chatSendPercent: parsedData.chatSendPercent,
       });
 
       console.log('✅ Media upload created:', mediaUpload.id);
@@ -368,7 +367,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (updatedPlayer) {
         await savePlayerDataToJSON(updatedPlayer);
       }
-      
+
       // Handle sendBeacon requests (no response expected)
       if (req.headers['content-type']?.includes('text/plain')) {
         res.status(204).end();
@@ -416,7 +415,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const currentLevel = player.upgrades?.[validation.data.upgradeId] || 0;
       const cost = Math.floor(upgrade.baseCost * Math.pow(upgrade.costMultiplier, currentLevel));
-      
+
       // Validate player has enough points
       const playerPoints = typeof player.points === 'string' ? parseFloat(player.points) : player.points;
       if (playerPoints < cost) {
@@ -434,12 +433,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Update player's upgrades JSONB field and deduct points
       const upgrades = player.upgrades || {};
       upgrades[validation.data.upgradeId] = validation.data.level;
-      
+
       const updatedPlayer = await storage.updatePlayer(req.player!.id, { 
         upgrades,
         points: playerPoints - cost
       });
-      
+
       if (updatedPlayer) {
         await savePlayerDataToJSON(updatedPlayer);
       }

@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { DEFAULT_UPGRADES, DEFAULT_CHARACTERS, DEFAULT_LEVEL_CONFIGS, DEFAULT_THEME, calculateUpgradeCost, calculateUpgradeValue, checkLevelRequirements, applyTheme, type UpgradeConfig, type CharacterConfig, type ImageConfig, type LevelConfig, type ThemeConfig } from '@shared/gameConfig';
+import { DEFAULT_THEME, calculateUpgradeCost, calculateUpgradeValue, checkLevelRequirements, applyTheme, type UpgradeConfig, type CharacterConfig, type ImageConfig, type LevelConfig, type ThemeConfig } from '@shared/gameConfig';
 
 interface GameState {
   points: number;
@@ -69,10 +69,10 @@ const INITIAL_STATE: GameState = {
 
 export function GameProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<GameState>(INITIAL_STATE);
-  const [upgrades, setUpgrades] = useState<UpgradeConfig[]>(DEFAULT_UPGRADES);
-  const [characters, setCharacters] = useState<CharacterConfig[]>(DEFAULT_CHARACTERS);
+  const [upgrades, setUpgrades] = useState<UpgradeConfig[]>([]);
+  const [characters, setCharacters] = useState<CharacterConfig[]>([]);
   const [images, setImages] = useState<ImageConfig[]>([]);
-  const [levelConfigs, setLevelConfigs] = useState<LevelConfig[]>(DEFAULT_LEVEL_CONFIGS);
+  const [levelConfigs, setLevelConfigs] = useState<LevelConfig[]>([]);
   const [theme, setTheme] = useState<ThemeConfig>(DEFAULT_THEME);
   const [pendingPurchases, setPendingPurchases] = useState<Set<string>>(new Set());
   const [isInitialized, setIsInitialized] = useState(false);
@@ -630,10 +630,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
   const resetGame = useCallback(() => {
     setState(INITIAL_STATE);
-    setUpgrades(DEFAULT_UPGRADES);
-    setCharacters(DEFAULT_CHARACTERS);
+    setUpgrades([]);
+    setCharacters([]);
     setImages([]);
-    setLevelConfigs(DEFAULT_LEVEL_CONFIGS);
+    setLevelConfigs([]);
     setTheme(DEFAULT_THEME);
   }, []);
 

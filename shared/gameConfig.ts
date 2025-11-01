@@ -66,81 +66,8 @@ export interface ThemeConfig {
   muted: string;
 }
 
-import tapPowerData from '../main-gamedata/progressive-data/upgrades/tap-power.json';
-import criticalChanceData from '../main-gamedata/progressive-data/upgrades/critical-chance.json';
-import passiveIncomeData from '../main-gamedata/progressive-data/upgrades/passive-income.json';
-import incomeMultiplierData from '../main-gamedata/progressive-data/upgrades/income-multiplier.json';
-import energyCapacityData from '../main-gamedata/progressive-data/upgrades/energy-capacity.json';
-import energyRegenData from '../main-gamedata/progressive-data/upgrades/energy-regen.json';
-
-export const DEFAULT_UPGRADES: UpgradeConfig[] = [
-  tapPowerData as UpgradeConfig,
-  criticalChanceData as UpgradeConfig,
-  passiveIncomeData as UpgradeConfig,
-  incomeMultiplierData as UpgradeConfig,
-  energyCapacityData as UpgradeConfig,
-  energyRegenData as UpgradeConfig
-];
-
-import starterData from '../main-gamedata/character-data/starter.json';
-import iceWarriorData from '../main-gamedata/character-data/ice-warrior.json';
-import pinkMageData from '../main-gamedata/character-data/pink-mage.json';
-import darkAssassinData from '../main-gamedata/character-data/dark-assassin.json';
-
-export const DEFAULT_CHARACTERS: CharacterConfig[] = [
-  starterData as CharacterConfig,
-  iceWarriorData as CharacterConfig,
-  pinkMageData as CharacterConfig,
-  darkAssassinData as CharacterConfig
-];
-
-export const DEFAULT_LEVEL_CONFIGS: LevelConfig[] = [
-  {
-    level: 2,
-    cost: 500,
-    requirements: [{ upgradeId: 'tap-power', minLevel: 5 }],
-    unlocks: ['New upgrade: Passive Income']
-  },
-  {
-    level: 3,
-    cost: 1500,
-    requirements: [
-      { upgradeId: 'tap-power', minLevel: 8 },
-      { upgradeId: 'passive-income', minLevel: 3 }
-    ],
-    unlocks: ['New upgrade: Critical Chance']
-  },
-  {
-    level: 5,
-    cost: 5000,
-    requirements: [
-      { upgradeId: 'tap-power', minLevel: 10 },
-      { upgradeId: 'passive-income', minLevel: 5 },
-      { upgradeId: 'critical-chance', minLevel: 3 }
-    ],
-    unlocks: ['Character: Ice Warrior', 'New upgrade: Income Multiplier']
-  },
-  {
-    level: 10,
-    cost: 15000,
-    requirements: [
-      { upgradeId: 'tap-power', minLevel: 10 },
-      { upgradeId: 'passive-income', minLevel: 8 },
-      { upgradeId: 'critical-chance', minLevel: 5 }
-    ],
-    unlocks: ['Character: Dark Assassin', 'VIP features']
-  },
-  {
-    level: 20,
-    cost: 50000,
-    requirements: [
-      { upgradeId: 'tap-power', minLevel: 20 },
-      { upgradeId: 'passive-income', minLevel: 15 },
-      { upgradeId: 'energy-capacity', minLevel: 10 }
-    ],
-    unlocks: ['Character: Pink Mage', 'Advanced features']
-  }
-];
+// All upgrade, character, and level data should be loaded from JSON files only
+// No default/mock data in this config file
 
 export const DEFAULT_THEME: ThemeConfig = {
   primary: '270 60% 50%',
