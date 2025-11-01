@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Settings, Save, RotateCcw, Plus, X, Users } from 'lucide-react';
+import { Settings, Save, RotateCcw, Plus, X, Users, Upload, Palette } from 'lucide-react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient } from '@/lib/queryClient';
 import { useGame } from '@/contexts/GameContext';
@@ -27,8 +27,7 @@ export default function AdminPanel() {
   const [editingTheme, setEditingTheme] = useState<ThemeConfig | null>(null);
   const [showCreateUpgrade, setShowCreateUpgrade] = useState(false);
   const [showCreateCharacter, setShowCreateCharacter] = useState(false);
-  const [createTemplate, setCreateTemplate] = useState<string>('');
-  const [adminToken, setAdminToken] = useState(localStorage.getItem('adminToken') || '');
+  const [adminToken] = useState(localStorage.getItem('adminToken') || '');
   const [editingPlayer, setEditingPlayer] = useState<any>(null);
 
   const upgradeTemplates = (upgradeMaster as any)?.upgrades ?? [];
@@ -137,7 +136,88 @@ export default function AdminPanel() {
             <TabsTrigger value="theme">Theme</TabsTrigger>
           </TabsList>
 
-          {/* Upgrades Tab omitted for brevity - stays as in prior working version with create/edit/delete */}
+          <TabsContent value="upgrades" className="space-y-4">
+            <div className="flex justify-end mb-3">
+              <Dialog open={showCreateUpgrade} onOpenChange={setShowCreateUpgrade}>
+                <DialogTrigger asChild>
+                  <Button><Plus className="w-4 h-4 mr-2" />Create Upgrade</Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Create New Upgrade</DialogTitle>
+                    <DialogDescription>Use defaults from master or enter values</DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div>
+                      <Label>Upgrade Name</Label>
+                      <Input id="new-upgrade-name" placeholder="Enter upgrade name" />
+                    </div>
+                    <div>
+                      <Label>Description</Label>
+                      <Textarea id="new-upgrade-desc" placeholder="Enter description" />
+                    </div>
+                    <Button
+                      onClick={() => {
+                        const nameInput = document.getElementById('new-upgrade-name') as HTMLInputElement;
+                        const descInput = document.getElementById('new-upgrade-desc') as HTMLTextAreaElement;
+                        const template = upgradeTemplates[0] || { name: 'New Upgrade', description: 'A powerful upgrade', type: 'perTap', maxLevel: 30, baseCost: 10, costMultiplier: 1.2, baseValue: 1, valueIncrement: 1, icon: '⚡' };
+                        const u: UpgradeConfig = {
+                          id: `upgrade-${Date.now()}`,
+                          name: nameInput?.value || template.name,
+                          description: descInput?.value || template.description,
+                          type: template.type,
+                          maxLevel: template.maxLevel,
+                          baseCost: template.baseCost,
+                          costMultiplier: template.costMultiplier,
+                          baseValue: template.baseValue,
+                          valueIncrement: template.valueIncrement,
+                          icon: template.icon,
+                          isHidden: false
+                        };
+                        updateUpgradeConfig(u);
+                        setShowCreateUpgrade(false);
+                        setTimeout(() => setEditingUpgrade(u), 100);
+                      }}
+                      className="w-full"
+                    >Create</Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </div>
+            <ScrollArea className="h-[450px]">
+              <div className="space-y-3 pr-4">
+                {upgrades.map(upgrade => (
+                  <Card key={upgrade.id}>
+                    <CardHeader>
+                      <div className="flex justify-between items-center">
+                        <h3 className="font-semibold">{upgrade.name}</h3>
+                        <Button variant="outline" size="sm" onClick={() => setEditingUpgrade(upgrade)}>Edit</Button>
+                      </div>
+                    </CardHeader>
+                    {editingUpgrade?.id === upgrade.id && (
+                      <CardContent className="space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div><Label>Name</Label><Input value={editingUpgrade.name} onChange={(e) => setEditingUpgrade({ ...editingUpgrade, name: e.target.value })} /></div>
+                          <div><Label>Max Level</Label><Input type="number" value={editingUpgrade.maxLevel} onChange={(e) => setEditingUpgrade({ ...editingUpgrade, maxLevel: parseInt(e.target.value) })} /></div>
+                        </div>
+                        <div><Label>Description</Label><Textarea value={editingUpgrade.description} onChange={(e) => setEditingUpgrade({ ...editingUpgrade, description: e.target.value })} /></div>
+                        <div className="grid grid-cols-3 gap-3">
+                          <div><Label>Base Cost</Label><Input type="number" value={editingUpgrade.baseCost} onChange={(e) => setEditingUpgrade({ ...editingUpgrade, baseCost: parseInt(e.target.value) })} /></div>
+                          <div><Label>Cost Multiplier</Label><Input type="number" step="0.1" value={editingUpgrade.costMultiplier} onChange={(e) => setEditingUpgrade({ ...editingUpgrade, costMultiplier: parseFloat(e.target.value) })} /></div>
+                          <div><Label>Base Value</Label><Input type="number" value={editingUpgrade.baseValue} onChange={(e) => setEditingUpgrade({ ...editingUpgrade, baseValue: parseFloat(e.target.value) })} /></div>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button onClick={handleSaveUpgrade}><Save className="w-4 h-4 mr-2" />Save</Button>
+                          <Button variant="outline" onClick={() => setEditingUpgrade(null)}>Cancel</Button>
+                          <Button variant="destructive" onClick={() => { if (confirm(`Delete upgrade "${editingUpgrade.name}"?`)) { deleteUpgrade(editingUpgrade.id); setEditingUpgrade(null); } }}><X className="w-4 h-4 mr-2" />Delete</Button>
+                        </div>
+                      </CardContent>
+                    )}
+                  </Card>
+                ))}
+              </div>
+            </ScrollArea>
+          </TabsContent>
 
           <TabsContent value="characters" className="space-y-4">
             <div className="flex justify-end mb-3">
@@ -208,7 +288,7 @@ export default function AdminPanel() {
                         <div className="flex gap-2">
                           <Button onClick={handleSaveCharacter}><Save className="w-4 h-4 mr-2" />Save</Button>
                           <Button variant="outline" onClick={() => setEditingCharacter(null)}>Cancel</Button>
-                          <Button variant="destructive" onClick={() => { if (confirm(`Delete character "${editingCharacter.name}"?`)) { (async () => { await fetch(`/api/admin/characters/${editingCharacter.id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`, ...(adminToken ? { 'x-admin-token': adminToken } : {}) } }); deleteCharacter(editingCharacter.id); setEditingCharacter(null); })(); } }}><X className="w-4 h-4 mr-2" />Delete</Button>
+                          <Button variant="destructive" onClick={() => { if (confirm(`Delete character "${editingCharacter.name}"?`)) { deleteCharacter(editingCharacter.id); setEditingCharacter(null); } }}><X className="w-4 h-4 mr-2" />Delete</Button>
                         </div>
                       </CardContent>
                     )}
@@ -235,7 +315,7 @@ export default function AdminPanel() {
                   <Card key={levelConfig.level} className={editingLevel?.level === levelConfig.level ? 'border-primary' : ''}>
                     <CardHeader>
                       <div className="flex justify-between items-center">
-                        <h3 className="font-semibold">Level {levelConfig.level}</h3>
+                        <h3 className="font-semibold">Level {levelConfig.level} - Cost: {levelConfig.cost} points</h3>
                         <Button variant="outline" size="sm" onClick={() => setEditingLevel({ ...levelConfig })}>Edit</Button>
                       </div>
                     </CardHeader>
@@ -252,7 +332,6 @@ export default function AdminPanel() {
                     <div className="grid grid-cols-2 gap-3">
                       <div><Label>Level Number</Label><Input type="number" min="1" value={editingLevel.level} onChange={(e)=> setEditingLevel({ ...editingLevel, level: parseInt(e.target.value)||1 })} /></div>
                       <div><Label>Cost (Points Required)</Label><Input type="number" value={editingLevel.cost} onChange={(e)=> setEditingLevel({ ...editingLevel, cost: parseInt(e.target.value)||0 })} /></div>
-                      <div><Label>Experience Required (optional)</Label><Input type="number" value={(editingLevel as any).experienceRequired||''} onChange={(e)=> setEditingLevel({ ...(editingLevel as any), experienceRequired: e.target.value===''? undefined : parseInt(e.target.value)||0 })} /></div>
                     </div>
 
                     <div>
@@ -286,7 +365,7 @@ export default function AdminPanel() {
                     <div className="flex gap-2">
                       <Button onClick={handleSaveLevel}><Save className="w-4 h-4 mr-2"/>Save</Button>
                       <Button variant="outline" onClick={()=> setEditingLevel(null)}>Cancel</Button>
-                      <Button variant="destructive" onClick={(e)=>{ e.stopPropagation(); if (confirm(`Delete Level ${editingLevel.level}?`)) { (async ()=>{ await fetch(`/api/admin/levels/${editingLevel.level}`, { method:'DELETE', headers:{ 'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`, ...(adminToken ? { 'x-admin-token': adminToken } : {}) } }); deleteLevel(editingLevel.level); setEditingLevel(null); })(); } }}><X className="w-4 h-4 mr-2"/>Delete</Button>
+                      <Button variant="destructive" onClick={(e)=>{ e.stopPropagation(); if (confirm(`Delete Level ${editingLevel.level}?`)) { deleteLevel(editingLevel.level); setEditingLevel(null); } }}><X className="w-4 h-4 mr-2"/>Delete</Button>
                     </div>
                   </div>
                 </DialogContent>
@@ -294,7 +373,78 @@ export default function AdminPanel() {
             )}
           </TabsContent>
 
-          {/* Theme and other tabs remain as before */}
+          <TabsContent value="images" className="space-y-4">
+            <div className="text-center py-8">
+              <Upload className="w-16 h-16 mx-auto mb-4 opacity-50" />
+              <h3 className="text-lg font-semibold mb-2">Image Management</h3>
+              <p className="text-gray-500 mb-4">Upload and manage character images</p>
+              <Button><Upload className="w-4 h-4 mr-2" />Upload Images</Button>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="players" className="space-y-4">
+            {playersLoading ? (
+              <div className="text-center py-8">
+                <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
+                <p>Loading players...</p>
+              </div>
+            ) : (
+              <div>
+                <div className="flex items-center gap-4 mb-4">
+                  <Users className="w-6 h-6" />
+                  <h3 className="text-lg font-semibold">Player Management</h3>
+                  <span className="text-sm text-gray-500">{playersData?.players?.length || 0} players</span>
+                </div>
+                <ScrollArea className="h-[400px]">
+                  <div className="space-y-3 pr-4">
+                    {playersData?.players?.map((player: any) => (
+                      <Card key={player.id}>
+                        <CardHeader>
+                          <div className="flex justify-between items-center">
+                            <div>
+                              <h4 className="font-semibold">{player.username}</h4>
+                              <p className="text-sm text-gray-500">Level {player.level} • {player.points} points</p>
+                            </div>
+                            <Button variant="outline" size="sm" onClick={() => setEditingPlayer(player)}>View</Button>
+                          </div>
+                        </CardHeader>
+                      </Card>
+                    )) || <p className="text-center py-8 text-gray-500">No players found</p>}
+                  </div>
+                </ScrollArea>
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="theme" className="space-y-4">
+            <div className="text-center py-8">
+              <Palette className="w-16 h-16 mx-auto mb-4 opacity-50" />
+              <h3 className="text-lg font-semibold mb-2">Theme Settings</h3>
+              <p className="text-gray-500 mb-4">Customize the game's appearance</p>
+              <div className="space-y-4 max-w-md mx-auto">
+                <div>
+                  <Label>Primary Color</Label>
+                  <Input type="color" value={theme.primaryColor || '#8b5cf6'} onChange={(e) => updateTheme({ ...theme, primaryColor: e.target.value })} />
+                </div>
+                <div>
+                  <Label>Background</Label>
+                  <Select value={theme.background || 'gradient'} onValueChange={(value) => updateTheme({ ...theme, background: value })}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="gradient">Gradient</SelectItem>
+                      <SelectItem value="solid">Solid</SelectItem>
+                      <SelectItem value="image">Image</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button onClick={() => updateTheme(theme)}>
+                  <Save className="w-4 h-4 mr-2" />Apply Theme
+                </Button>
+              </div>
+            </div>
+          </TabsContent>
         </Tabs>
       </DialogContent>
     </Dialog>
