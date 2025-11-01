@@ -1,6 +1,8 @@
-import { drizzle } from "drizzle-orm/neon-serverless";
-import { Pool, neonConfig } from "@neondatabase/serverless";
+
+import { createClient } from '@supabase/supabase-js';
 import { eq, and } from "drizzle-orm";
+import { drizzle } from 'drizzle-orm/postgres-js';
+import postgres from 'postgres';
 import * as schema from "@shared/schema";
 import {
   type Player,
@@ -16,16 +18,23 @@ import {
   type PlayerCharacter,
   type InsertPlayerCharacter,
 } from "@shared/schema";
-import WebSocket from "ws";
 
-neonConfig.webSocketConstructor = WebSocket;
-
-if (!process.env.DATABASE_URL) {
-  throw new Error("DATABASE_URL environment variable is not set");
+if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
+  throw new Error("SUPABASE_URL and SUPABASE_ANON_KEY environment variables must be set");
 }
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-export const db = drizzle(pool, { schema });
+// Initialize Supabase client
+export const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_ANON_KEY
+);
+
+// Get the connection string for Drizzle
+const connectionString = `postgresql://postgres.${process.env.SUPABASE_URL?.split('//')[1]?.split('.')[0]}:[YOUR-PASSWORD]@${process.env.SUPABASE_URL?.split('//')[1]}:5432/postgres`;
+
+// Use postgres.js for Drizzle with Supabase
+const client = postgres(connectionString);
+export const db = drizzle(client, { schema });
 
 export interface IStorage {
   getPlayer(id: string): Promise<Player | undefined>;
