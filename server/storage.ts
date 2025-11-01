@@ -186,7 +186,7 @@ export class DatabaseStorage implements IStorage {
       .where(eq(schema.playerUpgrades.playerId, playerId));
     
     return results.map(row => ({
-      ...row.player_upgrades,
+      ...row.playerUpgrades,
       upgrade: row.upgrades!,
     }));
   }
@@ -237,7 +237,7 @@ export class DatabaseStorage implements IStorage {
       .where(eq(schema.playerCharacters.playerId, playerId));
     
     return results.map(row => ({
-      ...row.player_characters,
+      ...row.playerCharacters,
       character: row.characters!,
     }));
   }
