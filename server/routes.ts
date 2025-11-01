@@ -7,7 +7,7 @@ import { fileURLToPath } from "url";
 import fs from "fs";
 import { AuthDataValidator } from "@telegram-auth/server";
 import { requireAuth, requireAdmin } from "./middleware/auth";
-import { syncAllGameData, saveUpgradeToJSON, saveLevelToJSON, saveCharacterToJSON } from "./utils/dataLoader";
+import { syncAllGameData, saveUpgradeToJSON, saveLevelToJSON, saveCharacterToJSON, savePlayerDataToJSON } from "./utils/dataLoader";
 import { insertUpgradeSchema, insertCharacterSchema, insertLevelSchema, insertPlayerUpgradeSchema } from "@shared/schema";
 import { generateSecureToken, getSessionExpiry } from "./utils/auth";
 
@@ -123,11 +123,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           isAdmin: false,
         });
         console.log('✅ New dev player created:', player.id);
+        await savePlayerDataToJSON(player);
       } else {
         console.log('👋 Existing dev player found, updating last login...');
         await storage.updatePlayer(player.id, {
           lastLogin: new Date(),
         });
+        await savePlayerDataToJSON(player);
       }
 
       const sessionToken = generateSecureToken();
@@ -211,11 +213,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           isAdmin: false,
         });
         console.log('✅ New player created:', player.id);
+        await savePlayerDataToJSON(player);
       } else {
         console.log('👋 Existing player found, updating last login...');
         await storage.updatePlayer(player.id, {
           lastLogin: new Date(),
         });
+        await savePlayerDataToJSON(player);
       }
 
       const sessionToken = generateSecureToken();
@@ -291,6 +295,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const updatedPlayer = await storage.updatePlayer(req.player!.id, updates);
+      if (updatedPlayer) {
+        await savePlayerDataToJSON(updatedPlayer);
+      }
       res.json({ player: updatedPlayer });
     } catch (error) {
       console.error('Error updating player:', error);
@@ -410,7 +417,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/admin/upgrades/:id", requireAuth, requireAdmin, async (req, res) => {
     try {
       const { id } = req.params;
-      const upgradesDir = path.join(__dirname, "../client/src/game-data/upgrades");
+      const upgradesDir = path.join(__dirname, "../main-gamedata/progressive-data/upgrades");
       const filePath = path.join(upgradesDir, `${id}.json`);
 
       if (fs.existsSync(filePath)) {
@@ -466,7 +473,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/admin/characters/:id", requireAuth, requireAdmin, async (req, res) => {
     try {
       const { id } = req.params;
-      const charactersDir = path.join(__dirname, "../client/src/character-data");
+      const charactersDir = path.join(__dirname, "../main-gamedata/character-data");
       const filePath = path.join(charactersDir, `${id}.json`);
 
       if (fs.existsSync(filePath)) {
@@ -522,7 +529,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/admin/levels/:level", requireAuth, requireAdmin, async (req, res) => {
     try {
       const level = parseInt(req.params.level);
-      const levelsDir = path.join(__dirname, "../client/src/game-data/levelup");
+      const levelsDir = path.join(__dirname, "../main-gamedata/progressive-data/levelup");
       const filePath = path.join(levelsDir, `level-${level}.json`);
 
       if (fs.existsSync(filePath)) {

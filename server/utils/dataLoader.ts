@@ -1,8 +1,9 @@
+
 import fs from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
 import { storage } from "../storage";
-import type { InsertUpgrade, InsertCharacter, InsertLevel } from "@shared/schema";
+import type { InsertUpgrade, InsertCharacter, InsertLevel, Player } from "@shared/schema";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -19,7 +20,7 @@ async function loadJSONFile<T>(filePath: string): Promise<T | null> {
 
 async function syncUpgrades() {
   console.log("📦 Syncing upgrades from JSON files...");
-  const upgradesDir = path.join(__dirname, "../../client/src/game-data/upgrades");
+  const upgradesDir = path.join(__dirname, "../../main-gamedata/progressive-data/upgrades");
   
   try {
     const files = await fs.readdir(upgradesDir);
@@ -62,7 +63,7 @@ async function syncUpgrades() {
 
 async function syncCharacters() {
   console.log("📦 Syncing characters from JSON files...");
-  const charactersDir = path.join(__dirname, "../../client/src/character-data");
+  const charactersDir = path.join(__dirname, "../../main-gamedata/character-data");
   
   try {
     const files = await fs.readdir(charactersDir);
@@ -103,7 +104,7 @@ async function syncCharacters() {
 
 async function syncLevels() {
   console.log("📦 Syncing levels from JSON files...");
-  const levelsDir = path.join(__dirname, "../../client/src/game-data/levelup");
+  const levelsDir = path.join(__dirname, "../../main-gamedata/progressive-data/levelup");
   
   try {
     const files = await fs.readdir(levelsDir);
@@ -146,8 +147,10 @@ export async function syncAllGameData() {
 }
 
 export async function saveUpgradeToJSON(upgrade: InsertUpgrade): Promise<void> {
-  const upgradesDir = path.join(__dirname, "../../client/src/game-data/upgrades");
+  const upgradesDir = path.join(__dirname, "../../main-gamedata/progressive-data/upgrades");
   const filePath = path.join(upgradesDir, `${upgrade.id}.json`);
+  
+  await fs.mkdir(upgradesDir, { recursive: true });
   
   const data = {
     id: upgrade.id,
@@ -168,8 +171,10 @@ export async function saveUpgradeToJSON(upgrade: InsertUpgrade): Promise<void> {
 }
 
 export async function saveLevelToJSON(level: InsertLevel): Promise<void> {
-  const levelsDir = path.join(__dirname, "../../client/src/game-data/levelup");
+  const levelsDir = path.join(__dirname, "../../main-gamedata/progressive-data/levelup");
   const filePath = path.join(levelsDir, `level-${level.level}.json`);
+  
+  await fs.mkdir(levelsDir, { recursive: true });
   
   const data = {
     level: level.level,
@@ -183,8 +188,10 @@ export async function saveLevelToJSON(level: InsertLevel): Promise<void> {
 }
 
 export async function saveCharacterToJSON(character: InsertCharacter): Promise<void> {
-  const charactersDir = path.join(__dirname, "../../client/src/character-data");
+  const charactersDir = path.join(__dirname, "../../main-gamedata/character-data");
   const filePath = path.join(charactersDir, `${character.id}.json`);
+  
+  await fs.mkdir(charactersDir, { recursive: true });
   
   const data = {
     id: character.id,
@@ -200,4 +207,45 @@ export async function saveCharacterToJSON(character: InsertCharacter): Promise<v
   
   await fs.writeFile(filePath, JSON.stringify(data, null, 2));
   console.log(`✓ Saved character JSON: ${filePath}`);
+}
+
+export async function savePlayerDataToJSON(player: Player): Promise<void> {
+  if (!player.telegramId) {
+    console.warn("⚠️ Cannot save player data: missing telegramId");
+    return;
+  }
+  
+  const playerDir = path.join(__dirname, "../../main-gamedata/player-data", `telegram_${player.telegramId}`);
+  const filePath = path.join(playerDir, "player.json");
+  
+  await fs.mkdir(playerDir, { recursive: true });
+  
+  const playerData = {
+    id: player.id,
+    telegramId: player.telegramId,
+    username: player.username,
+    points: player.points,
+    energy: player.energy,
+    maxEnergy: player.maxEnergy,
+    level: player.level,
+    experience: player.experience,
+    passiveIncomeRate: player.passiveIncomeRate,
+    isAdmin: player.isAdmin,
+    selectedCharacterId: player.selectedCharacterId,
+    displayImage: player.displayImage,
+    upgrades: player.upgrades,
+    unlockedCharacters: player.unlockedCharacters,
+    lastLogin: player.lastLogin,
+    lastEnergyUpdate: player.lastEnergyUpdate,
+  };
+  
+  await fs.writeFile(filePath, JSON.stringify(playerData, null, 2));
+  console.log(`✓ Saved player data: ${filePath}`);
+}
+
+export async function loadPlayerDataFromJSON(telegramId: string): Promise<any | null> {
+  const playerDir = path.join(__dirname, "../../main-gamedata/player-data", `telegram_${telegramId}`);
+  const filePath = path.join(playerDir, "player.json");
+  
+  return await loadJSONFile(filePath);
 }

@@ -66,12 +66,12 @@ export interface ThemeConfig {
   muted: string;
 }
 
-import tapPowerData from '../client/src/game-data/upgrades/tap-power.json';
-import criticalChanceData from '../client/src/game-data/upgrades/critical-chance.json';
-import passiveIncomeData from '../client/src/game-data/upgrades/passive-income.json';
-import incomeMultiplierData from '../client/src/game-data/upgrades/income-multiplier.json';
-import energyCapacityData from '../client/src/game-data/upgrades/energy-capacity.json';
-import energyRegenData from '../client/src/game-data/upgrades/energy-regen.json';
+import tapPowerData from '../main-gamedata/progressive-data/upgrades/tap-power.json';
+import criticalChanceData from '../main-gamedata/progressive-data/upgrades/critical-chance.json';
+import passiveIncomeData from '../main-gamedata/progressive-data/upgrades/passive-income.json';
+import incomeMultiplierData from '../main-gamedata/progressive-data/upgrades/income-multiplier.json';
+import energyCapacityData from '../main-gamedata/progressive-data/upgrades/energy-capacity.json';
+import energyRegenData from '../main-gamedata/progressive-data/upgrades/energy-regen.json';
 
 export const DEFAULT_UPGRADES: UpgradeConfig[] = [
   tapPowerData as UpgradeConfig,
@@ -82,10 +82,10 @@ export const DEFAULT_UPGRADES: UpgradeConfig[] = [
   energyRegenData as UpgradeConfig
 ];
 
-import starterData from '../client/src/character-data/starter.json';
-import iceWarriorData from '../client/src/character-data/ice-warrior.json';
-import pinkMageData from '../client/src/character-data/pink-mage.json';
-import darkAssassinData from '../client/src/character-data/dark-assassin.json';
+import starterData from '../main-gamedata/character-data/starter.json';
+import iceWarriorData from '../main-gamedata/character-data/ice-warrior.json';
+import pinkMageData from '../main-gamedata/character-data/pink-mage.json';
+import darkAssassinData from '../main-gamedata/character-data/dark-assassin.json';
 
 export const DEFAULT_CHARACTERS: CharacterConfig[] = [
   starterData as CharacterConfig,
