@@ -387,6 +387,14 @@
         delete updates.isAdmin;
       }
 
+      // Round integer fields to prevent PostgreSQL errors
+      const integerFields = ['points', 'energy', 'maxEnergy', 'level', 'experience', 'passiveIncomeRate'];
+      for (const field of integerFields) {
+        if (updates[field] !== undefined && typeof updates[field] === 'number') {
+          updates[field] = Math.round(updates[field]);
+        }
+      }
+
       // Get current player data to merge upgrades and unlockedCharacters
       const currentPlayer = await storage.getPlayer(req.player!.id);
       if (!currentPlayer) {

@@ -45,14 +45,21 @@ Preferred communication style: Simple, everyday language.
 
 **Server Framework**: Express.js running on Node.js with TypeScript.
 
-**API Design**: RESTful endpoints for file uploads. Currently minimal backend with primary route:
-- `POST /api/upload`: Handles character image uploads using Multer middleware with file validation (images only, 10MB limit)
+**API Design**: RESTful endpoints for game data and file uploads:
+- `GET /api/media`: Returns media uploads from Supabase database with optional character filtering
+- `POST /api/upload`: Handles character image uploads with comprehensive security validation:
+  - Sanitizes characterName to prevent directory traversal attacks
+  - Whitelists imageType values (character, avatar, vip, other)
+  - Validates poses array contains only strings
+  - Filters categories with type guards
+  - Bounds-checks chatSendPercent (0-100)
+- `PATCH /api/player/me`: Updates player data with automatic integer rounding to prevent PostgreSQL type errors
 
-**Session Management**: Placeholder session infrastructure using `connect-pg-simple` for PostgreSQL session storage (session routes not yet implemented in provided code).
+**Session Management**: Full session-based authentication using express-session with PostgreSQL session store via Supabase.
 
 **Static File Serving**: Development mode uses Vite middleware for HMR; production serves built static assets from `dist/public`.
 
-**File Storage**: Uploaded images stored in local `uploads/` directory with unique timestamped filenames.
+**File Storage**: Uploaded images stored in local `uploads/` directory with unique timestamped filenames. Metadata tracked in Supabase `mediaUploads` table.
 
 ### Data Storage Solutions
 
