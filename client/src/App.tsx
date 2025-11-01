@@ -143,6 +143,7 @@ function App() {
   };
 
   console.log('🎨 [v3.0] App render - authState:', authState, 'progress:', loadingProgress);
+  console.log('🎨 [v3.0] Current time:', new Date().toISOString());
 
   if (authState === 'loading') {
     console.log('🔄 [v3.0] Rendering LoadingScreen');
@@ -154,7 +155,7 @@ function App() {
     return <LoginScreen onLogin={handleLogin} />;
   }
 
-  console.log('🎮 [v3.0] Rendering Game');
+  console.log('🎮 [v3.0] Rendering Game with userData:', userData?.username);
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>

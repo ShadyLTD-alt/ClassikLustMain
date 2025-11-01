@@ -19,6 +19,10 @@ import CharacterSelector from "./CharacterSelector";
 import type { Player } from "@shared/schema";
 
 export default function GameInterface() {
+  console.log('🎮 [v3.0] GameInterface component rendering');
+  const { state, tap, isLoading } = useGame();
+  console.log('🎮 [v3.0] GameInterface isLoading:', isLoading);
+
   const [showUpgrades, setShowUpgrades] = useState(false);
   const [showLevelUp, setShowLevelUp] = useState(false);
   const [showCharacterSelector, setShowCharacterSelector] = useState(false);
