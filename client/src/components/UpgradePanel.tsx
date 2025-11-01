@@ -26,17 +26,17 @@ export default function UpgradePanel() {
     : upgrades.filter(u => u.type === activeTab);
 
   return (
-    <div className="h-full flex flex-col">
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-        <TabsList className="m-4 grid grid-cols-4">
+    <div className="h-full flex flex-col overflow-hidden">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
+        <TabsList className="m-4 grid grid-cols-4 flex-shrink-0">
           <TabsTrigger value="all" data-testid="tab-all">All</TabsTrigger>
           <TabsTrigger value="perTap" data-testid="tab-pertap">Tap</TabsTrigger>
           <TabsTrigger value="perHour" data-testid="tab-perhour">Hour</TabsTrigger>
           <TabsTrigger value="energyMax" data-testid="tab-energy">Energy</TabsTrigger>
         </TabsList>
 
-        <TabsContent value={activeTab} className="flex-1 mt-0">
-          <div className="h-full overflow-y-auto px-4 pb-4">
+        <TabsContent value={activeTab} className="flex-1 mt-0 overflow-hidden">
+          <div className="h-full overflow-y-auto px-4 pb-24">
             <div className="space-y-4">
               {filteredUpgrades.map(upgrade => {
             const currentLevel = state.upgrades[upgrade.id] || 0;
@@ -95,7 +95,7 @@ export default function UpgradePanel() {
                 </CardFooter>
               </Card>
             );
-          })}
+              })}
             </div>
           </div>
         </TabsContent>

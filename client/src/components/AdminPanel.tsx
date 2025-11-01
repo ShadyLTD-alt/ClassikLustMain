@@ -149,9 +149,10 @@ export default function AdminPanel() {
                             type: template.type as any
                           };
                           updateUpgradeConfig(newUpgrade);
-                          setEditingUpgrade(newUpgrade);
                           setShowCreateUpgrade(false);
                           setCreateTemplate('');
+                          // Set editing immediately to show the form
+                          setTimeout(() => setEditingUpgrade(newUpgrade), 100);
                         }
                       }}
                       disabled={!createTemplate}
@@ -429,7 +430,8 @@ export default function AdminPanel() {
                     unlocks: []
                   };
                   updateLevelConfig(newLevel);
-                  setEditingLevel(newLevel);
+                  // Set editing immediately to show the form
+                  setTimeout(() => setEditingLevel(newLevel), 100);
                 }}
                 data-testid="button-create-level"
               >
@@ -581,10 +583,16 @@ export default function AdminPanel() {
                           </Button>
                           <Button
                             variant="destructive"
-                            onClick={() => {
-                              if (confirm(`Delete Level ${editingLevel.level}?`)) {
-                                deleteLevel(editingLevel.level);
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (confirm(`Delete Level ${editingLevel.level}? This cannot be undone.`)) {
+                                const levelToDelete = editingLevel.level;
                                 setEditingLevel(null);
+                                deleteLevel(levelToDelete);
+                                toast({ 
+                                  title: 'Level deleted', 
+                                  description: `Level ${levelToDelete} has been removed.` 
+                                });
                               }
                             }}
                             data-testid={`button-delete-level-${levelConfig.level}`}

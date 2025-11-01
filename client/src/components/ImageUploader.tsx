@@ -102,24 +102,28 @@ export default function ImageUploader({ adminMode = false }: ImageUploaderProps)
       });
 
       if (!response.ok) {
-        throw new Error('Upload failed');
+        const errorText = await response.text();
+        throw new Error(`Upload failed: ${errorText}`);
       }
 
       const data = await response.json();
       
-      addImage({
+      const newImage = {
         id: `img-${Date.now()}`,
         characterId: selectedCharacterId,
         url: data.url,
         unlockLevel: unlockLevel,
-        isAvatar: false,
-        isDisplay: false,
+        isAvatar: imageType === 'avatar',
+        isDisplay: imageType === 'character',
         imageType: imageType,
         categories: { ...categories },
-        poses: selectedPoses,
+        poses: [...selectedPoses],
         isHidden: isHidden
-      });
+      };
       
+      addImage(newImage);
+      
+      // Reset form
       setSelectedFile(null);
       setPreviewUrl(null);
       setUnlockLevel(1);
@@ -127,9 +131,11 @@ export default function ImageUploader({ adminMode = false }: ImageUploaderProps)
       setCategories({ nsfw: false, vip: false, event: false, random: false });
       setSelectedPoses([]);
       setIsHidden(false);
+      
+      alert('Image uploaded successfully!');
     } catch (error) {
       console.error('Upload error:', error);
-      alert('Failed to upload image');
+      alert('Failed to upload image: ' + error.message);
     }
   };
 
