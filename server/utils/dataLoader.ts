@@ -1,4 +1,3 @@
-
 import fs from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -25,7 +24,52 @@ async function loadJSONFile<T>(filePath: string): Promise<T | null> {
 }
 
 async function syncUpgrades() {
-  console.log("📦 Syncing upgrades from JSON files...");
+  console.log("📦 Syncing upgrades from master JSON file...");
+  
+  // First try to load from upgrades-master.json
+  const masterFilePath = path.join(__dirname, "../../main-gamedata/upgrades-master.json");
+  const masterData = await loadJSONFile<{ upgrades: any[] }>(masterFilePath);
+  
+  if (masterData && masterData.upgrades) {
+    console.log(`📋 Loading ${masterData.upgrades.length} upgrades from upgrades-master.json`);
+    for (const data of masterData.upgrades) {
+      // Store in memory cache
+      upgradesCache.set(data.id, data as UpgradeConfig);
+      
+      // Also sync to DB for persistence
+      const upgradeData: InsertUpgrade = {
+        id: data.id,
+        name: data.name,
+        description: data.description,
+        type: data.type,
+        icon: data.icon,
+        maxLevel: data.maxLevel,
+        baseCost: data.baseCost,
+        costMultiplier: data.costMultiplier,
+        baseValue: data.baseValue,
+        valueIncrement: data.valueIncrement,
+        isHidden: data.isHidden || false,
+      };
+      
+      try {
+        const existing = await storage.getUpgrade(data.id);
+        if (existing) {
+          await storage.updateUpgrade(data.id, upgradeData);
+          console.log(`  ✓ Updated upgrade: ${data.name}`);
+        } else {
+          await storage.createUpgrade(upgradeData);
+          console.log(`  ✓ Created upgrade: ${data.name}`);
+        }
+      } catch (dbError) {
+        console.error(`  ⚠️ Failed to sync upgrade ${data.name}:`, dbError);
+      }
+    }
+    console.log(`✅ Synced ${masterData.upgrades.length} upgrades from master file`);
+    return;
+  }
+  
+  // Fallback to individual files in progressive-data/upgrades directory
+  console.log("📦 Fallback: Syncing upgrades from individual JSON files...");
   const upgradesDir = path.join(__dirname, "../../main-gamedata/progressive-data/upgrades");
   
   try {
@@ -69,7 +113,7 @@ async function syncUpgrades() {
         console.error(`  ⚠️ Failed to sync upgrade ${data.name}:`, dbError);
       }
     }
-    console.log(`✅ Synced ${jsonFiles.length} upgrades to memory and DB`);
+    console.log(`✅ Synced ${jsonFiles.length} upgrades from individual files`);
   } catch (error) {
     console.error("❌ Error syncing upgrades:", error);
     throw error;
@@ -77,7 +121,50 @@ async function syncUpgrades() {
 }
 
 async function syncCharacters() {
-  console.log("📦 Syncing characters from JSON files...");
+  console.log("📦 Syncing characters from master JSON file...");
+  
+  // Load from character-master.json
+  const masterFilePath = path.join(__dirname, "../../main-gamedata/character-master.json");
+  const masterData = await loadJSONFile<{ characters: any[] }>(masterFilePath);
+  
+  if (masterData && masterData.characters) {
+    console.log(`📋 Loading ${masterData.characters.length} characters from character-master.json`);
+    for (const data of masterData.characters) {
+      // Store in memory cache
+      charactersCache.set(data.id, data as CharacterConfig);
+      
+      // Also sync to DB for persistence
+      const characterData: InsertCharacter = {
+        id: data.id,
+        name: data.name,
+        unlockLevel: data.unlockLevel,
+        description: data.description,
+        rarity: data.rarity,
+        defaultImage: data.defaultImage || null,
+        avatarImage: data.avatarImage || null,
+        displayImage: data.displayImage || null,
+        isHidden: data.isHidden || false,
+      };
+      
+      try {
+        const existing = await storage.getCharacter(data.id);
+        if (existing) {
+          await storage.updateCharacter(data.id, characterData);
+          console.log(`  ✓ Updated character: ${data.name}`);
+        } else {
+          await storage.createCharacter(characterData);
+          console.log(`  ✓ Created character: ${data.name}`);
+        }
+      } catch (dbError) {
+        console.error(`  ⚠️ Failed to sync character ${data.name}:`, dbError);
+      }
+    }
+    console.log(`✅ Synced ${masterData.characters.length} characters from master file`);
+    return;
+  }
+  
+  // Fallback to individual files in character-data directory
+  console.log("📦 Fallback: Syncing characters from individual JSON files...");
   const charactersDir = path.join(__dirname, "../../main-gamedata/character-data");
   
   try {
@@ -119,7 +206,7 @@ async function syncCharacters() {
         console.error(`  ⚠️ Failed to sync character ${data.name}:`, dbError);
       }
     }
-    console.log(`✅ Synced ${jsonFiles.length} characters to memory and DB`);
+    console.log(`✅ Synced ${jsonFiles.length} characters from individual files`);
   } catch (error) {
     console.error("❌ Error syncing characters:", error);
     throw error;
@@ -127,7 +214,45 @@ async function syncCharacters() {
 }
 
 async function syncLevels() {
-  console.log("📦 Syncing levels from JSON files...");
+  console.log("📦 Syncing levels from master JSON file...");
+  
+  // Load from levelup-master.json
+  const masterFilePath = path.join(__dirname, "../../main-gamedata/levelup-master.json");
+  const masterData = await loadJSONFile<{ levels: any[] }>(masterFilePath);
+  
+  if (masterData && masterData.levels) {
+    console.log(`📋 Loading ${masterData.levels.length} levels from levelup-master.json`);
+    for (const data of masterData.levels) {
+      // Store in memory cache
+      levelsCache.set(data.level, data as LevelConfig);
+      
+      // Also sync to DB for persistence
+      const levelData: InsertLevel = {
+        level: data.level,
+        experienceRequired: data.experienceRequired,
+        requirements: data.requirements || [],
+        unlocks: data.unlocks || [],
+      };
+      
+      try {
+        const existing = await storage.getLevel(data.level);
+        if (existing) {
+          await storage.updateLevel(data.level, levelData);
+          console.log(`  ✓ Updated level: ${data.level}`);
+        } else {
+          await storage.createLevel(levelData);
+          console.log(`  ✓ Created level: ${data.level}`);
+        }
+      } catch (dbError) {
+        console.error(`  ⚠️ Failed to sync level ${data.level}:`, dbError);
+      }
+    }
+    console.log(`✅ Synced ${masterData.levels.length} levels from master file`);
+    return;
+  }
+  
+  // Fallback to individual files in progressive-data/levelup directory
+  console.log("📦 Fallback: Syncing levels from individual JSON files...");
   const levelsDir = path.join(__dirname, "../../main-gamedata/progressive-data/levelup");
   
   try {
@@ -151,18 +276,23 @@ async function syncLevels() {
         unlocks: data.unlocks || [],
       };
       
-      const existing = await storage.getLevel(data.level);
-      if (existing) {
-        await storage.updateLevel(data.level, levelData);
-        console.log(`  ✓ Updated level: ${data.level}`);
-      } else {
-        await storage.createLevel(levelData);
-        console.log(`  ✓ Created level: ${data.level}`);
+      try {
+        const existing = await storage.getLevel(data.level);
+        if (existing) {
+          await storage.updateLevel(data.level, levelData);
+          console.log(`  ✓ Updated level: ${data.level}`);
+        } else {
+          await storage.createLevel(levelData);
+          console.log(`  ✓ Created level: ${data.level}`);
+        }
+      } catch (dbError) {
+        console.error(`  ⚠️ Failed to sync level ${data.level}:`, dbError);
       }
     }
-    console.log(`✅ Synced ${jsonFiles.length} levels to memory and DB`);
+    console.log(`✅ Synced ${jsonFiles.length} levels from individual files`);
   } catch (error) {
-    console.error("Error syncing levels:", error);
+    console.error("❌ Error syncing levels:", error);
+    throw error;
   }
 }
 
@@ -207,80 +337,129 @@ export function getLevelFromMemory(level: number): LevelConfig | undefined {
   return levelsCache.get(level);
 }
 
-// Save functions to JSON
+// Save functions to JSON - Update master files
 export async function saveUpgradeToJSON(upgrade: InsertUpgrade): Promise<void> {
-  const upgradesDir = path.join(__dirname, "../../main-gamedata/progressive-data/upgrades");
-  const filePath = path.join(upgradesDir, `${upgrade.id}.json`);
+  const masterFilePath = path.join(__dirname, "../../main-gamedata/upgrades-master.json");
   
-  await fs.mkdir(upgradesDir, { recursive: true });
-  
-  const data = {
-    id: upgrade.id,
-    name: upgrade.name,
-    description: upgrade.description,
-    maxLevel: upgrade.maxLevel,
-    baseCost: upgrade.baseCost,
-    costMultiplier: upgrade.costMultiplier,
-    baseValue: upgrade.baseValue,
-    valueIncrement: upgrade.valueIncrement,
-    icon: upgrade.icon,
-    type: upgrade.type,
-    ...(upgrade.isHidden && { isHidden: upgrade.isHidden }),
-  };
-  
-  await fs.writeFile(filePath, JSON.stringify(data, null, 2));
-  
-  // Update memory cache
-  upgradesCache.set(upgrade.id, data as UpgradeConfig);
-  
-  console.log(`✓ Saved upgrade JSON: ${filePath}`);
+  try {
+    // Load existing master data
+    const masterData = await loadJSONFile<{ upgrades: any[] }>(masterFilePath);
+    const upgrades = masterData?.upgrades || [];
+    
+    // Find existing upgrade or add new one
+    const existingIndex = upgrades.findIndex(u => u.id === upgrade.id);
+    
+    const upgradeData = {
+      id: upgrade.id,
+      name: upgrade.name,
+      description: upgrade.description,
+      maxLevel: upgrade.maxLevel,
+      baseCost: upgrade.baseCost,
+      costMultiplier: upgrade.costMultiplier,
+      baseValue: upgrade.baseValue,
+      valueIncrement: upgrade.valueIncrement,
+      icon: upgrade.icon,
+      type: upgrade.type,
+      ...(upgrade.isHidden && { isHidden: upgrade.isHidden }),
+    };
+    
+    if (existingIndex >= 0) {
+      upgrades[existingIndex] = upgradeData;
+    } else {
+      upgrades.push(upgradeData);
+    }
+    
+    // Write back to master file
+    await fs.writeFile(masterFilePath, JSON.stringify({ upgrades }, null, 2));
+    
+    // Update memory cache
+    upgradesCache.set(upgrade.id, upgradeData as UpgradeConfig);
+    
+    console.log(`✓ Updated upgrades-master.json with upgrade: ${upgrade.name}`);
+  } catch (error) {
+    console.error(`❌ Failed to save upgrade to master JSON:`, error);
+    throw error;
+  }
 }
 
 export async function saveLevelToJSON(level: InsertLevel): Promise<void> {
-  const levelsDir = path.join(__dirname, "../../main-gamedata/progressive-data/levelup");
-  const filePath = path.join(levelsDir, `level-${level.level}.json`);
+  const masterFilePath = path.join(__dirname, "../../main-gamedata/levelup-master.json");
   
-  await fs.mkdir(levelsDir, { recursive: true });
-  
-  const data = {
-    level: level.level,
-    requirements: level.requirements,
-    experienceRequired: level.experienceRequired,
-    unlocks: level.unlocks,
-  };
-  
-  await fs.writeFile(filePath, JSON.stringify(data, null, 2));
-  
-  // Update memory cache
-  levelsCache.set(level.level, data as LevelConfig);
-  
-  console.log(`✓ Saved level JSON: ${filePath}`);
+  try {
+    // Load existing master data
+    const masterData = await loadJSONFile<{ levels: any[] }>(masterFilePath);
+    const levels = masterData?.levels || [];
+    
+    // Find existing level or add new one
+    const existingIndex = levels.findIndex(l => l.level === level.level);
+    
+    const levelData = {
+      level: level.level,
+      experienceRequired: level.experienceRequired,
+      requirements: level.requirements,
+      unlocks: level.unlocks,
+    };
+    
+    if (existingIndex >= 0) {
+      levels[existingIndex] = levelData;
+    } else {
+      levels.push(levelData);
+      levels.sort((a, b) => a.level - b.level); // Keep sorted
+    }
+    
+    // Write back to master file
+    await fs.writeFile(masterFilePath, JSON.stringify({ levels }, null, 2));
+    
+    // Update memory cache
+    levelsCache.set(level.level, levelData as LevelConfig);
+    
+    console.log(`✓ Updated levelup-master.json with level: ${level.level}`);
+  } catch (error) {
+    console.error(`❌ Failed to save level to master JSON:`, error);
+    throw error;
+  }
 }
 
 export async function saveCharacterToJSON(character: InsertCharacter): Promise<void> {
-  const charactersDir = path.join(__dirname, "../../main-gamedata/character-data");
-  const filePath = path.join(charactersDir, `${character.id}.json`);
+  const masterFilePath = path.join(__dirname, "../../main-gamedata/character-master.json");
   
-  await fs.mkdir(charactersDir, { recursive: true });
-  
-  const data = {
-    id: character.id,
-    name: character.name,
-    unlockLevel: character.unlockLevel,
-    description: character.description,
-    rarity: character.rarity,
-    ...(character.defaultImage && { defaultImage: character.defaultImage }),
-    ...(character.avatarImage && { avatarImage: character.avatarImage }),
-    ...(character.displayImage && { displayImage: character.displayImage }),
-    ...(character.isHidden && { isHidden: character.isHidden }),
-  };
-  
-  await fs.writeFile(filePath, JSON.stringify(data, null, 2));
-  
-  // Update memory cache
-  charactersCache.set(character.id, data as CharacterConfig);
-  
-  console.log(`✓ Saved character JSON: ${filePath}`);
+  try {
+    // Load existing master data
+    const masterData = await loadJSONFile<{ characters: any[] }>(masterFilePath);
+    const characters = masterData?.characters || [];
+    
+    // Find existing character or add new one
+    const existingIndex = characters.findIndex(c => c.id === character.id);
+    
+    const characterData = {
+      id: character.id,
+      name: character.name,
+      unlockLevel: character.unlockLevel,
+      description: character.description,
+      rarity: character.rarity,
+      ...(character.defaultImage && { defaultImage: character.defaultImage }),
+      ...(character.avatarImage && { avatarImage: character.avatarImage }),
+      ...(character.displayImage && { displayImage: character.displayImage }),
+      ...(character.isHidden && { isHidden: character.isHidden }),
+    };
+    
+    if (existingIndex >= 0) {
+      characters[existingIndex] = characterData;
+    } else {
+      characters.push(characterData);
+    }
+    
+    // Write back to master file
+    await fs.writeFile(masterFilePath, JSON.stringify({ characters }, null, 2));
+    
+    // Update memory cache
+    charactersCache.set(character.id, characterData as CharacterConfig);
+    
+    console.log(`✓ Updated character-master.json with character: ${character.name}`);
+  } catch (error) {
+    console.error(`❌ Failed to save character to master JSON:`, error);
+    throw error;
+  }
 }
 
 export async function savePlayerDataToJSON(player: Player): Promise<void> {
