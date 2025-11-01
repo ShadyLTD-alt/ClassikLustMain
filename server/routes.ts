@@ -340,6 +340,19 @@
     }
   });
 
+  // Get all media uploads
+  app.get("/api/media", requireAuth, async (req, res) => {
+    try {
+      const characterId = req.query.characterId as string | undefined;
+      const includeHidden = req.query.includeHidden === 'true';
+      const mediaUploads = await storage.getMediaUploads(characterId, includeHidden);
+      res.json({ media: mediaUploads });
+    } catch (error: any) {
+      console.error('Error fetching media uploads:', error);
+      res.status(500).json({ error: 'Failed to fetch media uploads' });
+    }
+  });
+
   console.log('👤 Setting up player routes...');
   app.get("/api/player/me", requireAuth, async (req, res) => {
     try {
