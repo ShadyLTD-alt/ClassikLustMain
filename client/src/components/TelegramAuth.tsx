@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Smartphone, ExternalLink, Loader2 } from "lucide-react";
 
 interface TelegramAuthProps {
-  onAuth: (userData: any) => void;
+  onAuth: (sessionToken: string, userData: any) => void;
 }
 
 export default function TelegramAuth({ onAuth }: TelegramAuthProps) {
@@ -54,9 +54,9 @@ export default function TelegramAuth({ onAuth }: TelegramAuthProps) {
       const data = await response.json();
       console.log('📦 Response data:', data);
 
-      if (data.success && data.player) {
+      if (data.success && data.player && data.sessionToken) {
         console.log('✅ Auth successful, calling onAuth with player:', data.player);
-        onAuth(data.player);
+        onAuth(data.sessionToken, data.player);
       } else {
         console.error('❌ Auth failed:', data.error);
         setError(data.error || "Authentication failed");

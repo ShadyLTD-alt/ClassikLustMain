@@ -1,16 +1,56 @@
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import TelegramAuth from './TelegramAuth';
+import { useState } from 'react';
+import { Loader2, User } from 'lucide-react';
 
 interface LoginScreenProps {
-  onLogin: (userId: string, userData?: any) => void;
+  onLogin: (sessionToken: string, playerData: any) => void;
 }
 
 export default function LoginScreen({ onLogin }: LoginScreenProps) {
-  const handleTelegramAuth = (player: any) => {
+  const [devUsername, setDevUsername] = useState('');
+  const [isDevLoading, setIsDevLoading] = useState(false);
+  const [devError, setDevError] = useState<string | null>(null);
+  const isDev = import.meta.env.DEV;
+
+  const handleTelegramAuth = (sessionToken: string, player: any) => {
     console.log('Telegram auth successful:', player);
-    onLogin(player.id, player);
+    onLogin(sessionToken, player);
+  };
+
+  const handleDevLogin = async () => {
+    if (!devUsername.trim()) {
+      setDevError('Please enter a username');
+      return;
+    }
+
+    setIsDevLoading(true);
+    setDevError(null);
+
+    try {
+      const response = await fetch('/api/auth/dev', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: devUsername }),
+      });
+
+      const data = await response.json();
+
+      if (data.success && data.player && data.sessionToken) {
+        console.log('✅ Dev login successful');
+        onLogin(data.sessionToken, data.player);
+      } else {
+        setDevError(data.error || 'Login failed');
+      }
+    } catch (error: any) {
+      console.error('Dev login error:', error);
+      setDevError(error.message || 'Login failed');
+    } finally {
+      setIsDevLoading(false);
+    }
   };
 
   return (
@@ -39,6 +79,61 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
               Login with Telegram to play. Your progress will be saved to the cloud.
             </p>
           </div>
+
+          {isDev && (
+            <>
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t border-gray-600" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-gray-900 px-2 text-gray-400">Or for testing</span>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                {devError && (
+                  <div className="bg-red-900/20 border border-red-500/50 rounded-lg p-3">
+                    <p className="text-red-400 text-sm">{devError}</p>
+                  </div>
+                )}
+                
+                <Input
+                  data-testid="input-dev-username"
+                  type="text"
+                  placeholder="Enter username for testing"
+                  value={devUsername}
+                  onChange={(e) => setDevUsername(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleDevLogin()}
+                  className="bg-gray-800/50 border-gray-600 text-white placeholder:text-gray-400"
+                  disabled={isDevLoading}
+                />
+                
+                <Button
+                  data-testid="button-dev-login"
+                  onClick={handleDevLogin}
+                  className="w-full bg-gradient-to-r from-gray-600 to-gray-700 hover:from-gray-700 hover:to-gray-800"
+                  disabled={isDevLoading || !devUsername.trim()}
+                >
+                  {isDevLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Logging in...
+                    </>
+                  ) : (
+                    <>
+                      <User className="w-4 h-4 mr-2" />
+                      Dev Login
+                    </>
+                  )}
+                </Button>
+                
+                <p className="text-xs text-gray-500 text-center">
+                  Development mode only - for testing without Telegram
+                </p>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
     </div>

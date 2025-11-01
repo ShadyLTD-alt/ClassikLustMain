@@ -87,6 +87,68 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/auth/dev", async (req, res) => {
+    // Only allow in development mode
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(403).json({ error: 'Development login not available in production' });
+    }
+
+    console.log('🛠️ Dev auth request received');
+    
+    try {
+      const { username } = req.body;
+      
+      if (!username || username.trim().length === 0) {
+        return res.status(400).json({ error: 'Username is required' });
+      }
+
+      const sanitizedUsername = username.trim().substring(0, 50);
+      const devTelegramId = `dev_${sanitizedUsername.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+
+      console.log('👤 Dev login for:', sanitizedUsername);
+      
+      let player = await storage.getPlayerByTelegramId(devTelegramId);
+      
+      if (!player) {
+        console.log('➕ Creating new dev player...');
+        player = await storage.createPlayer({
+          telegramId: devTelegramId,
+          username: sanitizedUsername,
+          points: 0,
+          energy: 1000,
+          maxEnergy: 1000,
+          level: 1,
+          experience: 0,
+          passiveIncomeRate: 0,
+          isAdmin: false,
+        });
+        console.log('✅ New dev player created:', player.id);
+      } else {
+        console.log('👋 Existing dev player found, updating last login...');
+        await storage.updatePlayer(player.id, {
+          lastLogin: new Date(),
+        });
+      }
+
+      const sessionToken = generateSecureToken();
+      await storage.createSession({
+        playerId: player.id,
+        token: sessionToken,
+        expiresAt: getSessionExpiry(),
+      });
+
+      console.log('🎉 Dev auth successful for player:', player.username);
+      res.json({
+        success: true,
+        player,
+        sessionToken,
+      });
+    } catch (error) {
+      console.error('💥 Dev auth error:', error);
+      res.status(500).json({ error: 'Authentication failed', details: (error as Error).message });
+    }
+  });
+
   app.post("/api/auth/telegram", async (req, res) => {
     console.log('🔐 Telegram auth request received');
     console.log('📦 Request body:', JSON.stringify(req.body, null, 2));
