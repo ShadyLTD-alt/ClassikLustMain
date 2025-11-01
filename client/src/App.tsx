@@ -38,11 +38,24 @@ function App() {
       
       // Check if running in Telegram WebApp
       const tg = (window as any).Telegram?.WebApp;
-      console.log('📱 Telegram WebApp check:', { exists: !!tg, hasInitData: !!tg?.initData });
+      console.log('📱 Telegram WebApp full object:', tg);
+      console.log('📱 Telegram WebApp check:', { 
+        exists: !!tg, 
+        hasInitData: !!tg?.initData,
+        initDataLength: tg?.initData?.length || 0,
+        platform: tg?.platform,
+        version: tg?.version
+      });
       
-      if (tg && tg.initData) {
+      if (tg) {
+        console.log('🔧 Telegram WebApp ready() called');
+        tg.ready();
+        tg.expand();
+      }
+      
+      if (tg && tg.initData && tg.initData.length > 0) {
         console.log('✅ Telegram WebApp detected, attempting auto-auth...');
-        console.log('📝 InitData:', tg.initData);
+        console.log('📝 InitData (first 50 chars):', tg.initData.substring(0, 50) + '...');
         setLoadingProgress(70);
         try {
           console.log('📤 Sending auto-auth request...');
@@ -68,7 +81,8 @@ function App() {
           console.error('💥 Auto-auth failed:', error);
         }
       } else {
-        console.log('ℹ️ Not in Telegram WebApp or no initData');
+        console.log('ℹ️ Not in Telegram WebApp or no initData available');
+        console.log('ℹ️ This app must be opened via Telegram Bot Web App button');
       }
       
       setLoadingProgress(80);
