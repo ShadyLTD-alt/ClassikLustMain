@@ -73,6 +73,106 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const [levelConfigs, setLevelConfigs] = useState<LevelConfig[]>(DEFAULT_LEVEL_CONFIGS);
   const [theme, setTheme] = useState<ThemeConfig>(DEFAULT_THEME);
   const [pendingPurchases, setPendingPurchases] = useState<Set<string>>(new Set());
+  const [isInitialized, setIsInitialized] = useState(false);
+
+  // Load player data from server on mount
+  useEffect(() => {
+    const loadPlayerData = async () => {
+      const sessionToken = localStorage.getItem('sessionToken');
+      if (!sessionToken) {
+        setIsInitialized(true);
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/player/me', {
+          headers: {
+            'Authorization': `Bearer ${sessionToken}`
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const player = data.player;
+          
+          // Update state with server data
+          setState(prev => ({
+            ...prev,
+            points: typeof player.points === 'string' ? parseFloat(player.points) : player.points,
+            energy: player.energy || prev.energy,
+            maxEnergy: player.maxEnergy || prev.maxEnergy,
+            level: player.level || prev.level,
+            selectedCharacterId: player.selectedCharacterId || prev.selectedCharacterId,
+            selectedImageId: player.displayImage || prev.selectedImageId,
+            upgrades: player.upgrades || {},
+            unlockedCharacters: Array.isArray(player.unlockedCharacters) ? player.unlockedCharacters : ['starter'],
+            passiveIncomeRate: player.passiveIncomeRate || 0,
+            isAdmin: player.isAdmin || false
+          }));
+          
+          console.log('✅ Loaded player data from server:', {
+            points: player.points,
+            energy: player.energy,
+            level: player.level,
+            upgrades: player.upgrades,
+            passiveIncomeRate: player.passiveIncomeRate
+          });
+        }
+      } catch (error) {
+        console.error('Failed to load player data:', error);
+      } finally {
+        setIsInitialized(true);
+      }
+    };
+
+    loadPlayerData();
+  }, []);
+
+  // Recalculate passive income, max energy, and regen when upgrades change
+  useEffect(() => {
+    if (!isInitialized) return;
+
+    setState(prev => {
+      const perHourUpgrades = upgrades.filter(u => u.type === 'perHour');
+      let newPassiveRate = 0;
+      perHourUpgrades.forEach(u => {
+        const lvl = prev.upgrades[u.id] || 0;
+        newPassiveRate += calculateUpgradeValue(u, lvl);
+      });
+
+      const energyUpgrades = upgrades.filter(u => u.type === 'energyMax' && u.id === 'energy-capacity');
+      let newMaxEnergy = 1000;
+      energyUpgrades.forEach(u => {
+        const lvl = prev.upgrades[u.id] || 0;
+        if (lvl > 0) {
+          newMaxEnergy = calculateUpgradeValue(u, lvl);
+        }
+      });
+
+      const regenUpgrades = upgrades.filter(u => u.type === 'energyMax' && u.id === 'energy-regen');
+      let newRegenRate = 1;
+      regenUpgrades.forEach(u => {
+        const lvl = prev.upgrades[u.id] || 0;
+        if (lvl > 0) {
+          newRegenRate = calculateUpgradeValue(u, lvl);
+        }
+      });
+
+      // Only update if values changed
+      if (newPassiveRate !== prev.passiveIncomeRate || 
+          newMaxEnergy !== prev.maxEnergy || 
+          newRegenRate !== prev.energyRegenRate) {
+        return {
+          ...prev,
+          passiveIncomeRate: newPassiveRate,
+          maxEnergy: newMaxEnergy,
+          energyRegenRate: newRegenRate
+        };
+      }
+      
+      return prev;
+    });
+  }, [state.upgrades, upgrades, isInitialized]);
 
   useEffect(() => {
     applyTheme(theme);
