@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, boolean, jsonb, real } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, boolean, jsonb, real, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -24,11 +24,12 @@ export const players = pgTable("players", {
   lastEnergyUpdate: timestamp("lastEnergyUpdate").defaultNow().notNull(),
 });
 
+// Match upgrades-master.json exactly
 export const upgrades = pgTable("upgrades", {
-  id: text("id").primaryKey(),
+  id: text("id").primaryKey(), // perTap, perHour, energyMax, criticalChance, etc.
   name: text("name").notNull(),
   description: text("description").notNull(),
-  type: text("type").notNull(),
+  type: text("type").notNull(), // perTap, perHour, energyMax
   icon: text("icon").notNull(),
   maxLevel: integer("maxLevel").notNull(),
   baseCost: integer("baseCost").notNull(),
@@ -52,21 +53,40 @@ export const characters = pgTable("characters", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
+// Enhanced levels for admin editor with cost and requirements
 export const levels = pgTable("levels", {
   level: integer("level").primaryKey(),
-  experienceRequired: integer("experienceRequired").notNull(),
-  requirements: jsonb("requirements").notNull().$type<Array<{ upgradeId: string; minLevel: number }>>(),
-  unlocks: text("unlocks").array().notNull(),
+  cost: integer("cost").notNull().default(100), // Points cost to level up
+  experienceRequired: integer("experienceRequired"), // Optional/dormant XP system
+  requirements: jsonb("requirements").notNull().default("[]").$type<Array<{ upgradeId: string; minLevel: number }>>(),
+  unlocks: jsonb("unlocks").notNull().default("[]").$type<string[]>(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
+// Fixed playerUpgrades to mirror JSON structure exactly
 export const playerUpgrades = pgTable("playerUpgrades", {
   id: varchar("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   playerId: varchar("playerId").notNull().references(() => players.id, { onDelete: 'cascade' }),
-  upgradeId: text("upgradeId").notNull().references(() => upgrades.id, { onDelete: 'cascade' }),
+  upgradeId: text("upgradeId").notNull().references(() => upgrades.id, { onDelete: 'cascade' }), // perTap, perHour, etc.
+  type: text("type").notNull(), // Store upgrade type for fast filtering
   level: integer("level").default(0).notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
-});
+}, (table) => ({
+  // Ensure each player can only have one record per upgrade
+  playerUpgradeUnique: unique().on(table.playerId, table.upgradeId),
+}));
+
+// New: Track player level progression (requirements-based)
+export const playerLevelUps = pgTable("playerLevelUps", {
+  id: varchar("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  playerId: varchar("playerId").notNull().references(() => players.id, { onDelete: 'cascade' }),
+  level: integer("level").notNull(),
+  unlockedAt: timestamp("unlockedAt").defaultNow().notNull(),
+  source: text("source"), // "requirements", "admin", "grant", etc.
+}, (table) => ({
+  // Ensure each player reaches each level only once
+  playerLevelUnique: unique().on(table.playerId, table.level),
+}));
 
 export const playerCharacters = pgTable("playerCharacters", {
   id: varchar("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
@@ -122,6 +142,11 @@ export const insertPlayerUpgradeSchema = createInsertSchema(playerUpgrades).omit
   updatedAt: true,
 });
 
+export const insertPlayerLevelUpSchema = createInsertSchema(playerLevelUps).omit({
+  id: true,
+  unlockedAt: true,
+});
+
 export const insertPlayerCharacterSchema = createInsertSchema(playerCharacters).omit({
   id: true,
   unlockedAt: true,
@@ -155,6 +180,9 @@ export type InsertLevel = z.infer<typeof insertLevelSchema>;
 
 export type PlayerUpgrade = typeof playerUpgrades.$inferSelect;
 export type InsertPlayerUpgrade = z.infer<typeof insertPlayerUpgradeSchema>;
+
+export type PlayerLevelUp = typeof playerLevelUps.$inferSelect;
+export type InsertPlayerLevelUp = z.infer<typeof insertPlayerLevelUpSchema>;
 
 export type PlayerCharacter = typeof playerCharacters.$inferSelect;
 export type InsertPlayerCharacter = z.infer<typeof insertPlayerCharacterSchema>;
