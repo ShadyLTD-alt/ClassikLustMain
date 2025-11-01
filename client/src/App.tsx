@@ -89,11 +89,17 @@ function App() {
       if (savedPlayer) {
         try {
           const playerData = JSON.parse(savedPlayer);
-          console.log('🔄 Auto-login with saved player:', playerData.username);
-          setUserData(playerData);
-          setLoadingProgress(100);
-          setTimeout(() => setAuthState('authenticated'), 500);
-          return;
+          // Only auto-login if we have a valid Telegram ID
+          if (playerData.telegramId) {
+            console.log('🔄 Auto-login with saved player:', playerData.username);
+            setUserData(playerData);
+            setLoadingProgress(100);
+            setTimeout(() => setAuthState('authenticated'), 500);
+            return;
+          } else {
+            console.log('⚠️ Saved player has no telegramId, clearing...');
+            localStorage.removeItem('playerData');
+          }
         } catch (error) {
           console.error('💥 Failed to parse saved player:', error);
           localStorage.removeItem('playerData');
