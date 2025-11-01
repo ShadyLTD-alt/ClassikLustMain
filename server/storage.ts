@@ -19,14 +19,22 @@ import {
   type InsertPlayerCharacter,
 } from "@shared/schema";
 
-if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error("SUPABASE_URL and SUPABASE_ANON_KEY environment variables must be set");
+}
+
+// Validate URL format
+if (!supabaseUrl.startsWith('http://') && !supabaseUrl.startsWith('https://')) {
+  throw new Error(`Invalid SUPABASE_URL format: "${supabaseUrl}". Must start with http:// or https://`);
 }
 
 // Initialize Supabase client
 export const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY
+  supabaseUrl,
+  supabaseAnonKey
 );
 
 // Get the connection string for Drizzle
