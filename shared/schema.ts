@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, boolean, jsonb, real, numeric } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, boolean, jsonb, real } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -7,7 +7,7 @@ export const players = pgTable("players", {
   id: varchar("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   telegramId: text("telegramId").unique(),
   username: text("username").notNull(),
-  points: numeric("points", { precision: 10, scale: 2 }).default("0").notNull(),
+  points: integer("points").default(0).notNull(),
   energy: integer("energy").default(1000).notNull(),
   maxEnergy: integer("maxEnergy").default(1000).notNull(),
   level: integer("level").default(1).notNull(),
@@ -17,8 +17,8 @@ export const players = pgTable("players", {
   selectedCharacterId: text("selectedCharacterId"),
   selectedImageId: text("selectedImageId"),
   displayImage: text("displayImage"),
-  upgrades: jsonb("upgrades").default("{}").notNull().$type<Record<string, number>>(), // Store upgrade levels as { upgradeId: level }
-  unlockedCharacters: jsonb("unlockedCharacters").default("[]").notNull().$type<string[]>(), // Store unlocked character IDs
+  upgrades: jsonb("upgrades").default("{}").notNull().$type<Record<string, number>>(),
+  unlockedCharacters: jsonb("unlockedCharacters").default("[]").notNull().$type<string[]>(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   lastLogin: timestamp("lastLogin").defaultNow().notNull(),
   lastEnergyUpdate: timestamp("lastEnergyUpdate").defaultNow().notNull(),
@@ -89,8 +89,8 @@ export const mediaUploads = pgTable("mediaUploads", {
   url: text("url").notNull(),
   type: text("type").notNull().default('character'),
   unlockLevel: integer("unlockLevel").notNull().default(1),
-  categories: jsonb("categories").notNull().default(sql`'{}'::jsonb`),
-  poses: jsonb("poses").notNull().default(sql`'[]'::jsonb`),
+  categories: jsonb("categories").notNull().default(sql`'[]'::jsonb`).$type<string[]>(),
+  poses: jsonb("poses").notNull().default(sql`'[]'::jsonb`).$type<string[]>(),
   isHidden: boolean("isHidden").notNull().default(false),
   chatEnable: boolean("chatEnable").notNull().default(false),
   chatSendPercent: integer("chatSendPercent").notNull().default(0),
@@ -114,7 +114,7 @@ export const insertCharacterSchema = createInsertSchema(characters).omit({
 });
 
 export const insertLevelSchema = createInsertSchema(levels).omit({
-  createdAt: true,
+  createdAt: true
 });
 
 export const insertPlayerUpgradeSchema = createInsertSchema(playerUpgrades).omit({

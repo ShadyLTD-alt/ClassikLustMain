@@ -123,8 +123,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.media_uploads": {
-      "name": "media_uploads",
+    "public.mediaUploads": {
+      "name": "mediaUploads",
       "schema": "",
       "columns": {
         "id": {
@@ -134,8 +134,8 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "character_id": {
-          "name": "character_id",
+        "characterId": {
+          "name": "characterId",
           "type": "text",
           "primaryKey": false,
           "notNull": true
@@ -153,8 +153,8 @@
           "notNull": true,
           "default": "'character'"
         },
-        "unlock_level": {
-          "name": "unlock_level",
+        "unlockLevel": {
+          "name": "unlockLevel",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
@@ -174,36 +174,36 @@
           "notNull": true,
           "default": "'[]'::jsonb"
         },
-        "is_hidden": {
-          "name": "is_hidden",
+        "isHidden": {
+          "name": "isHidden",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,
           "default": false
         },
-        "chat_enable": {
-          "name": "chat_enable",
+        "chatEnable": {
+          "name": "chatEnable",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,
           "default": false
         },
-        "chat_send_percent": {
-          "name": "chat_send_percent",
+        "chatSendPercent": {
+          "name": "chatSendPercent",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "default": 0
         },
-        "created_at": {
-          "name": "created_at",
+        "createdAt": {
+          "name": "createdAt",
           "type": "timestamp",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
         },
-        "updated_at": {
-          "name": "updated_at",
+        "updatedAt": {
+          "name": "updatedAt",
           "type": "timestamp",
           "primaryKey": false,
           "notNull": true,
@@ -212,12 +212,12 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "media_uploads_character_id_characters_id_fk": {
-          "name": "media_uploads_character_id_characters_id_fk",
-          "tableFrom": "media_uploads",
+        "mediaUploads_characterId_characters_id_fk": {
+          "name": "mediaUploads_characterId_characters_id_fk",
+          "tableFrom": "mediaUploads",
           "tableTo": "characters",
           "columnsFrom": [
-            "character_id"
+            "characterId"
           ],
           "columnsTo": [
             "id"

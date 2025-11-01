@@ -10,11 +10,22 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
+// Error handlers at the very top
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('💥 Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('💥 Uncaught Exception:', error);
+  process.exit(1);
+});
+
 declare module 'http' {
   interface IncomingMessage {
     rawBody: unknown
   }
 }
+
 app.use(express.json({
   verify: (req, _res, buf) => {
     req.rawBody = buf;
@@ -22,7 +33,9 @@ app.use(express.json({
 }));
 app.use(express.urlencoded({ extended: false }));
 
+// Request logging middleware
 app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
   const start = Date.now();
   const path = req.path;
   let capturedJsonResponse: Record<string, any> | undefined = undefined;
@@ -47,19 +60,29 @@ app.use((req, res, next) => {
 
       log(logLine);
     }
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url} - ${res.statusCode} (${duration}ms)`);
   });
+
+  // Log if request takes more than 5 seconds
+  setTimeout(() => {
+    if (!res.headersSent) {
+      console.error(`⚠️ REQUEST HANGING: ${req.method} ${req.url} - ${Date.now() - start}ms`);
+    }
+  }, 5000);
 
   next();
 });
 
 (async () => {
-  // Sync game data from JSON files to database on startup
-  // This is now done non-blocking after server starts
-  // await syncAllGameData(); // This line is removed to make sync non-blocking
+  console.log('🚀 Starting server initialization...');
 
+  console.log('📝 Registering routes...');
   const server = await registerRoutes(app);
+  console.log('✅ Routes registered successfully');
 
+  console.log('📁 Setting up static file serving...');
   app.use("/uploads", express.static(path.join(__dirname, "..", "uploads")));
+  console.log('✅ Static files configured');
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
@@ -79,9 +102,13 @@ app.use((req, res, next) => {
   // setting up all the other routes so the catch-all route
   // doesn't interfere with the other routes
   if (app.get("env") === "development") {
+    console.log('⚙️ Setting up Vite dev server...');
     await setupVite(app, server);
+    console.log('✅ Vite dev server ready');
   } else {
+    console.log('📦 Serving static files (production mode)...');
     serveStatic(app);
+    console.log('✅ Static files ready');
   }
 
   // ALWAYS serve the app on the port specified in the environment variable PORT
@@ -89,17 +116,23 @@ app.use((req, res, next) => {
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || '5000', 10);
+
+  console.log(`🌐 Starting server on port ${port}...`);
   server.listen({
     port,
     host: "0.0.0.0",
     reusePort: true,
   }, () => {
-    log(`serving on port ${port}`);
+    log(`✅ Server listening on port ${port}`);
+    console.log(`✅ Server is ready and accepting connections on http://0.0.0.0:${port}`);
   });
 
   // Sync game data from JSON files after server starts (non-blocking)
-  syncAllGameData().catch(err => {
-    console.error("⚠️ Failed to sync game data on startup:", err);
-    console.log("📝 The app will still work, but data may be out of sync");
-  });
+  console.log('🔄 Starting game data sync...');
+  syncAllGameData()
+    .then(() => console.log('✅ Game data synced successfully'))
+    .catch(err => {
+      console.error("⚠️ Failed to sync game data on startup:", err);
+      console.log("📝 The app will still work, but data may be out of sync");
+    });
 })();
