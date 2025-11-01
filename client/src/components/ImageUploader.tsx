@@ -20,7 +20,6 @@ interface ImageUploaderProps {
 export default function ImageUploader({ adminMode = false }: ImageUploaderProps) {
   const { state, characters, images, addImage, updateImage, removeImage, selectImage } = useGame();
   const [categories, setCategories] = useState({
-    hidden: false,
     nsfw: false,
     vip: false,
     event: false,
@@ -183,7 +182,7 @@ export default function ImageUploader({ adminMode = false }: ImageUploaderProps)
       setPreviewUrl(null);
       setUnlockLevel(1);
       setImageType('character');
-      setCategories({ hidden: false, nsfw: false, vip: false, event: false, random: false });
+      setCategories({ "nsfw": false, "vip": false, "event": false, "random": false });
       setSelectedPoses([]);
       setIsHidden(false);
       setChatEnable(false);
@@ -201,7 +200,7 @@ export default function ImageUploader({ adminMode = false }: ImageUploaderProps)
     setPreviewUrl(null);
     setUnlockLevel(1);
     setImageType('character');
-    setCategories({ hidden: false, nsfw: false, vip: false, event: false, random: false });
+    setCategories({ "nsfw": false, "vip": false, "event": false, "random": false });
     setSelectedPoses([]);
   };
 

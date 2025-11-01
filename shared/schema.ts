@@ -83,19 +83,19 @@ export const sessions = pgTable("sessions", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
-export const mediaUploads = pgTable("media_uploads", {
+export const mediaUploads = pgTable("mediaUploads", {
   id: text("id").primaryKey().default(sql`gen_random_uuid()`),
-  characterId: text("character_id").notNull().references(() => characters.id, { onDelete: 'cascade' }),
+  characterId: text("characterId").notNull().references(() => characters.id, { onDelete: 'cascade' }),
   url: text("url").notNull(),
   type: text("type").notNull().default('character'),
-  unlockLevel: integer("unlock_level").notNull().default(1),
+  unlockLevel: integer("unlockLevel").notNull().default(1),
   categories: jsonb("categories").notNull().default(sql`'{}'::jsonb`),
   poses: jsonb("poses").notNull().default(sql`'[]'::jsonb`),
-  isHidden: boolean("is_hidden").notNull().default(false),
-  chatEnable: boolean("chat_enable").notNull().default(false),
-  chatSendPercent: integer("chat_send_percent").notNull().default(0),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  isHidden: boolean("isHidden").notNull().default(false),
+  chatEnable: boolean("chatEnable").notNull().default(false),
+  chatSendPercent: integer("chatSendPercent").notNull().default(0),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 });
 
 export const insertPlayerSchema = createInsertSchema(players).omit({
