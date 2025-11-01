@@ -101,30 +101,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   }, [theme]);
 
   useEffect(() => {
-    localStorage.setItem('gameState', JSON.stringify(state));
-  }, [state]);
-
-  useEffect(() => {
-    localStorage.setItem('upgradeConfigs', JSON.stringify(upgrades));
-  }, [upgrades]);
-
-  useEffect(() => {
-    localStorage.setItem('characterConfigs', JSON.stringify(characters));
-  }, [characters]);
-
-  useEffect(() => {
-    localStorage.setItem('imageConfigs', JSON.stringify(images));
-  }, [images]);
-
-  useEffect(() => {
-    localStorage.setItem('levelConfigs', JSON.stringify(levelConfigs));
-  }, [levelConfigs]);
-
-  useEffect(() => {
-    localStorage.setItem('themeConfig', JSON.stringify(theme));
-  }, [theme]);
-
-  useEffect(() => {
+    let syncCounter = 0;
     const interval = setInterval(() => {
       setState(prev => {
         let newEnergy = Math.min(prev.maxEnergy, prev.energy + prev.energyRegenRate);
@@ -139,6 +116,23 @@ export function GameProvider({ children }: { children: ReactNode }) {
           return prev;
         }
 
+        // Sync to database every 10 seconds
+        syncCounter++;
+        if (syncCounter >= 10) {
+          syncCounter = 0;
+          fetch('/api/player/me', {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`
+            },
+            body: JSON.stringify({
+              energy: newEnergy,
+              points: newPoints
+            })
+          }).catch(err => console.error('Failed to sync energy/points to DB:', err));
+        }
+
         return { ...prev, energy: newEnergy, points: newPoints };
       });
     }, 1000);
@@ -146,7 +140,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(interval);
   }, []);
 
-  const tap = useCallback(() => {
+  const tap = useCallback(async () => {
     setState(prev => {
       if (prev.energy < 1) return prev;
 
@@ -159,16 +153,30 @@ export function GameProvider({ children }: { children: ReactNode }) {
       });
 
       const newPoints = prev.points + tapValue;
+      const newEnergy = prev.energy - 1;
+
+      // Sync to database
+      fetch('/api/player/me', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`
+        },
+        body: JSON.stringify({
+          points: newPoints,
+          energy: newEnergy
+        })
+      }).catch(err => console.error('Failed to sync tap to DB:', err));
 
       return {
         ...prev,
         points: newPoints,
-        energy: prev.energy - 1
+        energy: newEnergy
       };
     });
   }, [upgrades, characters]);
 
-  const purchaseUpgrade = useCallback((upgradeId: string) => {
+  const purchaseUpgrade = useCallback(async (upgradeId: string) => {
     const upgrade = upgrades.find(u => u.id === upgradeId);
     if (!upgrade) return false;
 
@@ -178,8 +186,27 @@ export function GameProvider({ children }: { children: ReactNode }) {
     const cost = calculateUpgradeCost(upgrade, currentLevel);
     if (state.points < cost) return false;
 
+    const newLevel = currentLevel + 1;
+
+    // Save to database first
+    try {
+      await fetch('/api/player/upgrades', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`
+        },
+        body: JSON.stringify({
+          upgradeId,
+          level: newLevel
+        })
+      });
+    } catch (err) {
+      console.error('Failed to save upgrade to DB:', err);
+      return false;
+    }
+
     setState(prev => {
-      const newLevel = currentLevel + 1;
       const newUpgrades = { ...prev.upgrades, [upgradeId]: newLevel };
 
       const perHourUpgrades = upgrades.filter(u => u.type === 'perHour');
@@ -216,8 +243,22 @@ export function GameProvider({ children }: { children: ReactNode }) {
     return true;
   }, [state.upgrades, state.points, upgrades]);
 
-  const selectCharacter = useCallback((characterId: string) => {
+  const selectCharacter = useCallback(async (characterId: string) => {
     if (state.unlockedCharacters.includes(characterId)) {
+      try {
+        await fetch('/api/player/me', {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`
+          },
+          body: JSON.stringify({
+            selectedCharacterId: characterId
+          })
+        });
+      } catch (err) {
+        console.error('Failed to sync character selection to DB:', err);
+      }
       setState(prev => ({ ...prev, selectedCharacterId: characterId, selectedImageId: null }));
     }
   }, [state.unlockedCharacters]);
@@ -240,28 +281,54 @@ export function GameProvider({ children }: { children: ReactNode }) {
     return meetsRequirements && hasEnoughPoints;
   }, [state.level, state.points, state.upgrades, levelConfigs]);
 
-  const levelUp = useCallback(() => {
+  const levelUp = useCallback(async () => {
     if (!canLevelUp()) return false;
 
-    setState(prev => {
-      const nextLevel = prev.level + 1;
-      const levelConfig = levelConfigs.find(lc => lc.level === nextLevel);
-      if (!levelConfig) return prev;
+    const nextLevel = state.level + 1;
+    const levelConfig = levelConfigs.find(lc => lc.level === nextLevel);
+    if (!levelConfig) return false;
 
-      const newUnlockedChars = characters
-        .filter(c => c.unlockLevel === nextLevel && !prev.unlockedCharacters.includes(c.id))
-        .map(c => c.id);
+    const newUnlockedChars = characters
+      .filter(c => c.unlockLevel === nextLevel && !state.unlockedCharacters.includes(c.id))
+      .map(c => c.id);
 
-      return {
-        ...prev,
-        level: nextLevel,
-        points: prev.points - levelConfig.cost,
-        unlockedCharacters: [...prev.unlockedCharacters, ...newUnlockedChars]
-      };
-    });
+    // Sync to database
+    try {
+      await fetch('/api/player/me', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`
+        },
+        body: JSON.stringify({
+          level: nextLevel,
+          points: state.points - levelConfig.cost
+        })
+      });
+
+      // Unlock new characters in DB
+      for (const charId of newUnlockedChars) {
+        await fetch(`/api/player/characters/${charId}/unlock`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`
+          }
+        });
+      }
+    } catch (err) {
+      console.error('Failed to sync level up to DB:', err);
+      return false;
+    }
+
+    setState(prev => ({
+      ...prev,
+      level: nextLevel,
+      points: prev.points - levelConfig.cost,
+      unlockedCharacters: [...prev.unlockedCharacters, ...newUnlockedChars]
+    }));
 
     return true;
-  }, [canLevelUp, levelConfigs, characters]);
+  }, [canLevelUp, levelConfigs, characters, state.level, state.points, state.unlockedCharacters]);
 
   const toggleAdmin = useCallback(() => {
     setState(prev => ({ ...prev, isAdmin: !prev.isAdmin }));

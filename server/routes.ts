@@ -451,45 +451,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const updatedCharacter = await storage.updateCharacter(id, updates);
       
       if (!updatedCharacter) {
-        return res.status(404).json({ error: 'Upgrade not found' });
-      }
-
-      await saveUpgradeToJSON(updatedUpgrade);
-      
-      res.json({ upgrade: updatedUpgrade, message: 'Upgrade updated and JSON file synced' });
-    } catch (error) {
-      console.error('Error updating upgrade:', error);
-      res.status(500).json({ error: 'Failed to update upgrade' });
-    }
-  });
-
-  app.post("/api/admin/characters", requireAuth, requireAdmin, async (req, res) => {
-    try {
-      const validation = insertCharacterSchema.safeParse(req.body);
-      
-      if (!validation.success) {
-        return res.status(400).json({ error: 'Invalid character data', details: validation.error });
-      }
-
-      const character = await storage.createCharacter(validation.data);
-      
-      await saveCharacterToJSON(validation.data);
-      
-      res.json({ character, message: 'Character created and JSON file generated' });
-    } catch (error) {
-      console.error('Error creating character:', error);
-      res.status(500).json({ error: 'Failed to create character' });
-    }
-  });
-
-  app.patch("/api/admin/characters/:id", requireAuth, requireAdmin, async (req, res) => {
-    try {
-      const { id } = req.params;
-      const updates = req.body;
-      
-      const updatedCharacter = await storage.updateCharacter(id, updates);
-      
-      if (!updatedCharacter) {
         return res.status(404).json({ error: 'Character not found' });
       }
 
@@ -572,36 +533,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Error deleting level:', error);
       res.status(500).json({ error: 'Failed to delete level' });
-    }
-  });
-
-  app.get("/api/admin/players", requireAuth, requireAdmin, async (_req, res) => {
-    try {
-      const players = await storage.getAllPlayers();
-      res.json({ players });
-    } catch (error) {
-      console.error('Error fetching players:', error);
-      res.status(500).json({ error: 'Failed to fetch players' });
-    }
-  });
-
-  app.patch("/api/admin/players/:id", requireAuth, requireAdmin, async (req, res) => {
-    try {
-      const { id } = req.params;
-      const updates = req.body;
-      
-      const updatedPlayer = await storage.updatePlayer(id, updates);
-      
-      if (!updatedPlayer) {
-        return res.status(404).json({ error: 'Level not found' });
-      }
-
-      await saveLevelToJSON(updatedLevel);
-      
-      res.json({ level: updatedLevel, message: 'Level updated and JSON file synced' });
-    } catch (error) {
-      console.error('Error updating level:', error);
-      res.status(500).json({ error: 'Failed to update level' });
     }
   });
 
