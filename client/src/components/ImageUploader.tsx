@@ -83,12 +83,25 @@ export default function ImageUploader({ adminMode = false }: ImageUploaderProps)
   };
 
   const handleUpload = async () => {
-    if (!selectedFile) return;
+    console.log('🔄 Upload button clicked');
+    
+    if (!selectedFile) {
+      console.log('❌ No file selected');
+      alert('Please select an image file first');
+      return;
+    }
+
+    if (!selectedCharacterId) {
+      console.log('❌ No character selected');
+      alert('Please select a character first');
+      return;
+    }
 
     // Get the character name for the folder structure
     const selectedChar = characters.find(c => c.id === selectedCharacterId);
     if (!selectedChar) {
-      alert('Please select a character first');
+      console.log('❌ Character not found:', selectedCharacterId);
+      alert('Selected character not found. Please select a character first.');
       return;
     }
 
@@ -96,17 +109,33 @@ export default function ImageUploader({ adminMode = false }: ImageUploaderProps)
     const sessionToken = localStorage.getItem('sessionToken');
     
     if (!sessionToken) {
+      console.log('❌ No session token');
       alert('You must be logged in to upload images. Please log in first.');
       return;
     }
+
+    console.log('📤 Preparing upload...', {
+      characterId: selectedCharacterId,
+      characterName: selectedChar.name,
+      imageType,
+      unlockLevel,
+      fileName: selectedFile.name
+    });
 
     const formData = new FormData();
     formData.append('image', selectedFile);
     formData.append('characterId', selectedCharacterId);
     formData.append('characterName', selectedChar.name);
     formData.append('imageType', imageType);
+    formData.append('unlockLevel', unlockLevel.toString());
+    formData.append('categories', JSON.stringify(categories));
+    formData.append('poses', JSON.stringify(selectedPoses));
+    formData.append('isHidden', isHidden.toString());
+    formData.append('chatEnable', chatEnable.toString());
+    formData.append('chatSendPercent', chatSendPercent.toString());
 
     try {
+      console.log('🚀 Sending upload request...');
       const response = await fetch('/api/upload', {
         method: 'POST',
         headers: {
@@ -115,15 +144,19 @@ export default function ImageUploader({ adminMode = false }: ImageUploaderProps)
         body: formData
       });
 
+      console.log('📡 Response status:', response.status);
+
       if (!response.ok) {
         const errorText = await response.text();
+        console.error('❌ Upload failed:', errorText);
         throw new Error(`Upload failed: ${errorText}`);
       }
 
       const data = await response.json();
+      console.log('✅ Upload successful:', data);
       
       const newImage = {
-        id: `img-${Date.now()}`,
+        id: data.media?.id || `img-${Date.now()}`,
         characterId: selectedCharacterId,
         url: data.url,
         unlockLevel: unlockLevel,
@@ -138,6 +171,7 @@ export default function ImageUploader({ adminMode = false }: ImageUploaderProps)
       };
       
       addImage(newImage);
+      console.log('✅ Image added to state');
       
       // Auto-select the uploaded image
       if (imageType === 'character') {
@@ -157,7 +191,7 @@ export default function ImageUploader({ adminMode = false }: ImageUploaderProps)
       
       alert('Image uploaded successfully!');
     } catch (error) {
-      console.error('Upload error:', error);
+      console.error('💥 Upload error:', error);
       alert('Failed to upload image: ' + (error instanceof Error ? error.message : 'Unknown error'));
     }
   };

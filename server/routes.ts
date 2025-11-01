@@ -50,7 +50,12 @@ const upload = multer({
 
 export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/upload", requireAuth, upload.single("image"), async (req, res) => {
+    console.log('📤 Upload request received');
+    console.log('📦 Request body:', req.body);
+    console.log('📁 File:', req.file ? req.file.filename : 'No file');
+
     if (!req.file) {
+      console.error('❌ No file uploaded');
       return res.status(400).json({ error: "No file uploaded" });
     }
 
@@ -59,10 +64,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const characterName = req.body.characterName;
       const imageType = req.body.imageType || 'character';
       const unlockLevel = parseInt(req.body.unlockLevel || '1', 10);
-      const categories = req.body.categories ? JSON.parse(req.body.categories) : [];
+      const categories = req.body.categories ? JSON.parse(req.body.categories) : {};
       const poses = req.body.poses ? JSON.parse(req.body.poses) : [];
+      const isHidden = req.body.isHidden === 'true';
+      const chatEnable = req.body.chatEnable === 'true';
+      const chatSendPercent = parseInt(req.body.chatSendPercent || '0', 10);
+
+      console.log('📋 Parsed data:', {
+        characterId,
+        characterName,
+        imageType,
+        unlockLevel,
+        categories,
+        poses,
+        isHidden,
+        chatEnable,
+        chatSendPercent
+      });
 
       if (!characterId || !characterName) {
+        console.error('❌ Missing character ID or name');
         fs.unlinkSync(req.file.path);
         return res.status(400).json({ error: "Character ID and name are required" });
       }
@@ -70,10 +91,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const finalDir = path.join(__dirname, "..", "uploads", "characters", characterName, imageType);
       if (!fs.existsSync(finalDir)) {
         fs.mkdirSync(finalDir, { recursive: true });
+        console.log('📁 Created directory:', finalDir);
       }
 
       const finalPath = path.join(finalDir, req.file.filename);
       fs.renameSync(req.file.path, finalPath);
+      console.log('✅ File moved to:', finalPath);
 
       const fileUrl = `/uploads/characters/${characterName}/${imageType}/${req.file.filename}`;
 
@@ -84,16 +107,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         unlockLevel,
         categories,
         poses,
-        isHidden: false,
+        isHidden,
+        chatEnable,
+        chatSendPercent,
       });
 
+      console.log('✅ Media upload created:', mediaUpload.id);
       res.json({ url: fileUrl, media: mediaUpload });
     } catch (error) {
       if (req.file && fs.existsSync(req.file.path)) {
         fs.unlinkSync(req.file.path);
       }
-      console.error('Error uploading file:', error);
-      res.status(500).json({ error: 'Failed to upload file' });
+      console.error('💥 Error uploading file:', error);
+      res.status(500).json({ error: 'Failed to upload file', details: (error as Error).message });
     }
   });
 

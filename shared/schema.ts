@@ -83,16 +83,19 @@ export const sessions = pgTable("sessions", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
-export const mediaUploads = pgTable("mediaUploads", {
-  id: varchar("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-  characterId: text("characterId").notNull().references(() => characters.id, { onDelete: 'cascade' }),
+export const mediaUploads = pgTable("media_uploads", {
+  id: text("id").primaryKey().default(sql`gen_random_uuid()`),
+  characterId: text("character_id").notNull().references(() => characters.id, { onDelete: 'cascade' }),
   url: text("url").notNull(),
-  type: text("type").notNull(),
-  unlockLevel: integer("unlockLevel").default(1).notNull(),
-  categories: text("categories").array().default(sql`'{}'::text[]`).notNull(),
-  poses: text("poses").array().default(sql`'{}'::text[]`).notNull(),
-  isHidden: boolean("isHidden").default(false).notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  type: text("type").notNull().default('character'),
+  unlockLevel: integer("unlock_level").notNull().default(1),
+  categories: jsonb("categories").notNull().default(sql`'{}'::jsonb`),
+  poses: jsonb("poses").notNull().default(sql`'[]'::jsonb`),
+  isHidden: boolean("is_hidden").notNull().default(false),
+  chatEnable: boolean("chat_enable").notNull().default(false),
+  chatSendPercent: integer("chat_send_percent").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
 export const insertPlayerSchema = createInsertSchema(players).omit({
@@ -132,6 +135,10 @@ export const insertSessionSchema = createInsertSchema(sessions).omit({
 export const insertMediaUploadSchema = createInsertSchema(mediaUploads).omit({
   id: true,
   createdAt: true,
+  updatedAt: true,
+}).extend({
+  chatEnable: z.boolean().optional().default(false),
+  chatSendPercent: z.number().int().min(0).max(100).optional().default(0),
 });
 
 export type Player = typeof players.$inferSelect;
