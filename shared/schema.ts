@@ -1,166 +1,108 @@
-import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, boolean, jsonb, real } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod";
+import { pgTable, text, integer, boolean, timestamp, uuid, bigint, jsonb } from 'drizzle-orm/pg-core';
+import { z } from 'zod';
 
-export const players = pgTable("players", {
-  id: varchar("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-  telegramId: text("telegramId").unique(),
-  username: text("username").notNull(),
-  points: integer("points").default(0).notNull(),
-  energy: integer("energy").default(1000).notNull(),
-  maxEnergy: integer("maxEnergy").default(1000).notNull(),
-  level: integer("level").default(1).notNull(),
-  experience: integer("experience").default(0).notNull(),
-  passiveIncomeRate: integer("passiveIncomeRate").default(0).notNull(),
-  isAdmin: boolean("isAdmin").default(false).notNull(),
-  selectedCharacterId: text("selectedCharacterId"),
-  selectedImageId: text("selectedImageId"),
-  displayImage: text("displayImage"),
-  upgrades: jsonb("upgrades").default("{}").notNull().$type<Record<string, number>>(),
-  unlockedCharacters: jsonb("unlockedCharacters").default("[]").notNull().$type<string[]>(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  lastLogin: timestamp("lastLogin").defaultNow().notNull(),
-  lastEnergyUpdate: timestamp("lastEnergyUpdate").defaultNow().notNull(),
+export const players = pgTable('players', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  telegramId: text('telegram_id').unique(),
+  username: text('username').notNull(),
+  points: bigint('points', { mode: 'number' }).default(0).notNull(),
+  energy: integer('energy').default(1000).notNull(),
+  maxEnergy: integer('max_energy').default(1000).notNull(),
+  level: integer('level').default(1).notNull(),
+  experience: bigint('experience', { mode: 'number' }).default(0).notNull(),
+  passiveIncomeRate: integer('passive_income_rate').default(0).notNull(),
+  upgrades: jsonb('upgrades').$type<Record<string, number>>().default({}).notNull(),
+  unlockedCharacters: jsonb('unlocked_characters').$type<string[]>().default([]).notNull(),
+  isAdmin: boolean('is_admin').default(false).notNull(),
+  displayImage: text('display_image'),
+  selectedCharacterId: text('selected_character_id'),
+  lastLogin: timestamp('last_login', { mode: 'date' }),
+  lastEnergyUpdate: timestamp('last_energy_update', { mode: 'date' }),
+  createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { mode: 'date' }).defaultNow().notNull(),
 });
 
-export const upgrades = pgTable("upgrades", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull(),
-  description: text("description").notNull(),
-  type: text("type").notNull(),
-  icon: text("icon").notNull(),
-  maxLevel: integer("maxLevel").notNull(),
-  baseCost: integer("baseCost").notNull(),
-  costMultiplier: real("costMultiplier").notNull(),
-  baseValue: real("baseValue").notNull(),
-  valueIncrement: real("valueIncrement").notNull(),
-  isHidden: boolean("isHidden").default(false).notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
+export const upgrades = pgTable('upgrades', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  description: text('description').notNull(),
+  type: text('type').notNull(),
+  icon: text('icon').notNull(),
+  maxLevel: integer('max_level').notNull(),
+  baseCost: integer('base_cost').notNull(),
+  costMultiplier: integer('cost_multiplier').notNull(),
+  baseValue: integer('base_value').notNull(),
+  valueIncrement: integer('value_increment').notNull(),
+  isHidden: boolean('is_hidden').default(false).notNull(),
 });
 
-export const characters = pgTable("characters", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull(),
-  unlockLevel: integer("unlockLevel").notNull(),
-  description: text("description").notNull(),
-  rarity: text("rarity").notNull(),
-  defaultImage: text("defaultImage"),
-  avatarImage: text("avatarImage"),
-  displayImage: text("displayImage"),
-  isHidden: boolean("isHidden").default(false).notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
+export const characters = pgTable('characters', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  unlockLevel: integer('unlock_level').default(1).notNull(),
+  description: text('description').notNull(),
+  rarity: text('rarity').notNull(),
+  defaultImage: text('default_image'),
+  avatarImage: text('avatar_image'),
+  displayImage: text('display_image'),
+  isHidden: boolean('is_hidden').default(false).notNull(),
 });
 
-export const levels = pgTable("levels", {
-  level: integer("level").primaryKey(),
-  experienceRequired: integer("experienceRequired").notNull(),
-  requirements: jsonb("requirements").notNull().$type<Array<{ upgradeId: string; minLevel: number }>>(),
-  unlocks: text("unlocks").array().notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
+export const levels = pgTable('levels', {
+  level: integer('level').primaryKey(),
+  cost: integer('cost').notNull(),
+  experienceRequired: bigint('experience_required', { mode: 'number' }),
+  requirements: jsonb('requirements').$type<Array<{ upgradeId: string; minLevel: number }>>().default([]).notNull(),
+  unlocks: jsonb('unlocks').$type<string[]>().default([]).notNull(),
 });
 
-export const playerUpgrades = pgTable("playerUpgrades", {
-  id: varchar("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-  playerId: varchar("playerId").notNull().references(() => players.id, { onDelete: 'cascade' }),
-  upgradeId: text("upgradeId").notNull().references(() => upgrades.id, { onDelete: 'cascade' }),
-  level: integer("level").default(0).notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+export const playerUpgrades = pgTable('player_upgrades', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  playerId: uuid('player_id').notNull(),
+  upgradeId: text('upgrade_id').notNull(),
+  level: integer('level').default(1).notNull(),
+  createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { mode: 'date' }).defaultNow().notNull(),
 });
 
-export const playerCharacters = pgTable("playerCharacters", {
-  id: varchar("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-  playerId: varchar("playerId").notNull().references(() => players.id, { onDelete: 'cascade' }),
-  characterId: text("characterId").notNull().references(() => characters.id, { onDelete: 'cascade' }),
-  unlockedAt: timestamp("unlockedAt").defaultNow().notNull(),
+export const playerCharacters = pgTable('player_characters', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  playerId: uuid('player_id').notNull(),
+  characterId: text('character_id').notNull(),
+  createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
 });
 
-export const sessions = pgTable("sessions", {
-  id: varchar("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-  playerId: varchar("playerId").notNull().references(() => players.id, { onDelete: 'cascade' }),
-  token: text("token").notNull().unique(),
-  expiresAt: timestamp("expiresAt").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
+export const sessions = pgTable('sessions', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  playerId: uuid('player_id').notNull(),
+  token: text('token').notNull().unique(),
+  expiresAt: timestamp('expires_at', { mode: 'date' }).notNull(),
+  createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
 });
 
-export const mediaUploads = pgTable("mediaUploads", {
-  id: text("id").primaryKey().default(sql`gen_random_uuid()`),
-  characterId: text("characterId").notNull().references(() => characters.id, { onDelete: 'cascade' }),
-  url: text("url").notNull(),
-  type: text("type").notNull().default('character'),
-  unlockLevel: integer("unlockLevel").notNull().default(1),
-  categories: jsonb("categories").notNull().default(sql`'[]'::jsonb`).$type<string[]>(),
-  poses: jsonb("poses").notNull().default(sql`'[]'::jsonb`).$type<string[]>(),
-  isHidden: boolean("isHidden").notNull().default(false),
-  chatEnable: boolean("chatEnable").notNull().default(false),
-  chatSendPercent: integer("chatSendPercent").notNull().default(0),
-  createdAt: timestamp("createdAt").notNull().defaultNow(),
-  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+export const mediaUploads = pgTable('media_uploads', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  characterId: text('character_id').notNull(),
+  url: text('url').notNull(),
+  type: text('type').notNull(),
+  unlockLevel: integer('unlock_level').default(1).notNull(),
+  categories: jsonb('categories').$type<string[]>().default([]).notNull(),
+  poses: jsonb('poses').$type<string[]>().default([]),
+  isHidden: boolean('is_hidden').default(false).notNull(),
+  chatEnable: boolean('chat_enable').default(false).notNull(),
+  chatSendPercent: integer('chat_send_percent').default(0).notNull(),
+  createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { mode: 'date' }).defaultNow().notNull(),
 });
 
-export const insertPlayerSchema = createInsertSchema(players).omit({
-  id: true,
-  createdAt: true,
-  lastLogin: true,
-  lastEnergyUpdate: true,
+// Zod schemas for inserts
+export const insertLevelSchema = z.object({
+  level: z.number().int().min(1),
+  cost: z.number().int().min(0),
+  experienceRequired: z.number().int().optional(),
+  requirements: z.array(z.object({ upgradeId: z.string(), minLevel: z.number().int().min(1) })).default([]),
+  unlocks: z.array(z.string()).default([]),
 });
-
-export const insertUpgradeSchema = createInsertSchema(upgrades).omit({
-  createdAt: true,
-});
-
-export const insertCharacterSchema = createInsertSchema(characters).omit({
-  createdAt: true,
-});
-
-export const insertLevelSchema = createInsertSchema(levels).omit({
-  createdAt: true
-});
-
-export const insertPlayerUpgradeSchema = createInsertSchema(playerUpgrades).omit({
-  id: true,
-  updatedAt: true,
-});
-
-export const insertPlayerCharacterSchema = createInsertSchema(playerCharacters).omit({
-  id: true,
-  unlockedAt: true,
-});
-
-export const insertSessionSchema = createInsertSchema(sessions).omit({
-  id: true,
-  createdAt: true,
-});
-
-export const insertMediaUploadSchema = createInsertSchema(mediaUploads).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-}).extend({
-  chatEnable: z.boolean().optional().default(false),
-  chatSendPercent: z.number().int().min(0).max(100).optional().default(0),
-});
-
-export type Player = typeof players.$inferSelect;
-export type InsertPlayer = z.infer<typeof insertPlayerSchema>;
-
-export type Upgrade = typeof upgrades.$inferSelect;
-export type InsertUpgrade = z.infer<typeof insertUpgradeSchema>;
-
-export type Character = typeof characters.$inferSelect;
-export type InsertCharacter = z.infer<typeof insertCharacterSchema>;
 
 export type Level = typeof levels.$inferSelect;
 export type InsertLevel = z.infer<typeof insertLevelSchema>;
-
-export type PlayerUpgrade = typeof playerUpgrades.$inferSelect;
-export type InsertPlayerUpgrade = z.infer<typeof insertPlayerUpgradeSchema>;
-
-export type PlayerCharacter = typeof playerCharacters.$inferSelect;
-export type InsertPlayerCharacter = z.infer<typeof insertPlayerCharacterSchema>;
-
-export type Session = typeof sessions.$inferSelect;
-export type InsertSession = z.infer<typeof insertSessionSchema>;
-
-export type MediaUpload = typeof mediaUploads.$inferSelect;
-export type InsertMediaUpload = z.infer<typeof insertMediaUploadSchema>;
