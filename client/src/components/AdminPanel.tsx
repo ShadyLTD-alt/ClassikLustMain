@@ -16,7 +16,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import ImageUploader from '@/components/ImageUploader';
 import type { UpgradeConfig, CharacterConfig, LevelConfig, ThemeConfig } from '@shared/gameConfig';
-import upgradeTemplates from '../../../main-gamedata/upgrade-templates.json';
+import upgradeTemplates from '../../../main-gamedata/upgrades-master.json';
 import characterMaster from '../../../main-gamedata/character-master.json';
 
 export default function AdminPanel() {
