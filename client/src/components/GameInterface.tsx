@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/context/AuthContext";
-import Upgrades from "./Upgrades";
+import UpgradePanel from "./UpgradePanel";
 import LevelUp from "./LevelUp";
 import CharacterSelector from "./CharacterSelector";
 import type { Player } from "@shared/schema";
@@ -40,7 +40,7 @@ export default function GameInterface() {
     queryKey: ['/api/characters', player?.selectedCharacterId],
     queryFn: async () => {
       if (!player?.selectedCharacterId) return null;
-      const response = await apiRequest('GET', `/api/characters/${player.selectedCharacterId}`);
+      const response = await apiRequest('GET', '/api/characters/${player.selectedCharacterId}');
       return await response.json();
     },
     enabled: !!player?.selectedCharacterId,
@@ -277,7 +277,7 @@ export default function GameInterface() {
       </div>
 
       {/* Modals */}
-      <Upgrades 
+      <UpgradePanel
         isOpen={showUpgrades}
         onClose={() => setShowUpgrades(false)}
       />
