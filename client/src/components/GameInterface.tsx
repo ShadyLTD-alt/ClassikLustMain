@@ -13,7 +13,6 @@ import {
   Crown
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
-import { useAuth } from "@/context/AuthContext";
 import UpgradePanel from "./UpgradePanel";
 import LevelUp from "./LevelUp";
 import CharacterSelector from "./CharacterSelector";
@@ -23,10 +22,9 @@ export default function GameInterface() {
   const [showUpgrades, setShowUpgrades] = useState(false);
   const [showLevelUp, setShowLevelUp] = useState(false);
   const [showCharacterSelector, setShowCharacterSelector] = useState(false);
-  const { user } = useAuth();
 
   // Fetch player data
-  const { data: player, refetch: refetchPlayer } = useQuery({
+  const { data: player, refetch: refetchPlayer } = useQuery<Player>({
     queryKey: ['/api/player/me'],
     queryFn: async () => {
       const response = await apiRequest('GET', '/api/player/me');
@@ -40,7 +38,7 @@ export default function GameInterface() {
     queryKey: ['/api/characters', player?.selectedCharacterId],
     queryFn: async () => {
       if (!player?.selectedCharacterId) return null;
-      const response = await apiRequest('GET', '/api/characters/${player.selectedCharacterId}');
+      const response = await apiRequest('GET', `/api/characters/${player.selectedCharacterId}`);
       return await response.json();
     },
     enabled: !!player?.selectedCharacterId,
@@ -56,7 +54,6 @@ export default function GameInterface() {
   // Handle tap
   const handleTap = async () => {
     if (!player) return;
-    
     try {
       const response = await apiRequest('POST', '/api/player/tap');
       if (response.ok) {
@@ -67,7 +64,7 @@ export default function GameInterface() {
     }
   };
 
-  if (!player || !user) {
+  if (!player) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <div className="text-white text-center">
@@ -85,7 +82,7 @@ export default function GameInterface() {
       {/* Header with User Info */}
       <div className="p-4 bg-black/20 backdrop-blur-sm">
         <div className="flex items-center justify-between">
-          {/* User Info with Telegram Username */}
+          {/* User Info with Username */}
           <div className="flex items-center gap-3">
             <div className="relative">
               {currentCharacter ? (
@@ -102,7 +99,6 @@ export default function GameInterface() {
                   <User className="w-6 h-6 text-gray-400" />
                 </div>
               )}
-              
               {/* Character selector button */}
               <Button
                 size="sm"
@@ -113,15 +109,13 @@ export default function GameInterface() {
                 <Crown className="w-3 h-3" />
               </Button>
             </div>
-            
             <div>
-              <div className="text-xs text-gray-400">@{user.username}</div>
+              <div className="text-xs text-gray-400">@{player.username || 'Unknown'}</div>
               <div className="font-semibold">
                 {currentCharacter ? currentCharacter.name : 'Select Character'}
               </div>
             </div>
           </div>
-
           {/* Admin Toggle */}
           {player.isAdmin && (
             <div className="flex items-center gap-2 text-xs">
@@ -131,11 +125,9 @@ export default function GameInterface() {
           )}
         </div>
       </div>
-
       {/* Main Game Stats */}
       <div className="px-4 py-6">
         <div className="grid grid-cols-3 gap-4 mb-6">
-          {/* Points */}
           <Card className="bg-black/40 border-purple-500/30">
             <CardContent className="p-4 text-center">
               <div className="flex items-center justify-center mb-2">
@@ -147,8 +139,6 @@ export default function GameInterface() {
               <div className="text-xs text-purple-400">Passive Income</div>
             </CardContent>
           </Card>
-
-          {/* Points/HR */}
           <Card className="bg-black/40 border-purple-500/30">
             <CardContent className="p-4 text-center">
               <div className="flex items-center justify-center mb-2">
@@ -159,8 +149,6 @@ export default function GameInterface() {
               <div className="text-xs text-purple-400">Passive Income</div>
             </CardContent>
           </Card>
-
-          {/* Energy */}
           <Card className="bg-black/40 border-purple-500/30">
             <CardContent className="p-4 text-center">
               <div className="flex items-center justify-center mb-2">
@@ -168,16 +156,12 @@ export default function GameInterface() {
                 <span className="text-yellow-400 font-semibold">ENERGY</span>
               </div>
               <div className="text-2xl font-bold">{player.energy} / {player.maxEnergy}</div>
-              <Progress 
-                value={energyPercentage} 
-                className="mt-2 h-2 bg-gray-700"
-              />
+              <Progress value={energyPercentage} className="mt-2 h-2 bg-gray-700" />
               <div className="text-xs text-yellow-400 mt-1">+1/s</div>
             </CardContent>
           </Card>
         </div>
       </div>
-
       {/* Character Display Area */}
       <div className="flex-1 flex items-center justify-center px-4">
         <div className="text-center">
@@ -216,10 +200,7 @@ export default function GameInterface() {
                   <div>No character selected</div>
                 </div>
               </div>
-              <Button 
-                onClick={() => setShowCharacterSelector(true)}
-                className="bg-purple-600 hover:bg-purple-700"
-              >
+              <Button onClick={() => setShowCharacterSelector(true)} className="bg-purple-600 hover:bg-purple-700">
                 <Crown className="w-4 h-4 mr-2" />
                 Select Character
               </Button>
@@ -227,70 +208,34 @@ export default function GameInterface() {
           )}
         </div>
       </div>
-
       {/* Bottom Navigation */}
       <div className="fixed bottom-0 left-0 right-0 bg-black/80 backdrop-blur-sm border-t border-gray-700">
         <div className="flex justify-around py-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="flex flex-col items-center gap-1 text-xs"
-            onClick={() => setShowUpgrades(true)}
-          >
+          <Button variant="ghost" size="sm" className="flex flex-col items-center gap-1 text-xs" onClick={() => setShowUpgrades(true)}>
             <TrendingUp className="w-5 h-5" />
             <span>Upgrades</span>
             <span className="text-xs text-gray-400">0/6</span>
           </Button>
-
-          <Button
-            variant="ghost"
-            size="sm"
-            className="flex flex-col items-center gap-1 text-xs"
-            onClick={() => setShowCharacterSelector(true)}
-          >
+          <Button variant="ghost" size="sm" className="flex flex-col items-center gap-1 text-xs" onClick={() => setShowCharacterSelector(true)}>
             <User className="w-5 h-5" />
             <span>Characters</span>
             <span className="text-xs text-gray-400">0</span>
           </Button>
-
-          <Button
-            variant="ghost"
-            size="sm"
-            className="flex flex-col items-center gap-1 text-xs"
-            onClick={() => setShowLevelUp(true)}
-          >
+          <Button variant="ghost" size="sm" className="flex flex-col items-center gap-1 text-xs" onClick={() => setShowLevelUp(true)}>
             <MessageCircle className="w-5 h-5" />
             <span>AI Chat</span>
           </Button>
-
-          <Button
-            variant="ghost"
-            size="sm"
-            className="flex flex-col items-center gap-1 text-xs"
-            onClick={() => setShowLevelUp(true)}
-          >
+          <Button variant="ghost" size="sm" className="flex flex-col items-center gap-1 text-xs" onClick={() => setShowLevelUp(true)}>
             <TrendingDown className="w-5 h-5" />
             <span>Level Up</span>
             <span className="text-xs text-gray-400">Lv.{player.level}</span>
           </Button>
         </div>
       </div>
-
       {/* Modals */}
-      <UpgradePanel
-        isOpen={showUpgrades}
-        onClose={() => setShowUpgrades(false)}
-      />
-
-      <LevelUp 
-        isOpen={showLevelUp}
-        onClose={() => setShowLevelUp(false)}
-      />
-
-      <CharacterSelector 
-        isOpen={showCharacterSelector}
-        onClose={() => setShowCharacterSelector(false)}
-      />
+      <UpgradePanel isOpen={showUpgrades} onClose={() => setShowUpgrades(false)} />
+      <LevelUp isOpen={showLevelUp} onClose={() => setShowLevelUp(false)} />
+      <CharacterSelector isOpen={showCharacterSelector} onClose={() => setShowCharacterSelector(false)} />
     </div>
   );
 }
