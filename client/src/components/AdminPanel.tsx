@@ -119,6 +119,75 @@ export default function AdminPanel() {
     toast({ title: 'Config exported', description: 'Configuration has been downloaded.' });
   };
 
+  const handleDeleteUpgrade = async (upgradeId: string) => {
+    try {
+      await fetch(`/api/admin/upgrades/${upgradeId}`, {
+        method: 'DELETE',
+        headers: {
+          'x-admin-token': adminToken
+        }
+      });
+      deleteUpgrade(upgradeId);
+      setEditingUpgrade(null);
+      toast({
+        title: "Success",
+        description: "Upgrade deleted and JSON file removed"
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete upgrade",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleDeleteCharacter = async (characterId: string) => {
+    try {
+      await fetch(`/api/admin/characters/${characterId}`, {
+        method: 'DELETE',
+        headers: {
+          'x-admin-token': adminToken
+        }
+      });
+      deleteCharacter(characterId);
+      setEditingCharacter(null);
+      toast({
+        title: "Success",
+        description: "Character deleted and JSON file removed"
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete character",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleDeleteLevel = async (level: number) => {
+    try {
+      await fetch(`/api/admin/levels/${level}`, {
+        method: 'DELETE',
+        headers: {
+          'x-admin-token': adminToken
+        }
+      });
+      deleteLevel(level);
+      setEditingLevel(null);
+      toast({
+        title: "Success",
+        description: "Level deleted and JSON file removed"
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete level",
+        variant: "destructive"
+      });
+    }
+  };
+
   return (
     <Dialog>
       <DialogTrigger asChild>
@@ -343,8 +412,7 @@ export default function AdminPanel() {
                         variant="destructive"
                         onClick={() => {
                           if (confirm(`Delete upgrade "${editingUpgrade.name}"?`)) {
-                            deleteUpgrade(editingUpgrade.id);
-                            setEditingUpgrade(null);
+                            handleDeleteUpgrade(editingUpgrade.id);
                           }
                         }}
                         data-testid="button-delete-upgrade"
@@ -483,8 +551,7 @@ export default function AdminPanel() {
                             onClick={(e) => {
                               e.stopPropagation();
                               if (confirm(`Delete character "${editingCharacter.name}"?`)) {
-                                deleteCharacter(editingCharacter.id);
-                                setEditingCharacter(null);
+                                handleDeleteCharacter(editingCharacter.id);
                               }
                             }}
                             data-testid={`button-delete-character-${character.id}`}
@@ -705,13 +772,7 @@ export default function AdminPanel() {
                         onClick={(e) => {
                           e.stopPropagation();
                           if (confirm(`Delete Level ${editingLevel.level}? This cannot be undone.`)) {
-                            const levelToDelete = editingLevel.level;
-                            setEditingLevel(null);
-                            deleteLevel(levelToDelete);
-                            toast({
-                              title: 'Level deleted',
-                              description: `Level ${levelToDelete} has been removed.`
-                            });
+                            handleDeleteLevel(editingLevel.level);
                           }
                         }}
                         data-testid="button-delete-level"
