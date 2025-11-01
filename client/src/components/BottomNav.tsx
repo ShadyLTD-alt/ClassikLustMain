@@ -1,4 +1,4 @@
-import { TrendingUp, UserCircle, ArrowUpCircle, CheckCircle, XCircle, Check, X } from 'lucide-react';
+import { TrendingUp, UserCircle, ArrowUpCircle, CheckCircle, XCircle, Check, X, MessageCircle } from 'lucide-react';
 import { useState } from 'react';
 import { useGame } from '@/contexts/GameContext';
 import { Button } from '@/components/ui/button';
@@ -8,6 +8,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardHeader, CardContent } from '@/components/ui/card';
 import UpgradePanel from './UpgradePanel';
 import CharacterGallery from './CharacterGallery';
+import AIChat from './AIChat';
 import { useToast } from '@/hooks/use-toast';
 
 export default function BottomNav() {
@@ -83,6 +84,16 @@ export default function BottomNav() {
           </Button>
 
           <Button
+            variant="ghost"
+            className="flex-col h-auto py-2 gap-1"
+            onClick={() => setActiveSheet(activeSheet === 'chat' ? null : 'chat')}
+            data-testid="nav-chat"
+          >
+            <MessageCircle className="w-6 h-6" />
+            <span className="text-xs">AI Chat</span>
+          </Button>
+
+          <Button
             variant={isLevelUpReady ? 'default' : 'ghost'}
             className={`flex-col h-auto py-2 gap-1 ${isLevelUpReady ? 'bg-green-600 hover:bg-green-700' : ''}`}
             onClick={() => setActiveSheet(activeSheet === 'levelup' ? null : 'levelup')}
@@ -118,6 +129,18 @@ export default function BottomNav() {
           </SheetHeader>
           <div className="h-[calc(100%-3rem)] overflow-auto mt-4 px-4">
             <CharacterGallery inline />
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      <Sheet open={activeSheet === 'chat'} onOpenChange={(open) => setActiveSheet(open ? 'chat' : null)}>
+        <SheetContent side="bottom" className="h-[95vh]">
+          <SheetHeader>
+            <SheetTitle>AI Chat</SheetTitle>
+            <SheetDescription>Chat with your selected character</SheetDescription>
+          </SheetHeader>
+          <div className="h-[calc(100%-5rem)] mt-4">
+            <AIChat />
           </div>
         </SheetContent>
       </Sheet>
