@@ -35,6 +35,8 @@ export default function ImageUploader({ adminMode = false }: ImageUploaderProps)
   const [selectedPoses, setSelectedPoses] = useState<string[]>([]);
   const [newPoseInput, setNewPoseInput] = useState('');
   const [isHidden, setIsHidden] = useState(false);
+  const [chatEnable, setChatEnable] = useState(false);
+  const [chatSendPercent, setChatSendPercent] = useState(0);
   const [availablePoses, setAvailablePoses] = useState<string[]>(() => {
     const saved = localStorage.getItem('availablePoses');
     return saved ? JSON.parse(saved) : ['sitting', 'standing', 'casual', 'formal', 'bikini', 'dress'];
@@ -119,7 +121,9 @@ export default function ImageUploader({ adminMode = false }: ImageUploaderProps)
         imageType: imageType,
         categories: { ...categories },
         poses: [...selectedPoses],
-        isHidden: isHidden
+        isHidden: isHidden,
+        chatEnable: chatEnable,
+        chatSendPercent: chatSendPercent
       };
       
       addImage(newImage);
@@ -137,11 +141,13 @@ export default function ImageUploader({ adminMode = false }: ImageUploaderProps)
       setCategories({ hidden: false, nsfw: false, vip: false, event: false, random: false });
       setSelectedPoses([]);
       setIsHidden(false);
+      setChatEnable(false);
+      setChatSendPercent(0);
       
       alert('Image uploaded successfully!');
     } catch (error) {
       console.error('Upload error:', error);
-      alert('Failed to upload image: ' + error.message);
+      alert('Failed to upload image: ' + (error instanceof Error ? error.message : 'Unknown error'));
     }
   };
 
@@ -327,9 +333,32 @@ export default function ImageUploader({ adminMode = false }: ImageUploaderProps)
                           onCheckedChange={(checked) => setCategories(prev => ({ ...prev, random: !!checked }))}
                           data-testid="checkbox-random"
                         />
-                        <Label htmlFor="random" className="cursor-pointer">Enable for Chat</Label>
+                        <Label htmlFor="random" className="cursor-pointer">Random</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="chat-enable"
+                          checked={chatEnable}
+                          onCheckedChange={(checked) => setChatEnable(!!checked)}
+                          data-testid="checkbox-chat-enable"
+                        />
+                        <Label htmlFor="chat-enable" className="cursor-pointer">Chat Enable</Label>
                       </div>
                     </div>
+                    {chatEnable && (
+                      <div className="mt-3">
+                        <Label htmlFor="chat-send-percent">Chat Send % (Probability)</Label>
+                        <Input
+                          id="chat-send-percent"
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={chatSendPercent}
+                          onChange={(e) => setChatSendPercent(parseInt(e.target.value) || 0)}
+                          data-testid="input-chat-send-percent"
+                        />
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
 

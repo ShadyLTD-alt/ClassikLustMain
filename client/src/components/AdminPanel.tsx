@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { Settings, Save, RotateCcw, Plus, X } from 'lucide-react';
+import { Settings, Save, RotateCcw, Plus, X, Users } from 'lucide-react';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useGame } from '@/contexts/GameContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -7,9 +9,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Card, CardHeader, CardContent, CardFooter } from '@/components/ui/card';
+import { Card, CardHeader, CardContent } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import ImageUploader from '@/components/ImageUploader';
 import type { UpgradeConfig, CharacterConfig, LevelConfig, ThemeConfig } from '@shared/gameConfig';
@@ -26,6 +29,42 @@ export default function AdminPanel() {
   const [showCreateUpgrade, setShowCreateUpgrade] = useState(false);
   const [showCreateCharacter, setShowCreateCharacter] = useState(false);
   const [createTemplate, setCreateTemplate] = useState<string>('');
+  const [adminToken, setAdminToken] = useState(localStorage.getItem('adminToken') || '');
+  const [editingPlayer, setEditingPlayer] = useState<any>(null);
+
+  const { data: playersData, isLoading: playersLoading } = useQuery({
+    queryKey: ['/api/admin/players'],
+    enabled: !!adminToken && state.isAdmin,
+    queryFn: async () => {
+      const response = await fetch('/api/admin/players', {
+        headers: {
+          'x-admin-token': adminToken
+        }
+      });
+      if (!response.ok) throw new Error('Failed to fetch players');
+      return response.json();
+    }
+  });
+
+  const updatePlayerMutation = useMutation({
+    mutationFn: async ({ id, updates }: { id: string; updates: any }) => {
+      const response = await fetch(`/api/admin/players/${id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-token': adminToken
+        },
+        body: JSON.stringify(updates)
+      });
+      if (!response.ok) throw new Error('Failed to update player');
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/players'] });
+      toast({ title: 'Player updated', description: 'Player data has been updated successfully.' });
+      setEditingPlayer(null);
+    }
+  });
 
   if (!state.isAdmin) return null;
 
@@ -68,6 +107,7 @@ export default function AdminPanel() {
     const config = {
       upgrades,
       characters,
+      levelConfigs,
       timestamp: new Date().toISOString()
     };
     const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
@@ -92,11 +132,12 @@ export default function AdminPanel() {
         </DialogHeader>
 
         <Tabs defaultValue="upgrades" className="flex-1">
-          <TabsList className="grid grid-cols-5 w-full">
+          <TabsList className="grid grid-cols-6 w-full">
             <TabsTrigger value="upgrades" data-testid="tab-admin-upgrades">Upgrades</TabsTrigger>
             <TabsTrigger value="characters" data-testid="tab-admin-characters">Characters</TabsTrigger>
             <TabsTrigger value="levels" data-testid="tab-admin-levels">Levels</TabsTrigger>
             <TabsTrigger value="images" data-testid="tab-admin-images">Images</TabsTrigger>
+            <TabsTrigger value="players" data-testid="tab-admin-players">Players</TabsTrigger>
             <TabsTrigger value="theme" data-testid="tab-admin-theme">Theme</TabsTrigger>
           </TabsList>
 
@@ -136,7 +177,7 @@ export default function AdminPanel() {
                       onClick={() => {
                         const template = upgradeTemplates.templates.find(t => t.id === createTemplate);
                         if (template) {
-                          const newUpgrade = {
+                          const newUpgrade: UpgradeConfig = {
                             id: `upgrade-${Date.now()}`,
                             name: template.name || '',
                             description: template.description || '',
@@ -146,12 +187,14 @@ export default function AdminPanel() {
                             baseValue: template.fields.baseValue.default,
                             valueIncrement: template.fields.valueIncrement.default,
                             icon: template.icon,
-                            type: template.type as any
+                            type: template.type as any,
+                            isVip: false,
+                            isEvent: false,
+                            passiveIncomeTime: 0
                           };
                           updateUpgradeConfig(newUpgrade);
                           setShowCreateUpgrade(false);
                           setCreateTemplate('');
-                          // Set editing immediately to show the form
                           setTimeout(() => setEditingUpgrade(newUpgrade), 100);
                         }
                       }}
@@ -164,10 +207,10 @@ export default function AdminPanel() {
                 </DialogContent>
               </Dialog>
             </div>
-            <ScrollArea className="h-[450px]">
+            <ScrollArea className="h-[350px]">
               <div className="space-y-3 pr-4">
                 {upgrades.map(upgrade => (
-                  <Card key={upgrade.id}>
+                  <Card key={upgrade.id} className={editingUpgrade?.id === upgrade.id ? 'border-primary' : ''}>
                     <CardHeader>
                       <div className="flex justify-between items-center">
                         <h3 className="font-semibold">{upgrade.name}</h3>
@@ -177,7 +220,7 @@ export default function AdminPanel() {
                           onClick={() => {
                             setEditingUpgrade(upgrade);
                             setTimeout(() => {
-                              document.getElementById(`upgrade-edit-${upgrade.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                              document.getElementById('upgrade-edit-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
                             }, 100);
                           }}
                           data-testid={`button-edit-upgrade-${upgrade.id}`}
@@ -186,101 +229,136 @@ export default function AdminPanel() {
                         </Button>
                       </div>
                     </CardHeader>
-                    {editingUpgrade?.id === upgrade.id && (
-                      <CardContent className="space-y-3" id={`upgrade-edit-${upgrade.id}`}>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <Label>Name</Label>
-                            <Input
-                              value={editingUpgrade.name}
-                              onChange={(e) => setEditingUpgrade({ ...editingUpgrade, name: e.target.value })}
-                              data-testid="input-upgrade-name"
-                            />
-                          </div>
-                          <div>
-                            <Label>Max Level</Label>
-                            <Input
-                              type="number"
-                              value={editingUpgrade.maxLevel}
-                              onChange={(e) => setEditingUpgrade({ ...editingUpgrade, maxLevel: parseInt(e.target.value) })}
-                              data-testid="input-upgrade-maxlevel"
-                            />
-                          </div>
-                          <div>
-                            <Label>Base Cost</Label>
-                            <Input
-                              type="number"
-                              value={editingUpgrade.baseCost}
-                              onChange={(e) => setEditingUpgrade({ ...editingUpgrade, baseCost: parseFloat(e.target.value) })}
-                              data-testid="input-upgrade-basecost"
-                            />
-                          </div>
-                          <div>
-                            <Label>Cost Multiplier</Label>
-                            <Input
-                              type="number"
-                              step="0.01"
-                              value={editingUpgrade.costMultiplier}
-                              onChange={(e) => setEditingUpgrade({ ...editingUpgrade, costMultiplier: parseFloat(e.target.value) })}
-                              data-testid="input-upgrade-costmult"
-                            />
-                          </div>
-                          <div>
-                            <Label>Base Value</Label>
-                            <Input
-                              type="number"
-                              value={editingUpgrade.baseValue}
-                              onChange={(e) => setEditingUpgrade({ ...editingUpgrade, baseValue: parseFloat(e.target.value) })}
-                              data-testid="input-upgrade-basevalue"
-                            />
-                          </div>
-                          <div>
-                            <Label>Value Increment</Label>
-                            <Input
-                              type="number"
-                              step="0.1"
-                              value={editingUpgrade.valueIncrement}
-                              onChange={(e) => setEditingUpgrade({ ...editingUpgrade, valueIncrement: parseFloat(e.target.value) })}
-                              data-testid="input-upgrade-valueinc"
-                            />
-                          </div>
-                        </div>
-                        <div>
-                          <Label>Description</Label>
-                          <Textarea
-                            value={editingUpgrade.description}
-                            onChange={(e) => setEditingUpgrade({ ...editingUpgrade, description: e.target.value })}
-                            data-testid="input-upgrade-desc"
-                          />
-                        </div>
-                        <div className="flex gap-2">
-                          <Button onClick={handleSaveUpgrade} data-testid="button-save-upgrade">
-                            <Save className="w-4 h-4 mr-2" />
-                            Save
-                          </Button>
-                          <Button variant="outline" onClick={() => setEditingUpgrade(null)}>
-                            Cancel
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            onClick={() => {
-                              if (confirm(`Delete upgrade "${editingUpgrade.name}"?`)) {
-                                deleteUpgrade(editingUpgrade.id);
-                                setEditingUpgrade(null);
-                              }
-                            }}
-                            data-testid={`button-delete-upgrade-${upgrade.id}`}
-                          >
-                            <X className="w-4 h-4 mr-2" />
-                            Delete
-                          </Button>
-                        </div>
-                      </CardContent>
-                    )}
                   </Card>
                 ))}
               </div>
             </ScrollArea>
+
+            {editingUpgrade && (
+              <Card id="upgrade-edit-form" className="border-primary">
+                <CardHeader>
+                  <h3 className="font-semibold">Editing: {editingUpgrade.name}</h3>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label>Name</Label>
+                      <Input
+                        value={editingUpgrade.name}
+                        onChange={(e) => setEditingUpgrade({ ...editingUpgrade, name: e.target.value })}
+                        data-testid="input-upgrade-name"
+                      />
+                    </div>
+                    <div>
+                      <Label>Max Level</Label>
+                      <Input
+                        type="number"
+                        value={editingUpgrade.maxLevel}
+                        onChange={(e) => setEditingUpgrade({ ...editingUpgrade, maxLevel: parseInt(e.target.value) })}
+                        data-testid="input-upgrade-maxlevel"
+                      />
+                    </div>
+                    <div>
+                      <Label>Base Cost</Label>
+                      <Input
+                        type="number"
+                        value={editingUpgrade.baseCost}
+                        onChange={(e) => setEditingUpgrade({ ...editingUpgrade, baseCost: parseFloat(e.target.value) })}
+                        data-testid="input-upgrade-basecost"
+                      />
+                    </div>
+                    <div>
+                      <Label>Cost Multiplier</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={editingUpgrade.costMultiplier}
+                        onChange={(e) => setEditingUpgrade({ ...editingUpgrade, costMultiplier: parseFloat(e.target.value) })}
+                        data-testid="input-upgrade-costmult"
+                      />
+                    </div>
+                    <div>
+                      <Label>Base Value</Label>
+                      <Input
+                        type="number"
+                        value={editingUpgrade.baseValue}
+                        onChange={(e) => setEditingUpgrade({ ...editingUpgrade, baseValue: parseFloat(e.target.value) })}
+                        data-testid="input-upgrade-basevalue"
+                      />
+                    </div>
+                    <div>
+                      <Label>Value Increment</Label>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        value={editingUpgrade.valueIncrement}
+                        onChange={(e) => setEditingUpgrade({ ...editingUpgrade, valueIncrement: parseFloat(e.target.value) })}
+                        data-testid="input-upgrade-valueinc"
+                      />
+                    </div>
+                    <div>
+                      <Label>Passive Income Time (Minutes)</Label>
+                      <Input
+                        type="number"
+                        value={editingUpgrade.passiveIncomeTime || 0}
+                        onChange={(e) => setEditingUpgrade({ ...editingUpgrade, passiveIncomeTime: parseInt(e.target.value) || 0 })}
+                        data-testid="input-upgrade-passive-time"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label>Description</Label>
+                    <Textarea
+                      value={editingUpgrade.description}
+                      onChange={(e) => setEditingUpgrade({ ...editingUpgrade, description: e.target.value })}
+                      data-testid="input-upgrade-desc"
+                    />
+                  </div>
+                  <div className="flex gap-4">
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="upgrade-vip"
+                        checked={editingUpgrade.isVip || false}
+                        onCheckedChange={(checked) => setEditingUpgrade({ ...editingUpgrade, isVip: checked as boolean })}
+                        data-testid="checkbox-upgrade-vip"
+                      />
+                      <Label htmlFor="upgrade-vip">VIP Upgrade</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="upgrade-event"
+                        checked={editingUpgrade.isEvent || false}
+                        onCheckedChange={(checked) => setEditingUpgrade({ ...editingUpgrade, isEvent: checked as boolean })}
+                        data-testid="checkbox-upgrade-event"
+                      />
+                      <Label htmlFor="upgrade-event">Event Upgrade</Label>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button onClick={handleSaveUpgrade} data-testid="button-save-upgrade">
+                      <Save className="w-4 h-4 mr-2" />
+                      Save
+                    </Button>
+                    <Button variant="outline" onClick={() => setEditingUpgrade(null)}>
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      onClick={() => {
+                        if (confirm(`Delete upgrade "${editingUpgrade.name}"?`)) {
+                          deleteUpgrade(editingUpgrade.id);
+                          setEditingUpgrade(null);
+                        }
+                      }}
+                      data-testid="button-delete-upgrade"
+                    >
+                      <X className="w-4 h-4 mr-2" />
+                      Delete
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
 
           <TabsContent value="characters" className="space-y-4">
@@ -403,7 +481,8 @@ export default function AdminPanel() {
                           </Button>
                           <Button
                             variant="destructive"
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.stopPropagation();
                               if (confirm(`Delete character "${editingCharacter.name}"?`)) {
                                 deleteCharacter(editingCharacter.id);
                                 setEditingCharacter(null);
@@ -427,7 +506,6 @@ export default function AdminPanel() {
             <div className="flex justify-end mb-3">
               <Button
                 onClick={() => {
-                  // Find the first missing level number, or use next available
                   const existingLevels = levelConfigs.map(l => l.level).sort((a, b) => a - b);
                   let nextLevel = 1;
                   for (let i = 0; i < existingLevels.length; i++) {
@@ -447,6 +525,9 @@ export default function AdminPanel() {
                     unlocks: []
                   };
                   setEditingLevel(newLevel);
+                  setTimeout(() => {
+                    document.getElementById('level-edit-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  }, 100);
                 }}
                 data-testid="button-create-level"
               >
@@ -454,186 +535,199 @@ export default function AdminPanel() {
                 Create Level
               </Button>
             </div>
-            <ScrollArea className="h-[450px]">
+            <ScrollArea className="h-[350px]">
               <div className="space-y-3 pr-4">
                 {levelConfigs.map(levelConfig => (
-                  <Card key={levelConfig.level}>
+                  <Card key={levelConfig.level} className={editingLevel?.level === levelConfig.level ? 'border-primary' : ''}>
                     <CardHeader>
                       <div className="flex justify-between items-center">
                         <h3 className="font-semibold">Level {levelConfig.level}</h3>
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => setEditingLevel(levelConfig)}
+                          onClick={() => {
+                            setEditingLevel(levelConfig);
+                            setTimeout(() => {
+                              document.getElementById('level-edit-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            }, 100);
+                          }}
                           data-testid={`button-edit-level-${levelConfig.level}`}
                         >
                           Edit
                         </Button>
                       </div>
                     </CardHeader>
-                    {editingLevel?.level === levelConfig.level && (
-                      <CardContent className="space-y-3">
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <Label>Level Number</Label>
-                            <Input
-                              type="number"
-                              min="1"
-                              value={editingLevel.level}
-                              onChange={(e) => setEditingLevel({ ...editingLevel, level: parseInt(e.target.value) || 1 })}
-                              data-testid="input-level-number"
-                            />
-                          </div>
-                          <div>
-                            <Label>Cost (Points Required)</Label>
-                            <Input
-                              type="number"
-                              value={editingLevel.cost}
-                              onChange={(e) => setEditingLevel({ ...editingLevel, cost: parseInt(e.target.value) })}
-                              data-testid="input-level-cost"
-                            />
-                          </div>
-                        </div>
-
-                        <div>
-                          <Label>Requirements</Label>
-                          {editingLevel.requirements.map((req, idx) => (
-                            <div key={idx} className="flex gap-2 mb-2">
-                              <Select
-                                value={req.upgradeId}
-                                onValueChange={(value) => {
-                                  const newReqs = [...editingLevel.requirements];
-                                  newReqs[idx] = { ...req, upgradeId: value };
-                                  setEditingLevel({ ...editingLevel, requirements: newReqs });
-                                }}
-                              >
-                                <SelectTrigger data-testid={`select-req-upgrade-${idx}`}>
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {upgrades.map(u => (
-                                    <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              <Input
-                                type="number"
-                                placeholder="Min Level"
-                                value={req.minLevel}
-                                onChange={(e) => {
-                                  const newReqs = [...editingLevel.requirements];
-                                  newReqs[idx] = { ...req, minLevel: parseInt(e.target.value) };
-                                  setEditingLevel({ ...editingLevel, requirements: newReqs });
-                                }}
-                                data-testid={`input-req-level-${idx}`}
-                              />
-                              <Button
-                                variant="destructive"
-                                size="icon"
-                                onClick={() => {
-                                  setEditingLevel({
-                                    ...editingLevel,
-                                    requirements: editingLevel.requirements.filter((_, i) => i !== idx)
-                                  });
-                                }}
-                              >
-                                <X className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          ))}
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setEditingLevel({
-                                ...editingLevel,
-                                requirements: [...editingLevel.requirements, { upgradeId: upgrades[0]?.id || '', minLevel: 1 }]
-                              });
-                            }}
-                            data-testid="button-add-requirement"
-                          >
-                            <Plus className="w-4 h-4 mr-2" />
-                            Add Requirement
-                          </Button>
-                        </div>
-
-                        <div>
-                          <Label>Unlocks</Label>
-                          {editingLevel.unlocks.map((unlock, idx) => (
-                            <div key={idx} className="flex gap-2 mb-2">
-                              <Input
-                                value={unlock}
-                                onChange={(e) => {
-                                  const newUnlocks = [...editingLevel.unlocks];
-                                  newUnlocks[idx] = e.target.value;
-                                  setEditingLevel({ ...editingLevel, unlocks: newUnlocks });
-                                }}
-                                data-testid={`input-unlock-${idx}`}
-                              />
-                              <Button
-                                variant="destructive"
-                                size="icon"
-                                onClick={() => {
-                                  setEditingLevel({
-                                    ...editingLevel,
-                                    unlocks: editingLevel.unlocks.filter((_, i) => i !== idx)
-                                  });
-                                }}
-                              >
-                                <X className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          ))}
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setEditingLevel({
-                                ...editingLevel,
-                                unlocks: [...editingLevel.unlocks, 'New unlock']
-                              });
-                            }}
-                            data-testid="button-add-unlock"
-                          >
-                            <Plus className="w-4 h-4 mr-2" />
-                            Add Unlock
-                          </Button>
-                        </div>
-
-                        <div className="flex gap-2">
-                          <Button onClick={handleSaveLevel} data-testid="button-save-level">
-                            <Save className="w-4 h-4 mr-2" />
-                            Save
-                          </Button>
-                          <Button variant="outline" onClick={() => setEditingLevel(null)}>
-                            Cancel
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (confirm(`Delete Level ${editingLevel.level}? This cannot be undone.`)) {
-                                const levelToDelete = editingLevel.level;
-                                setEditingLevel(null);
-                                deleteLevel(levelToDelete);
-                                toast({ 
-                                  title: 'Level deleted', 
-                                  description: `Level ${levelToDelete} has been removed.` 
-                                });
-                              }
-                            }}
-                            data-testid={`button-delete-level-${levelConfig.level}`}
-                          >
-                            <X className="w-4 h-4 mr-2" />
-                            Delete
-                          </Button>
-                        </div>
-                      </CardContent>
-                    )}
                   </Card>
                 ))}
               </div>
             </ScrollArea>
+
+            {editingLevel && (
+              <Card id="level-edit-form" className="border-primary">
+                <CardHeader>
+                  <h3 className="font-semibold">Editing: Level {editingLevel.level}</h3>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label>Level Number</Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        value={editingLevel.level}
+                        onChange={(e) => setEditingLevel({ ...editingLevel, level: parseInt(e.target.value) || 1 })}
+                        data-testid="input-level-number"
+                      />
+                    </div>
+                    <div>
+                      <Label>Cost (Points Required)</Label>
+                      <Input
+                        type="number"
+                        value={editingLevel.cost}
+                        onChange={(e) => setEditingLevel({ ...editingLevel, cost: parseInt(e.target.value) })}
+                        data-testid="input-level-cost"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label>Requirements</Label>
+                    {editingLevel.requirements.map((req, idx) => (
+                      <div key={idx} className="flex gap-2 mb-2">
+                        <Select
+                          value={req.upgradeId}
+                          onValueChange={(value) => {
+                            const newReqs = [...editingLevel.requirements];
+                            newReqs[idx] = { ...req, upgradeId: value };
+                            setEditingLevel({ ...editingLevel, requirements: newReqs });
+                          }}
+                        >
+                          <SelectTrigger data-testid={`select-req-upgrade-${idx}`}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {upgrades.map(u => (
+                              <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          type="number"
+                          placeholder="Min Level"
+                          value={req.minLevel}
+                          onChange={(e) => {
+                            const newReqs = [...editingLevel.requirements];
+                            newReqs[idx] = { ...req, minLevel: parseInt(e.target.value) };
+                            setEditingLevel({ ...editingLevel, requirements: newReqs });
+                          }}
+                          data-testid={`input-req-level-${idx}`}
+                        />
+                        <Button
+                          variant="destructive"
+                          size="icon"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingLevel({
+                              ...editingLevel,
+                              requirements: editingLevel.requirements.filter((_, i) => i !== idx)
+                            });
+                          }}
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    ))}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setEditingLevel({
+                          ...editingLevel,
+                          requirements: [...editingLevel.requirements, { upgradeId: upgrades[0]?.id || '', minLevel: 1 }]
+                        });
+                      }}
+                      data-testid="button-add-requirement"
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Add Requirement
+                    </Button>
+                  </div>
+
+                  <div>
+                    <Label>Unlocks</Label>
+                    {editingLevel.unlocks.map((unlock, idx) => (
+                      <div key={idx} className="flex gap-2 mb-2">
+                        <Input
+                          value={unlock}
+                          onChange={(e) => {
+                            const newUnlocks = [...editingLevel.unlocks];
+                            newUnlocks[idx] = e.target.value;
+                            setEditingLevel({ ...editingLevel, unlocks: newUnlocks });
+                          }}
+                          data-testid={`input-unlock-${idx}`}
+                        />
+                        <Button
+                          variant="destructive"
+                          size="icon"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingLevel({
+                              ...editingLevel,
+                              unlocks: editingLevel.unlocks.filter((_, i) => i !== idx)
+                            });
+                          }}
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    ))}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setEditingLevel({
+                          ...editingLevel,
+                          unlocks: [...editingLevel.unlocks, 'New unlock']
+                        });
+                      }}
+                      data-testid="button-add-unlock"
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Add Unlock
+                    </Button>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button onClick={handleSaveLevel} data-testid="button-save-level">
+                      <Save className="w-4 h-4 mr-2" />
+                      Save
+                    </Button>
+                    <Button variant="outline" onClick={() => setEditingLevel(null)}>
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (confirm(`Delete Level ${editingLevel.level}? This cannot be undone.`)) {
+                          const levelToDelete = editingLevel.level;
+                          setEditingLevel(null);
+                          deleteLevel(levelToDelete);
+                          toast({ 
+                            title: 'Level deleted', 
+                            description: `Level ${levelToDelete} has been removed.` 
+                          });
+                        }
+                      }}
+                      data-testid="button-delete-level"
+                    >
+                      <X className="w-4 h-4 mr-2" />
+                      Delete
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
 
           <TabsContent value="images" className="space-y-4">
@@ -642,6 +736,171 @@ export default function AdminPanel() {
                 <ImageUploader adminMode={true} />
               </div>
             </ScrollArea>
+          </TabsContent>
+
+          <TabsContent value="players" className="space-y-4">
+            {!adminToken ? (
+              <Card>
+                <CardHeader>
+                  <h3 className="font-semibold">Admin Token Required</h3>
+                  <p className="text-sm text-muted-foreground">Enter your ADMIN_TOKEN to manage players</p>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div>
+                    <Label htmlFor="admin-token">Admin Token</Label>
+                    <Input
+                      id="admin-token"
+                      type="password"
+                      placeholder="Enter ADMIN_TOKEN"
+                      value={adminToken}
+                      onChange={(e) => {
+                        setAdminToken(e.target.value);
+                        localStorage.setItem('adminToken', e.target.value);
+                      }}
+                      data-testid="input-admin-token"
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    This token is used to authenticate admin API requests for player management.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <>
+                <Card>
+                  <CardHeader>
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <h3 className="font-semibold flex items-center gap-2">
+                          <Users className="w-5 h-5" />
+                          Player Management
+                        </h3>
+                        <p className="text-sm text-muted-foreground">
+                          View and edit player stats
+                        </p>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setAdminToken('');
+                          localStorage.removeItem('adminToken');
+                        }}
+                      >
+                        Clear Token
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    {playersLoading ? (
+                      <p className="text-muted-foreground">Loading players...</p>
+                    ) : !playersData?.players || playersData.players.length === 0 ? (
+                      <p className="text-muted-foreground">No players found. Players will appear here when they authenticate via Telegram.</p>
+                    ) : (
+                      <ScrollArea className="h-[400px]">
+                        <div className="space-y-3 pr-4">
+                          {playersData.players.map((player: any) => (
+                            <Card key={player.id} className={editingPlayer?.id === player.id ? 'border-primary' : ''}>
+                              <CardHeader>
+                                <div className="flex justify-between items-center">
+                                  <div>
+                                    <h4 className="font-semibold">{player.username}</h4>
+                                    <p className="text-xs text-muted-foreground">
+                                      ID: {player.id} | Telegram: {player.telegramId || 'N/A'}
+                                    </p>
+                                  </div>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setEditingPlayer(player)}
+                                    data-testid={`button-edit-player-${player.id}`}
+                                  >
+                                    Edit
+                                  </Button>
+                                </div>
+                              </CardHeader>
+                              {editingPlayer?.id === player.id && (
+                                <CardContent className="space-y-3">
+                                  <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                      <Label>Points</Label>
+                                      <Input
+                                        type="number"
+                                        value={editingPlayer.points}
+                                        onChange={(e) => setEditingPlayer({ ...editingPlayer, points: parseInt(e.target.value) || 0 })}
+                                        data-testid="input-player-points"
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label>Energy</Label>
+                                      <Input
+                                        type="number"
+                                        value={editingPlayer.energy}
+                                        onChange={(e) => setEditingPlayer({ ...editingPlayer, energy: parseInt(e.target.value) || 0 })}
+                                        data-testid="input-player-energy"
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label>Max Energy</Label>
+                                      <Input
+                                        type="number"
+                                        value={editingPlayer.maxEnergy}
+                                        onChange={(e) => setEditingPlayer({ ...editingPlayer, maxEnergy: parseInt(e.target.value) || 0 })}
+                                        data-testid="input-player-max-energy"
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label>Level</Label>
+                                      <Input
+                                        type="number"
+                                        value={editingPlayer.level}
+                                        onChange={(e) => setEditingPlayer({ ...editingPlayer, level: parseInt(e.target.value) || 1 })}
+                                        data-testid="input-player-level"
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label>Passive Income Rate</Label>
+                                      <Input
+                                        type="number"
+                                        value={editingPlayer.passiveIncomeRate}
+                                        onChange={(e) => setEditingPlayer({ ...editingPlayer, passiveIncomeRate: parseInt(e.target.value) || 0 })}
+                                        data-testid="input-player-passive-income"
+                                      />
+                                    </div>
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <Button
+                                      onClick={() => updatePlayerMutation.mutate({
+                                        id: editingPlayer.id,
+                                        updates: {
+                                          points: editingPlayer.points,
+                                          energy: editingPlayer.energy,
+                                          maxEnergy: editingPlayer.maxEnergy,
+                                          level: editingPlayer.level,
+                                          passiveIncomeRate: editingPlayer.passiveIncomeRate
+                                        }
+                                      })}
+                                      disabled={updatePlayerMutation.isPending}
+                                      data-testid="button-save-player"
+                                    >
+                                      <Save className="w-4 h-4 mr-2" />
+                                      {updatePlayerMutation.isPending ? 'Saving...' : 'Save'}
+                                    </Button>
+                                    <Button variant="outline" onClick={() => setEditingPlayer(null)}>
+                                      Cancel
+                                    </Button>
+                                  </div>
+                                </CardContent>
+                              )}
+                            </Card>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                    )}
+                  </CardContent>
+                </Card>
+              </>
+            )}
           </TabsContent>
 
           <TabsContent value="theme" className="space-y-4">
@@ -712,39 +971,24 @@ export default function AdminPanel() {
                     <Save className="w-4 h-4 mr-2" />
                     Apply Theme
                   </Button>
-                  <Button 
-                    variant="outline" 
-                    onClick={() => setEditingTheme(null)}
-                  >
+                  <Button variant="outline" onClick={() => setEditingTheme(null)}>
                     Cancel
                   </Button>
                 </div>
               </CardContent>
             </Card>
-          </TabsContent>
 
-          <TabsContent value="settings" className="space-y-4">
             <Card>
               <CardHeader>
-                <h3 className="font-semibold">Configuration Export/Import</h3>
+                <h3 className="font-semibold">Game Management</h3>
               </CardHeader>
               <CardContent className="space-y-3">
-                <p className="text-sm text-muted-foreground">
-                  Export your game configuration as JSON to customize externally or share with others.
-                </p>
-                <Button onClick={handleExportConfig} data-testid="button-export-config">
-                  Export Config (JSON)
+                <Button onClick={handleExportConfig} variant="outline" className="w-full" data-testid="button-export-config">
+                  <Save className="w-4 h-4 mr-2" />
+                  Export Configuration
                 </Button>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <h3 className="font-semibold text-destructive">Danger Zone</h3>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground mb-3">
-                  Reset all game data including progress, upgrades, and configurations.
+                <p className="text-sm text-muted-foreground">
+                  Warning: Resetting will delete all game progress and return to default settings.
                 </p>
                 <Button variant="destructive" onClick={handleResetGame} data-testid="button-reset-game">
                   <RotateCcw className="w-4 h-4 mr-2" />

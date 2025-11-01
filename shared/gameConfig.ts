@@ -9,6 +9,9 @@ export interface UpgradeConfig {
   valueIncrement: number;
   icon: string;
   type: 'perTap' | 'perHour' | 'energyMax';
+  isVip?: boolean;
+  isEvent?: boolean;
+  passiveIncomeTime?: number;
 }
 
 export interface CharacterConfig {
@@ -38,6 +41,8 @@ export interface ImageConfig {
   };
   poses?: string[];
   isHidden?: boolean;
+  chatEnable?: boolean;
+  chatSendPercent?: number;
 }
 
 export interface LevelRequirement {

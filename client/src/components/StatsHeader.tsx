@@ -22,7 +22,7 @@ export default function StatsHeader() {
         <div className="flex flex-col items-center gap-1">
           <Dialog>
             <DialogTrigger asChild>
-              <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-primary cursor-pointer hover-elevate">
+              <div className="w-16 h-16 rounded-lg overflow-hidden border-2 border-primary cursor-pointer hover-elevate">
                 {displayAvatar ? (
                   <img
                     src={displayAvatar}
@@ -61,6 +61,19 @@ export default function StatsHeader() {
               +{state.passiveIncomeRate}/hr
             </span>
           )}
+        </div>
+
+        <div className="flex-1 min-w-0" data-testid="stat-points-per-hour">
+          <div className="flex items-center gap-2 mb-1">
+            <Star className="w-5 h-5 text-primary" />
+            <span className="text-sm font-medium uppercase tracking-wide">Points/Hr</span>
+          </div>
+          <div className="text-2xl font-bold tabular-nums">
+            {state.passiveIncomeRate.toLocaleString()}
+          </div>
+          <span className="text-xs text-muted-foreground">
+            Passive Income
+          </span>
         </div>
 
         <div className="flex-1 min-w-0" data-testid="stat-energy">
