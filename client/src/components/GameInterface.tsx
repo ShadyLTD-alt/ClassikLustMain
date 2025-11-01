@@ -13,6 +13,7 @@ import {
   Crown
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
+import { useGame } from "@/contexts/GameContext";
 import UpgradePanel from "./UpgradePanel";
 import LevelUp from "./LevelUp";
 import CharacterSelector from "./CharacterSelector";
