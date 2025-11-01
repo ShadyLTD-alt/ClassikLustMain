@@ -7,7 +7,7 @@ export const players = pgTable("players", {
   id: varchar("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   telegramId: text("telegramId").unique(),
   username: text("username").notNull(),
-  points: numeric("points", { precision: 10, scale: 2 }).default("0").notNull(), // Supports decimals with 2 decimal places // Always round to integer before saving
+  points: numeric("points", { precision: 10, scale: 2 }).default("0").notNull(),
   energy: integer("energy").default(1000).notNull(),
   maxEnergy: integer("maxEnergy").default(1000).notNull(),
   level: integer("level").default(1).notNull(),
@@ -16,6 +16,8 @@ export const players = pgTable("players", {
   isAdmin: boolean("isAdmin").default(false).notNull(),
   selectedCharacterId: text("selectedCharacterId"),
   displayImage: text("displayImage"),
+  upgrades: jsonb("upgrades").default("{}").notNull().$type<Record<string, number>>(), // Store upgrade levels as { upgradeId: level }
+  unlockedCharacters: jsonb("unlockedCharacters").default("[]").notNull().$type<string[]>(), // Store unlocked character IDs
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   lastLogin: timestamp("lastLogin").defaultNow().notNull(),
   lastEnergyUpdate: timestamp("lastEnergyUpdate").defaultNow().notNull(),
