@@ -1,4 +1,3 @@
-
 import { createClient } from '@supabase/supabase-js';
 import { eq, and, lt } from "drizzle-orm";
 import { drizzle } from 'drizzle-orm/postgres-js';
@@ -73,16 +72,19 @@ export interface IStorage {
   getUpgrade(id: string): Promise<Upgrade | undefined>;
   createUpgrade(upgrade: InsertUpgrade): Promise<Upgrade>;
   updateUpgrade(id: string, updates: Partial<Upgrade>): Promise<Upgrade | undefined>;
+  deleteUpgrade(id: string): Promise<boolean>;
   
   getCharacters(includeHidden?: boolean): Promise<Character[]>;
   getCharacter(id: string): Promise<Character | undefined>;
   createCharacter(character: InsertCharacter): Promise<Character>;
   updateCharacter(id: string, updates: Partial<Character>): Promise<Character | undefined>;
+  deleteCharacter(id: string): Promise<boolean>;
   
   getLevels(): Promise<Level[]>;
   getLevel(level: number): Promise<Level | undefined>;
   createLevel(levelData: InsertLevel): Promise<Level>;
   updateLevel(level: number, updates: Partial<Level>): Promise<Level | undefined>;
+  deleteLevel(level: number): Promise<boolean>;
   
   getPlayerUpgrades(playerId: string): Promise<(PlayerUpgrade & { upgrade: Upgrade })[]>;
   getPlayerUpgrade(playerId: string, upgradeId: string): Promise<PlayerUpgrade | undefined>;
@@ -143,13 +145,28 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createUpgrade(upgrade: InsertUpgrade): Promise<Upgrade> {
-    const result = await db.insert(schema.upgrades).values(upgrade).returning();
-    return result[0];
+    try {
+      // Try to insert, or update if exists
+      const result = await db.insert(schema.upgrades).values(upgrade).returning();
+      return result[0];
+    } catch (error: any) {
+      if (error?.code === '23505') { // Unique constraint violation
+        // Update existing instead
+        const result = await db.update(schema.upgrades).set(upgrade).where(eq(schema.upgrades.id, upgrade.id)).returning();
+        return result[0];
+      }
+      throw error;
+    }
   }
 
   async updateUpgrade(id: string, updates: Partial<Upgrade>): Promise<Upgrade | undefined> {
     const result = await db.update(schema.upgrades).set(updates).where(eq(schema.upgrades.id, id)).returning();
     return result[0];
+  }
+
+  async deleteUpgrade(id: string): Promise<boolean> {
+    const result = await db.delete(schema.upgrades).where(eq(schema.upgrades.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
   }
 
   async getCharacters(includeHidden = false): Promise<Character[]> {
@@ -165,8 +182,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createCharacter(character: InsertCharacter): Promise<Character> {
-    const result = await db.insert(schema.characters).values(character).returning();
-    return result[0];
+    try {
+      const result = await db.insert(schema.characters).values(character).returning();
+      return result[0];
+    } catch (error: any) {
+      if (error?.code === '23505') { // Unique constraint violation
+        // Update existing instead
+        const result = await db.update(schema.characters).set(character).where(eq(schema.characters.id, character.id)).returning();
+        return result[0];
+      }
+      throw error;
+    }
   }
 
   async updateCharacter(id: string, updates: Partial<Character>): Promise<Character | undefined> {
@@ -174,8 +200,13 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
+  async deleteCharacter(id: string): Promise<boolean> {
+    const result = await db.delete(schema.characters).where(eq(schema.characters.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
   async getLevels(): Promise<Level[]> {
-    return await db.select().from(schema.levels);
+    return await db.select().from(schema.levels).orderBy(schema.levels.level);
   }
 
   async getLevel(level: number): Promise<Level | undefined> {
@@ -184,13 +215,27 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createLevel(levelData: InsertLevel): Promise<Level> {
-    const result = await db.insert(schema.levels).values(levelData).returning();
-    return result[0];
+    try {
+      const result = await db.insert(schema.levels).values(levelData).returning();
+      return result[0];
+    } catch (error: any) {
+      if (error?.code === '23505') { // Unique constraint violation
+        // Update existing instead
+        const result = await db.update(schema.levels).set(levelData).where(eq(schema.levels.level, levelData.level)).returning();
+        return result[0];
+      }
+      throw error;
+    }
   }
 
   async updateLevel(level: number, updates: Partial<Level>): Promise<Level | undefined> {
     const result = await db.update(schema.levels).set(updates).where(eq(schema.levels.level, level)).returning();
     return result[0];
+  }
+
+  async deleteLevel(level: number): Promise<boolean> {
+    const result = await db.delete(schema.levels).where(eq(schema.levels.level, level));
+    return result.rowCount ? result.rowCount > 0 : false;
   }
 
   async getPlayerUpgrades(playerId: string): Promise<(PlayerUpgrade & { upgrade: Upgrade })[]> {
