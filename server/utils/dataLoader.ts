@@ -46,18 +46,23 @@ async function syncUpgrades() {
         isHidden: data.isHidden || false,
       };
       
-      const existing = await storage.getUpgrade(data.id);
-      if (existing) {
-        await storage.updateUpgrade(data.id, upgradeData);
-        console.log(`  ✓ Updated upgrade: ${data.name}`);
-      } else {
-        await storage.createUpgrade(upgradeData);
-        console.log(`  ✓ Created upgrade: ${data.name}`);
+      try {
+        const existing = await storage.getUpgrade(data.id);
+        if (existing) {
+          await storage.updateUpgrade(data.id, upgradeData);
+          console.log(`  ✓ Updated upgrade: ${data.name}`);
+        } else {
+          await storage.createUpgrade(upgradeData);
+          console.log(`  ✓ Created upgrade: ${data.name}`);
+        }
+      } catch (dbError) {
+        console.error(`  ⚠️ Failed to sync upgrade ${data.name}:`, dbError);
       }
     }
     console.log(`✅ Synced ${jsonFiles.length} upgrades`);
   } catch (error) {
-    console.error("Error syncing upgrades:", error);
+    console.error("❌ Error syncing upgrades:", error);
+    throw error;
   }
 }
 
@@ -87,18 +92,23 @@ async function syncCharacters() {
         isHidden: data.isHidden || false,
       };
       
-      const existing = await storage.getCharacter(data.id);
-      if (existing) {
-        await storage.updateCharacter(data.id, characterData);
-        console.log(`  ✓ Updated character: ${data.name}`);
-      } else {
-        await storage.createCharacter(characterData);
-        console.log(`  ✓ Created character: ${data.name}`);
+      try {
+        const existing = await storage.getCharacter(data.id);
+        if (existing) {
+          await storage.updateCharacter(data.id, characterData);
+          console.log(`  ✓ Updated character: ${data.name}`);
+        } else {
+          await storage.createCharacter(characterData);
+          console.log(`  ✓ Created character: ${data.name}`);
+        }
+      } catch (dbError) {
+        console.error(`  ⚠️ Failed to sync character ${data.name}:`, dbError);
       }
     }
     console.log(`✅ Synced ${jsonFiles.length} characters`);
   } catch (error) {
-    console.error("Error syncing characters:", error);
+    console.error("❌ Error syncing characters:", error);
+    throw error;
   }
 }
 

@@ -1,10 +1,10 @@
 {
   "id": "pink-mage",
   "name": "Stella",
+  "description": "A powerful pink mage",
   "unlockLevel": 10,
-  "description": "The pink mage",
   "rarity": "epic",
-  "defaultImage": "/attached_assets/generated_images/Pink_mage_character_portrait_ac8f14fa.png",
-  "avatarImage": "/attached_assets/generated_images/Pink_mage_character_portrait_ac8f14fa.png",
-  "displayImage": "/attached_assets/generated_images/Pink_mage_character_portrait_ac8f14fa.png"
+  "defaultImage": "/uploads/characters/Stella/character/default.png",
+  "avatarImage": "/uploads/characters/Stella/avatar/default.png",
+  "displayImage": "/uploads/characters/Stella/character/default.png"
 }

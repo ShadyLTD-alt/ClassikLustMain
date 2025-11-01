@@ -54,7 +54,7 @@ app.use((req, res, next) => {
 
 (async () => {
   // Sync game data from JSON files to database on startup
-  await syncAllGameData();
+  // await syncAllGameData(); // This line is removed to make sync non-blocking
 
   const server = await registerRoutes(app);
 
@@ -94,5 +94,11 @@ app.use((req, res, next) => {
     reusePort: true,
   }, () => {
     log(`serving on port ${port}`);
+  });
+
+  // Sync game data from JSON files after server starts (non-blocking)
+  syncAllGameData().catch(err => {
+    console.error("⚠️ Failed to sync game data on startup:", err);
+    console.log("📝 The app will still work, but data may be out of sync");
   });
 })();
