@@ -76,6 +76,17 @@ app.use((req, res, next) => {
 (async () => {
   console.log('🚀 Starting server initialization...');
 
+  // Sync game data from JSON files FIRST (blocking)
+  console.log('🔄 Starting game data sync...');
+  try {
+    await syncAllGameData();
+    console.log('✅ Game data synced successfully - memory cache populated');
+  } catch (err) {
+    console.error("❌ CRITICAL: Failed to sync game data on startup:", err);
+    console.log("⚠️ Server may not work correctly without game data");
+    // Still continue startup but log the issue
+  }
+
   console.log('📝 Registering routes...');
   const server = await registerRoutes(app);
   console.log('✅ Routes registered successfully');
@@ -126,13 +137,4 @@ app.use((req, res, next) => {
     log(`✅ Server listening on port ${port}`);
     console.log(`✅ Server is ready and accepting connections on http://0.0.0.0:${port}`);
   });
-
-  // Sync game data from JSON files after server starts (non-blocking)
-  console.log('🔄 Starting game data sync...');
-  syncAllGameData()
-    .then(() => console.log('✅ Game data synced successfully'))
-    .catch(err => {
-      console.error("⚠️ Failed to sync game data on startup:", err);
-      console.log("📝 The app will still work, but data may be out of sync");
-    });
 })();
