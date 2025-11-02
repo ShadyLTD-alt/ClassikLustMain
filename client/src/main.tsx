@@ -11,8 +11,8 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
 
-// Import LunaBug bootstrap (runs immediately)
-import { initLunaBug } from "../LunaBug/init.js";
+// Import LunaBug bootstrap - FIXED PATH
+import { initLunaBug } from "../../LunaBug/init.js";
 
 /**
  * Initialize LunaBug FIRST - before React even starts
