@@ -181,4 +181,13 @@ router.post('/force-audit', async (req, res) => {
   }
 });
 
+// Export for both CommonJS and ESM
 module.exports = { router, setLunaInstance };
+module.exports.default = { router, setLunaInstance };
+
+// ESM exports
+if (typeof exports !== 'undefined') {
+  exports.router = router;
+  exports.setLunaInstance = setLunaInstance;
+  exports.default = { router, setLunaInstance };
+}
