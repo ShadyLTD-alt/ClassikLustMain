@@ -5,6 +5,7 @@ interface GameState {
   points: number;
   energy: number;
   maxEnergy: number;
+  level: number;
   selectedCharacterId: string;
   selectedImageId: string | null;
   selectedAvatarId: string | null;
@@ -15,7 +16,7 @@ interface GameState {
   passiveIncomeCap: number;
   energyRegenRate: number;
   isAdmin: boolean;
-  displayImage: string | null; // Added displayImage field to GameState
+  displayImage: string | null;
 }
 
 interface GameContextType {
@@ -44,6 +45,7 @@ interface GameContextType {
   updateLevelConfig: (levelConfig: LevelConfig) => void;
   updateTheme: (theme: ThemeConfig) => void;
   resetGame: () => void;
+  dispatch: (action: any) => void;
 }
 
 const GameContext = createContext<GameContextType | undefined>(undefined);
@@ -63,7 +65,7 @@ const INITIAL_STATE: GameState = {
   passiveIncomeCap: 10000,
   energyRegenRate: 1,
   isAdmin: false,
-  displayImage: null // Initialize displayImage to null
+  displayImage: null
 };
 
 export function GameProvider({ children }: { children: React.ReactNode }) {
@@ -203,21 +205,24 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         newPassiveRate += calculateUpgradeValue(u, lvl);
       });
 
-      const energyUpgrades = upgrades.filter(u => u.type === 'energyMax' && u.id === 'energy-capacity');
-      let newMaxEnergy = 1000;
+      // Fix: Find ANY energyMax upgrade, not just specific ID
+      const energyUpgrades = upgrades.filter(u => u.type === 'energyMax');
+      let newMaxEnergy = 1000; // Base energy
       energyUpgrades.forEach(u => {
         const lvl = prev.upgrades[u.id] || 0;
         if (lvl > 0) {
-          newMaxEnergy = calculateUpgradeValue(u, lvl);
+          const upgradeValue = calculateUpgradeValue(u, lvl);
+          // Add to base energy instead of replacing
+          newMaxEnergy = 1000 + upgradeValue;
         }
       });
 
-      const regenUpgrades = upgrades.filter(u => u.type === 'energyMax' && u.id === 'energy-regen');
-      let newRegenRate = 1;
+      const regenUpgrades = upgrades.filter(u => u.type === 'energyRegen');
+      let newRegenRate = 1; // Base regen
       regenUpgrades.forEach(u => {
         const lvl = prev.upgrades[u.id] || 0;
         if (lvl > 0) {
-          newRegenRate = calculateUpgradeValue(u, lvl);
+          newRegenRate += calculateUpgradeValue(u, lvl);
         }
       });
 
@@ -256,7 +261,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           level: state.level,
           maxEnergy: state.maxEnergy,
           energyRegenRate: state.energyRegenRate,
-          displayImage: state.displayImage // Save displayImage
+          displayImage: state.displayImage
         });
 
         const blob = new Blob([data], { type: 'application/json' });
@@ -300,7 +305,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
               passiveIncomeRate: prev.passiveIncomeRate,
               upgrades: prev.upgrades,
               unlockedCharacters: prev.unlockedCharacters,
-              displayImage: prev.displayImage // Sync displayImage
+              displayImage: prev.displayImage
             })
           }).catch(err => console.error('Failed to sync to DB:', err));
         }
@@ -343,10 +348,24 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       return {
         ...prev,
         points: newPoints,
-        energy: newEnergy
+        energy: newEnergy,
+        lastTapValue: tapValue // Store for floating animation
       };
     });
-  }, [upgrades, characters]);
+  }, [upgrades]);
+
+  const dispatch = useCallback((action: any) => {
+    switch (action.type) {
+      case 'SET_POINTS':
+        setState(prev => ({ ...prev, points: action.payload }));
+        break;
+      case 'SET_ENERGY':
+        setState(prev => ({ ...prev, energy: action.payload }));
+        break;
+      default:
+        break;
+    }
+  }, []);
 
   const purchaseUpgrade = useCallback(async (upgradeId: string): Promise<boolean> => {
     // Prevent duplicate purchases
@@ -397,18 +416,24 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           newPassiveRate += calculateUpgradeValue(u, lvl);
         });
 
-        const energyUpgrades = upgrades.filter(u => u.type === 'energyMax' && u.id === 'energy-capacity');
+        // Fix: Find ANY energyMax upgrade
+        const energyUpgrades = upgrades.filter(u => u.type === 'energyMax');
         let newMaxEnergy = 1000;
         energyUpgrades.forEach(u => {
           const lvl = newUpgrades[u.id] || 0;
-          newMaxEnergy = calculateUpgradeValue(u, lvl);
+          if (lvl > 0) {
+            const upgradeValue = calculateUpgradeValue(u, lvl);
+            newMaxEnergy = 1000 + upgradeValue;
+          }
         });
 
-        const regenUpgrades = upgrades.filter(u => u.type === 'energyMax' && u.id === 'energy-regen');
+        const regenUpgrades = upgrades.filter(u => u.type === 'energyRegen');
         let newRegenRate = 1;
         regenUpgrades.forEach(u => {
           const lvl = newUpgrades[u.id] || 0;
-          newRegenRate = calculateUpgradeValue(u, lvl);
+          if (lvl > 0) {
+            newRegenRate += calculateUpgradeValue(u, lvl);
+          }
         });
 
         return {
@@ -689,7 +714,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       deleteLevel,
       updateLevelConfig,
       updateTheme,
-      resetGame
+      resetGame,
+      dispatch
     }}>
       {children}
     </GameContext.Provider>
