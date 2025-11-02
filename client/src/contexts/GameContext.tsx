@@ -17,6 +17,7 @@ interface GameState {
   energyRegenRate: number;
   isAdmin: boolean;
   displayImage: string | null;
+  lastTapValue?: number; // For floating animation sync
 }
 
 interface GameContextType {
@@ -46,6 +47,7 @@ interface GameContextType {
   updateTheme: (theme: ThemeConfig) => void;
   resetGame: () => void;
   dispatch: (action: any) => void;
+  calculateTapValue: () => number; // Exposed for CharacterDisplay
 }
 
 const GameContext = createContext<GameContextType | undefined>(undefined);
@@ -65,7 +67,8 @@ const INITIAL_STATE: GameState = {
   passiveIncomeCap: 10000,
   energyRegenRate: 1,
   isAdmin: false,
-  displayImage: null
+  displayImage: null,
+  lastTapValue: 1
 };
 
 export function GameProvider({ children }: { children: React.ReactNode }) {
@@ -77,6 +80,19 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = useState<ThemeConfig>(DEFAULT_THEME);
   const [pendingPurchases, setPendingPurchases] = useState<Set<string>>(new Set());
   const [isInitialized, setIsInitialized] = useState(false);
+
+  // Calculate tap value (shared with CharacterDisplay)
+  const calculateTapValue = useCallback(() => {
+    const tapPowerUpgrades = upgrades.filter(u => u.type === 'perTap');
+    let tapValue = 1; // Base tap value
+
+    tapPowerUpgrades.forEach(upgrade => {
+      const level = state.upgrades[upgrade.id] || 0;
+      tapValue += calculateUpgradeValue(upgrade, level);
+    });
+
+    return tapValue;
+  }, [upgrades, state.upgrades]);
 
   // Load player data from server on mount
   useEffect(() => {
@@ -212,8 +228,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         const lvl = prev.upgrades[u.id] || 0;
         if (lvl > 0) {
           const upgradeValue = calculateUpgradeValue(u, lvl);
-          // Add to base energy instead of replacing
-          newMaxEnergy = 1000 + upgradeValue;
+          // PROPER calculation: multiply level by upgrade value per level
+          newMaxEnergy = 1000 + (upgradeValue * lvl);
         }
       });
 
@@ -321,16 +337,20 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setState(prev => {
       if (prev.energy < 1) return prev;
 
-      const tapPowerUpgrades = upgrades.filter(u => u.type === 'perTap');
-      let tapValue = 1;
+      // Calculate actual tap value
+      const actualTapValue = calculateTapValue();
 
-      tapPowerUpgrades.forEach(upgrade => {
-        const level = prev.upgrades[upgrade.id] || 0;
-        tapValue += calculateUpgradeValue(upgrade, level);
-      });
-
-      const newPoints = prev.points + tapValue;
+      const newPoints = prev.points + actualTapValue;
       const newEnergy = prev.energy - 1;
+
+      // Log tap to LunaBug if available
+      if ((window as any).LunaBug?.core) {
+        (window as any).LunaBug.core.logEvent('tap_event', {
+          tapValue: actualTapValue,
+          energyBefore: prev.energy,
+          pointsBefore: prev.points
+        });
+      }
 
       // Sync to database
       fetch('/api/player/me', {
@@ -349,10 +369,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         ...prev,
         points: newPoints,
         energy: newEnergy,
-        lastTapValue: tapValue // Store for floating animation
+        lastTapValue: actualTapValue // Store for CharacterDisplay animation
       };
     });
-  }, [upgrades]);
+  }, [calculateTapValue]);
 
   const dispatch = useCallback((action: any) => {
     switch (action.type) {
@@ -386,6 +406,17 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
     // Mark as pending
     setPendingPurchases(prev => new Set(prev).add(upgradeId));
+
+    // Log purchase attempt to LunaBug
+    if ((window as any).LunaBug?.core) {
+      (window as any).LunaBug.core.logEvent('upgrade_purchase_attempt', {
+        upgradeId,
+        currentLevel,
+        newLevel,
+        cost,
+        playerPoints: state.points
+      });
+    }
 
     // Save to database first (pessimistic update)
     try {
@@ -423,7 +454,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           const lvl = newUpgrades[u.id] || 0;
           if (lvl > 0) {
             const upgradeValue = calculateUpgradeValue(u, lvl);
-            newMaxEnergy = 1000 + upgradeValue;
+            // FIXED: Proper energy calculation
+            newMaxEnergy = 1000 + (upgradeValue * lvl);
           }
         });
 
@@ -435,6 +467,17 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
             newRegenRate += calculateUpgradeValue(u, lvl);
           }
         });
+
+        // Log successful upgrade to LunaBug
+        if ((window as any).LunaBug?.core) {
+          (window as any).LunaBug.core.logEvent('upgrade_purchased', {
+            upgradeId,
+            newLevel,
+            costPaid: cost,
+            newMaxEnergy,
+            newPassiveRate
+          });
+        }
 
         return {
           ...prev,
@@ -455,6 +498,15 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       return true;
     } catch (err) {
       console.error('Failed to save upgrade to DB:', err);
+      
+      // Log error to LunaBug
+      if ((window as any).LunaBug?.core) {
+        (window as any).LunaBug.core.logEvent('upgrade_purchase_error', {
+          upgradeId,
+          error: err.message
+        });
+      }
+      
       setPendingPurchases(prev => {
         const next = new Set(prev);
         next.delete(upgradeId);
@@ -715,7 +767,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       updateLevelConfig,
       updateTheme,
       resetGame,
-      dispatch
+      dispatch,
+      calculateTapValue
     }}>
       {children}
     </GameContext.Provider>
