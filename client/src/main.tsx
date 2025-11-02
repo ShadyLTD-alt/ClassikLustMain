@@ -12,7 +12,7 @@ import App from "./App";
 import "./index.css";
 
 // 🌙 Import LunaBug using Vite alias - BULLETPROOF!
-import { initLunaBug } from "@lunabug/init.js";
+//import { initLunaBug } from "@lunabug/init.js";
 
 /**
  * Initialize LunaBug FIRST - before React even starts
@@ -23,7 +23,7 @@ async function bootstrap() {
   
   try {
     // Initialize LunaBug standalone system
-    await initLunaBug();
+    //await initLunaBug();
     console.log('🌙✅ LunaBug online - React can now proceed safely');
   } catch (error) {
     console.error('🌙❌ LunaBug failed to initialize:', error);
