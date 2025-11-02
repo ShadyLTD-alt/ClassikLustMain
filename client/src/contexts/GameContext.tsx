@@ -63,12 +63,13 @@ interface GameContextType {
 
 const GameContext = createContext<GameContextType | undefined>(undefined);
 
+// INITIAL STATE - NO MORE HARDCODED VALUES!
 const INITIAL_STATE: GameState = {
   points: 0,
-  lustPoints: 0,           // NEW
-  lustGems: 0,             // NEW
-  energy: 1000,
-  maxEnergy: 1000,
+  lustPoints: 0,           
+  lustGems: 0,             
+  energy: 0,               // Will be set from DB
+  maxEnergy: 0,            // Will be calculated from upgrades!
   level: 1,
   selectedCharacterId: 'aria',
   selectedImageId: null,
@@ -78,7 +79,7 @@ const INITIAL_STATE: GameState = {
   unlockedImages: [],
   passiveIncomeRate: 0,
   passiveIncomeCap: 10000,
-  energyRegenRate: 1,
+  energyRegenRate: 0,      // Will be calculated from upgrades!
   isAdmin: false,
   displayImage: null,
   lastTapValue: 1,
@@ -91,6 +92,33 @@ const INITIAL_STATE: GameState = {
   totalTapsAllTime: 0,
   lastDailyReset: new Date(),
   lastWeeklyReset: new Date()
+};
+
+// CALCULATE BASE VALUES FROM UPGRADES
+const calculateBaseEnergyValues = (upgrades: UpgradeConfig[], playerUpgrades: Record<string, number>) => {
+  // Base energy values
+  let baseMaxEnergy = 1000;
+  let baseEnergyRegen = 1;
+  
+  // Calculate from upgrades
+  const energyUpgrades = upgrades.filter(u => u.type === 'energyMax');
+  energyUpgrades.forEach(u => {
+    const lvl = playerUpgrades[u.id] || 0;
+    if (lvl > 0) {
+      const upgradeValue = calculateUpgradeValue(u, lvl);
+      baseMaxEnergy += (upgradeValue * lvl);
+    }
+  });
+  
+  const regenUpgrades = upgrades.filter(u => u.type === 'energyRegen');
+  regenUpgrades.forEach(u => {
+    const lvl = playerUpgrades[u.id] || 0;
+    if (lvl > 0) {
+      baseEnergyRegen += calculateUpgradeValue(u, lvl);
+    }
+  });
+  
+  return { baseMaxEnergy, baseEnergyRegen };
 };
 
 export function GameProvider({ children }: { children: React.ReactNode }) {
@@ -160,37 +188,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
         const playerData = await playerRes.json();
 
-        if (playerData?.player) {
-          const player = playerData.player;
-          setState(prev => ({
-            ...prev,
-            points: typeof player.points === 'string' ? parseFloat(player.points) : player.points,
-            lustPoints: typeof player.lustPoints === 'string' ? parseFloat(player.lustPoints) : (player.lustPoints || player.points || 0),
-            lustGems: player.lustGems || 0,
-            energy: player.energy || prev.energy,
-            maxEnergy: player.maxEnergy || prev.maxEnergy,
-            level: player.level || prev.level,
-            selectedCharacterId: player.selectedCharacterId || 'aria',
-            selectedImageId: player.selectedImageId || null,
-            displayImage: player.displayImage || null,
-            upgrades: player.upgrades || {},
-            unlockedCharacters: Array.isArray(player.unlockedCharacters) ? player.unlockedCharacters : ['aria'],
-            passiveIncomeRate: player.passiveIncomeRate || 0,
-            isAdmin: player.isAdmin || false,
-            // NEW BOOST FIELDS
-            boostActive: player.boostActive || false,
-            boostMultiplier: player.boostMultiplier || 1.0,
-            boostExpiresAt: player.boostExpiresAt ? new Date(player.boostExpiresAt) : null,
-            // NEW TRACKING FIELDS
-            totalTapsToday: player.totalTapsToday || 0,
-            totalTapsAllTime: player.totalTapsAllTime || 0,
-            lastDailyReset: player.lastDailyReset ? new Date(player.lastDailyReset) : new Date(),
-            lastWeeklyReset: player.lastWeeklyReset ? new Date(player.lastWeeklyReset) : new Date()
-          }));
-          console.log('✅ Loaded player data:', player.username);
-        }
-
-        // STEP 2: Load game config data in parallel AFTER player data is set
+        // STEP 2: Load game config data to calculate proper energy values
         console.log('📥 Loading game configuration data...');
         const [upgradesRes, charactersRes, levelsRes, mediaRes] = await Promise.all([
           fetch('/api/upgrades', {
@@ -215,25 +213,22 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           mediaRes.ok ? mediaRes.json() : null
         ]);
 
-        // Set upgrades
+        // Set config data first
         if (upgradesData?.upgrades) {
           setUpgrades(upgradesData.upgrades);
           console.log('✅ Loaded upgrades:', upgradesData.upgrades.length);
         }
 
-        // Set characters
         if (charactersData?.characters) {
           setCharacters(charactersData.characters);
           console.log('✅ Loaded characters:', charactersData.characters.length);
         }
 
-        // Set levels
         if (levelsData?.levels) {
           setLevelConfigs(levelsData.levels);
           console.log('✅ Loaded levels:', levelsData.levels.length);
         }
 
-        // Set media
         if (mediaData?.media) {
           const imageConfigs: ImageConfig[] = mediaData.media.map((media: any) => ({
             id: media.id,
@@ -248,6 +243,49 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           console.log('✅ Loaded media:', imageConfigs.length);
         }
 
+        // STEP 3: Calculate actual energy values from upgrades
+        if (playerData?.player && upgradesData?.upgrades) {
+          const player = playerData.player;
+          const playerUpgrades = player.upgrades || {};
+          
+          // Calculate REAL energy values from upgrades
+          const { baseMaxEnergy, baseEnergyRegen } = calculateBaseEnergyValues(upgradesData.upgrades, playerUpgrades);
+          
+          console.log('🔧 Calculated energy from upgrades:', { baseMaxEnergy, baseEnergyRegen });
+          console.log('🔧 Player upgrades:', playerUpgrades);
+          
+          // Set player state with CALCULATED values, not DB values!
+          setState(prev => ({
+            ...prev,
+            points: typeof player.points === 'string' ? parseFloat(player.points) : player.points,
+            lustPoints: typeof player.lustPoints === 'string' ? parseFloat(player.lustPoints) : (player.lustPoints || player.points || 0),
+            lustGems: player.lustGems || 0,
+            energy: player.energy || baseMaxEnergy, // Use calculated max if energy not set
+            maxEnergy: baseMaxEnergy,              // CALCULATED, NOT FROM DB!
+            level: player.level || prev.level,
+            selectedCharacterId: player.selectedCharacterId || 'aria',
+            selectedImageId: player.selectedImageId || null,
+            displayImage: player.displayImage || null,
+            upgrades: playerUpgrades,
+            unlockedCharacters: Array.isArray(player.unlockedCharacters) ? player.unlockedCharacters : ['aria'],
+            passiveIncomeRate: player.passiveIncomeRate || 0,
+            energyRegenRate: baseEnergyRegen,      // CALCULATED, NOT FROM DB!
+            isAdmin: player.isAdmin || false,
+            // NEW BOOST FIELDS
+            boostActive: player.boostActive || false,
+            boostMultiplier: player.boostMultiplier || 1.0,
+            boostExpiresAt: player.boostExpiresAt ? new Date(player.boostExpiresAt) : null,
+            // NEW TRACKING FIELDS
+            totalTapsToday: player.totalTapsToday || 0,
+            totalTapsAllTime: player.totalTapsAllTime || 0,
+            lastDailyReset: player.lastDailyReset ? new Date(player.lastDailyReset) : new Date(),
+            lastWeeklyReset: player.lastWeeklyReset ? new Date(player.lastWeeklyReset) : new Date()
+          }));
+          
+          console.log('✅ Loaded player data with calculated energy:', player.username);
+          console.log('⚡ Final maxEnergy:', baseMaxEnergy);
+        }
+
         console.log('✅ All game data loaded successfully');
       } catch (error) {
         console.error('❌ Failed to load game data:', error);
@@ -259,7 +297,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     loadAllData();
   }, []);
 
-  // Recalculate passive income, max energy, and regen when upgrades change
+  // Recalculate passive income, max energy, and regen when upgrades change - ENHANCED LOGGING
   useEffect(() => {
     if (!isInitialized) return;
 
@@ -271,36 +309,34 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         newPassiveRate += calculateUpgradeValue(u, lvl);
       });
 
-      // Fix: Find ANY energyMax upgrade, not just specific ID
-      const energyUpgrades = upgrades.filter(u => u.type === 'energyMax');
-      let newMaxEnergy = 1000; // Base energy
-      energyUpgrades.forEach(u => {
-        const lvl = prev.upgrades[u.id] || 0;
-        if (lvl > 0) {
-          const upgradeValue = calculateUpgradeValue(u, lvl);
-          // PROPER calculation: multiply level by upgrade value per level
-          newMaxEnergy = 1000 + (upgradeValue * lvl);
-        }
-      });
-
-      const regenUpgrades = upgrades.filter(u => u.type === 'energyRegen');
-      let newRegenRate = 1; // Base regen
-      regenUpgrades.forEach(u => {
-        const lvl = prev.upgrades[u.id] || 0;
-        if (lvl > 0) {
-          newRegenRate += calculateUpgradeValue(u, lvl);
-        }
+      // Calculate energy values from upgrades
+      const { baseMaxEnergy, baseEnergyRegen } = calculateBaseEnergyValues(upgrades, prev.upgrades);
+      
+      console.log('🔄 Upgrade recalculation:', {
+        currentUpgrades: prev.upgrades,
+        newPassiveRate,
+        calculatedMaxEnergy: baseMaxEnergy,
+        calculatedEnergyRegen: baseEnergyRegen,
+        previousMaxEnergy: prev.maxEnergy
       });
 
       // Only update if values changed
       if (newPassiveRate !== prev.passiveIncomeRate || 
-          newMaxEnergy !== prev.maxEnergy || 
-          newRegenRate !== prev.energyRegenRate) {
+          baseMaxEnergy !== prev.maxEnergy || 
+          baseEnergyRegen !== prev.energyRegenRate) {
+        
+        console.log('✅ Updating energy values:', {
+          oldMaxEnergy: prev.maxEnergy,
+          newMaxEnergy: baseMaxEnergy,
+          oldRegen: prev.energyRegenRate,
+          newRegen: baseEnergyRegen
+        });
+        
         return {
           ...prev,
           passiveIncomeRate: newPassiveRate,
-          maxEnergy: newMaxEnergy,
-          energyRegenRate: newRegenRate
+          maxEnergy: baseMaxEnergy,
+          energyRegenRate: baseEnergyRegen
         };
       }
 
@@ -327,7 +363,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           upgrades: state.upgrades,
           unlockedCharacters: state.unlockedCharacters,
           level: state.level,
-          maxEnergy: state.maxEnergy,
+          maxEnergy: state.maxEnergy,  // Save calculated max energy
           energyRegenRate: state.energyRegenRate,
           displayImage: state.displayImage,
           boostActive: state.boostActive,
@@ -381,7 +417,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
               passiveIncomeRate: prev.passiveIncomeRate,
               upgrades: prev.upgrades,
               unlockedCharacters: prev.unlockedCharacters,
-              displayImage: prev.displayImage
+              displayImage: prev.displayImage,
+              maxEnergy: prev.maxEnergy,  // Sync calculated max energy
+              energyRegenRate: prev.energyRegenRate
             })
           }).catch(err => console.error('Failed to sync to DB:', err));
         }
@@ -464,10 +502,18 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       case 'SET_ENERGY':
         setState(prev => ({ ...prev, energy: action.payload }));
         break;
+      case 'RECALCULATE_ENERGY':
+        // Force recalculate energy from upgrades
+        if (upgrades.length > 0) {
+          const { baseMaxEnergy, baseEnergyRegen } = calculateBaseEnergyValues(upgrades, state.upgrades);
+          console.log('🔄 Force recalculating energy:', { baseMaxEnergy, baseEnergyRegen });
+          setState(prev => ({ ...prev, maxEnergy: baseMaxEnergy, energyRegenRate: baseEnergyRegen }));
+        }
+        break;
       default:
         break;
     }
-  }, []);
+  }, [upgrades, state.upgrades]);
 
   const purchaseUpgrade = useCallback(async (upgradeId: string): Promise<boolean> => {
     // Prevent duplicate purchases
@@ -522,6 +568,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       setState(prev => {
         const newUpgrades = { ...prev.upgrades, [upgradeId]: newLevel };
 
+        // Recalculate ALL values from upgrades
         const perHourUpgrades = upgrades.filter(u => u.type === 'perHour');
         let newPassiveRate = 0;
         perHourUpgrades.forEach(u => {
@@ -529,25 +576,15 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           newPassiveRate += calculateUpgradeValue(u, lvl);
         });
 
-        // Fix: Find ANY energyMax upgrade
-        const energyUpgrades = upgrades.filter(u => u.type === 'energyMax');
-        let newMaxEnergy = 1000;
-        energyUpgrades.forEach(u => {
-          const lvl = newUpgrades[u.id] || 0;
-          if (lvl > 0) {
-            const upgradeValue = calculateUpgradeValue(u, lvl);
-            // FIXED: Proper energy calculation
-            newMaxEnergy = 1000 + (upgradeValue * lvl);
-          }
-        });
-
-        const regenUpgrades = upgrades.filter(u => u.type === 'energyRegen');
-        let newRegenRate = 1;
-        regenUpgrades.forEach(u => {
-          const lvl = newUpgrades[u.id] || 0;
-          if (lvl > 0) {
-            newRegenRate += calculateUpgradeValue(u, lvl);
-          }
+        // Calculate REAL energy values
+        const { baseMaxEnergy, baseEnergyRegen } = calculateBaseEnergyValues(upgrades, newUpgrades);
+        
+        console.log('💪 Upgrade purchased - new energy values:', {
+          upgradeId,
+          newLevel,
+          calculatedMaxEnergy: baseMaxEnergy,
+          calculatedRegen: baseEnergyRegen,
+          previousMaxEnergy: prev.maxEnergy
         });
 
         // Log successful upgrade to LunaBug
@@ -556,7 +593,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
             upgradeId,
             newLevel,
             costPaid: cost,
-            newMaxEnergy,
+            newMaxEnergy: baseMaxEnergy,
             newPassiveRate
           });
         }
@@ -567,8 +604,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           lustPoints: prev.lustPoints - cost,
           upgrades: newUpgrades,
           passiveIncomeRate: newPassiveRate,
-          maxEnergy: newMaxEnergy,
-          energyRegenRate: newRegenRate
+          maxEnergy: baseMaxEnergy,      // CALCULATED VALUE!
+          energyRegenRate: baseEnergyRegen // CALCULATED VALUE!
         };
       });
 
