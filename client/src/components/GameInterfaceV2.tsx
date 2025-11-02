@@ -7,8 +7,9 @@ import UpgradePanel from "@/components/UpgradePanel";
 import LevelUp from "@/components/LevelUp";
 import ChatModal from "@/components/ChatModal";
 import { apiRequest } from "@/lib/queryClient";
-import { User, Crown, Shield, Settings, Sparkles, Database, Upload, Bug } from "lucide-react";
+import { User, Crown, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import AdminMenu from "@/components/AdminMenu";
 
 export default function GameInterfaceV2() {
   const { state } = useGame();
@@ -16,7 +17,6 @@ export default function GameInterfaceV2() {
   const [showUpgrades, setShowUpgrades] = useState(false);
   const [showLevel, setShowLevel] = useState(false);
   const [showChat, setShowChat] = useState(false);
-  const [tapEffects, setTapEffects] = useState<Array<{id: string, x: number, y: number, value: number}>>([]);
   const [showAdmin, setShowAdmin] = useState(false);
 
   // Fetch current character data
@@ -94,7 +94,6 @@ export default function GameInterfaceV2() {
                 <div className="absolute bottom-4 left-4 right-4 bg-black/60 backdrop-blur-sm rounded-lg px-3 py-2 border border-purple-400/30">
                   <div className="text-white font-semibold text-lg flex items-center justify-between">
                     <span>{currentCharacter.name}</span>
-                    {/* Tiny admin chip when isAdmin */}
                     {state?.isAdmin && (
                       <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-300 border border-yellow-400/30">Admin</span>
                     )}
@@ -105,10 +104,10 @@ export default function GameInterfaceV2() {
             </div>
           </div>
           
-          {/* Energy line removed per request */}
+          {/* Energy line removed */}
         </div>
 
-        {/* Admin FAB - visible only for admins */}
+        {/* Admin FAB */}
         {state?.isAdmin && (
           <button
             onClick={() => setShowAdmin(true)}
@@ -120,45 +119,9 @@ export default function GameInterfaceV2() {
         )}
       </div>
 
-      {/* Simple Admin Panel */}
+      {/* Admin Menu */}
       {showAdmin && state?.isAdmin && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowAdmin(false)}>
-          <div className="w-full max-w-2xl bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="p-4 border-b border-gray-700 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Shield className="w-5 h-5 text-yellow-400" />
-                <div>
-                  <div className="text-white font-bold">Admin Tools</div>
-                  <div className="text-xs text-gray-400">Quick maintenance panel</div>
-                </div>
-              </div>
-              <button className="text-gray-400 hover:text-white" onClick={() => setShowAdmin(false)}>✕</button>
-            </div>
-            <div className="p-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
-              <AdminCard icon={<Sparkles className="w-5 h-5" />} title="Give 1K LP" desc="Quick test LP grant" onClick={async ()=>{
-                const newLP = (state?.lustPoints || 0) + 1000;
-                try {
-                  await fetch('/api/player/me', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lustPoints: newLP }) });
-                  alert('Granted 1,000 LP');
-                } catch { alert('Failed to grant LP'); }
-              }} />
-              <AdminCard icon={<Database className="w-5 h-5" />} title="Save Now" desc="Force save player data" onClick={async()=>{
-                try { await fetch('/api/player/me', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ forceSave: true }) }); alert('Saved'); } catch { alert('Save failed'); }
-              }} />
-              <AdminCard icon={<Upload className="w-5 h-5" />} title="Media Manager" desc="Open uploader" onClick={()=>{
-                window.location.href = '/admin/media';
-              }} />
-              <AdminCard icon={<Settings className="w-5 h-5" />} title="Reload Config" desc="Reload game data JSON" onClick={async()=>{
-                try { await fetch('/api/admin/reload', { method: 'POST' }); alert('Reload triggered'); } catch { alert('Reload failed'); }
-              }} />
-              <AdminCard icon={<Bug className="w-5 h-5" />} title="LunaBug Panel" desc="Open debugger" onClick={()=>{
-                (window as any).LunaBug?.emergency?.();
-                alert('LunaBug status: '+JSON.stringify((window as any).LunaBug?.status?.()))
-              }} />
-            </div>
-            <div className="p-3 border-t border-gray-700 text-xs text-gray-500 text-center">Admin tools are visible only to admins</div>
-          </div>
-        </div>
+        <AdminMenu isOpen={showAdmin} onClose={() => setShowAdmin(false)} />
       )}
 
       {/* Modals */}
@@ -168,14 +131,5 @@ export default function GameInterfaceV2() {
       {showChat && <ChatModal isOpen={showChat} onClose={() => setShowChat(false)} />}
       
     </GameLayout>
-  );
-}
-
-function AdminCard({ icon, title, desc, onClick }: { icon: React.ReactNode; title: string; desc: string; onClick: ()=>void }){
-  return (
-    <button onClick={onClick} className="bg-gray-800/60 hover:bg-gray-800 border border-gray-700 rounded-xl p-4 text-left transition-colors">
-      <div className="flex items-center gap-3 mb-2 text-white font-semibold">{icon}<span>{title}</span></div>
-      <div className="text-xs text-gray-400">{desc}</div>
-    </button>
   );
 }
