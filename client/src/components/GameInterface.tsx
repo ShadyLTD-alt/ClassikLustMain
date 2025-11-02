@@ -10,25 +10,29 @@ import {
   MessageCircle, 
   TrendingDown,
   User,
-  Crown
+  Crown,
+  Rocket,
+  Gem
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useGame } from "@/contexts/GameContext";
 import UpgradePanel from "./UpgradePanel";
 import LevelUp from "./LevelUp";
 import CharacterSelector from "./CharacterSelector";
+import BoostPanel from "./BoostPanel";
 import type { Player } from "@shared/schema";
 
 export default function GameInterface() {
-  console.log('🎮 [v3.2] GameInterface component rendering');
+  console.log('🎮 [v3.3] GameInterface component rendering');
   
   // Get state from GameContext
   const { state, tap } = useGame();
-  console.log('🎮 [v3.2] GameInterface state:', state);
+  console.log('🎮 [v3.3] GameInterface state:', state);
 
   const [showUpgrades, setShowUpgrades] = useState(false);
   const [showLevelUp, setShowLevelUp] = useState(false);
   const [showCharacterSelector, setShowCharacterSelector] = useState(false);
+  const [showBoost, setShowBoost] = useState(false);
 
   // Fetch player data for username (GameContext doesn't have this)
   const { data: player } = useQuery<Player>({
@@ -54,7 +58,7 @@ export default function GameInterface() {
 
   // Handle tap using GameContext tap function
   const handleTap = () => {
-    console.log('💯 [v3.2] Tap triggered via GameContext');
+    console.log('💯 [v3.3] Tap triggered via GameContext');
     if (state?.energy > 0) {
       tap();
     }
@@ -62,7 +66,7 @@ export default function GameInterface() {
 
   // Wait for GameContext to initialize
   if (!state || state.points === undefined) {
-    console.log('⏳ [v3.2] GameInterface waiting for GameContext to initialize...');
+    console.log('⏳ [v3.3] GameInterface waiting for GameContext to initialize...');
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 flex items-center justify-center">
         <div className="text-white text-center">
@@ -114,52 +118,86 @@ export default function GameInterface() {
               </div>
             </div>
           </div>
-          {/* Admin Toggle */}
-          {state.isAdmin && (
-            <div className="flex items-center gap-2 text-xs">
-              <span className="text-green-400">Admin: ON</span>
-              <Settings className="w-4 h-4" />
+          
+          {/* NEW: LustGems Display + Boost Button */}
+          <div className="flex items-center gap-3">
+            <div className="text-center">
+              <div className="flex items-center gap-1 mb-1">
+                <Gem className="w-4 h-4 text-blue-400" />
+                <span className="text-xs text-blue-300">LUSTGEMS</span>
+              </div>
+              <div className="text-lg font-bold text-blue-400">{(state.lustGems || 0).toLocaleString()}</div>
             </div>
-          )}
+            
+            <BoostPanel />
+            
+            {/* Admin Toggle */}
+            {state.isAdmin && (
+              <div className="flex items-center gap-2 text-xs">
+                <span className="text-green-400">Admin: ON</span>
+                <Settings className="w-4 h-4" />
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Main Game Stats */}
       <div className="px-4 py-6 relative z-10">
         <div className="grid grid-cols-3 gap-4 mb-6">
-          <Card className="bg-black/40 border-purple-500/30">
+          {/* LustPoints Card */}
+          <Card className="bg-black/40 border-pink-500/30">
             <CardContent className="p-4 text-center">
               <div className="flex items-center justify-center mb-2">
-                <TrendingUp className="w-5 h-5 text-purple-400 mr-2" />
-                <span className="text-purple-400 font-semibold text-sm">POINTS</span>
+                <TrendingUp className="w-5 h-5 text-pink-400 mr-2" />
+                <span className="text-pink-400 font-semibold text-sm">LUSTPOINTS</span>
               </div>
-              <div className="text-2xl font-bold">{Math.floor(state.points)}</div>
+              <div className="text-2xl font-bold text-pink-300">{Math.floor(state.lustPoints || state.points)}</div>
               <div className="text-xs text-gray-400">+{Math.floor(state.passiveIncomeRate)}/hr</div>
-              <div className="text-xs text-purple-400">Passive Income</div>
+              <div className="text-xs text-pink-400">Passive Income</div>
             </CardContent>
           </Card>
+          
+          {/* Passive Income Card */}
           <Card className="bg-black/40 border-purple-500/30">
             <CardContent className="p-4 text-center">
               <div className="flex items-center justify-center mb-2">
                 <TrendingDown className="w-5 h-5 text-purple-400 mr-2" />
-                <span className="text-purple-400 font-semibold text-sm">POINTS/HR</span>
+                <span className="text-purple-400 font-semibold text-sm">LP/HR</span>
               </div>
               <div className="text-2xl font-bold">{Math.floor(state.passiveIncomeRate)}</div>
               <div className="text-xs text-purple-400">Passive Income</div>
             </CardContent>
           </Card>
-          <Card className="bg-black/40 border-purple-500/30">
+          
+          {/* Energy Card */}
+          <Card className="bg-black/40 border-green-500/30">
             <CardContent className="p-4 text-center">
               <div className="flex items-center justify-center mb-2">
-                <Zap className="w-5 h-5 text-yellow-400 mr-2" />
-                <span className="text-yellow-400 font-semibold text-sm">ENERGY</span>
+                <Zap className="w-5 h-5 text-green-400 mr-2" />
+                <span className="text-green-400 font-semibold text-sm">ENERGY</span>
               </div>
-              <div className="text-2xl font-bold">{state.energy} / {state.maxEnergy}</div>
+              <div className="text-2xl font-bold text-green-300">{state.energy} / {state.maxEnergy}</div>
               <Progress value={energyPercentage} className="mt-2 h-2 bg-gray-700" />
-              <div className="text-xs text-yellow-400 mt-1">+{state.energyRegenRate}/s</div>
+              <div className="text-xs text-green-400 mt-1">+{state.energyRegenRate}/s</div>
             </CardContent>
           </Card>
         </div>
+        
+        {/* NEW: Boost Status Display */}
+        {state.boostActive && state.boostExpiresAt && (
+          <Card className="mb-4 bg-gradient-to-r from-orange-500/20 to-red-500/20 border-orange-500/50">
+            <CardContent className="p-3 text-center">
+              <div className="flex items-center justify-center gap-2">
+                <Rocket className="w-5 h-5 text-orange-400" />
+                <span className="text-orange-300 font-bold">{state.boostMultiplier}x BOOST ACTIVE!</span>
+              </div>
+              <div className="text-xs text-orange-400 mt-1">
+                Expires: {state.boostExpiresAt.toLocaleTimeString()}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Character Display Area */}
@@ -200,6 +238,11 @@ export default function GameInterface() {
               <div className="text-sm text-gray-400">
                 Tap to earn points! ({state.energy > 0 ? 'Ready' : 'No energy'})
               </div>
+              {state.boostActive && (
+                <div className="text-sm text-orange-400 mt-1">
+                  🚀 {state.boostMultiplier}x Boost Active!
+                </div>
+              )}
             </div>
           ) : (
             <div className="text-center">
@@ -244,6 +287,16 @@ export default function GameInterface() {
           <Button 
             variant="ghost" 
             size="sm" 
+            className="flex flex-col items-center gap-1 text-xs hover:bg-blue-600/20" 
+            onClick={() => setShowBoost(true)}
+          >
+            <Rocket className="w-5 h-5 text-blue-400" />
+            <span className="text-blue-300">Boost</span>
+            <span className="text-xs text-blue-400">{state.lustGems || 0} LG</span>
+          </Button>
+          <Button 
+            variant="ghost" 
+            size="sm" 
             className="flex flex-col items-center gap-1 text-xs hover:bg-purple-600/20" 
             onClick={() => setShowLevelUp(true)}
           >
@@ -277,6 +330,11 @@ export default function GameInterface() {
       {showCharacterSelector && (
         <div className="fixed inset-0 z-[100]">
           <CharacterSelector isOpen={showCharacterSelector} onClose={() => setShowCharacterSelector(false)} />
+        </div>
+      )}
+      {showBoost && (
+        <div className="fixed inset-0 z-[100]">
+          <BoostPanel isOpen={showBoost} onClose={() => setShowBoost(false)} />
         </div>
       )}
     </div>
