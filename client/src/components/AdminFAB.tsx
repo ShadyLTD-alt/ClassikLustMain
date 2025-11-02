@@ -1,11 +1,10 @@
 import React, { useState } from "react";
-import { Settings, Plus, Upload, Eye, Bug } from "lucide-react";
+import { Settings, Plus, Upload, Eye, Bug, Gem, Zap, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useGame } from "@/contexts/GameContext";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import AdminPanel from "@/components/AdminPanel";
-import ImageUploader from "@/components/ImageUploader";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface AdminFABProps {
@@ -18,7 +17,6 @@ export function AdminFAB({ onOpenDebugger }: AdminFABProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [showDevHUD, setShowDevHUD] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
-  const [showImageUploader, setShowImageUploader] = useState(false);
 
   // Only show for admins
   if (!state?.isAdmin) return null;
@@ -37,13 +35,56 @@ export function AdminFAB({ onOpenDebugger }: AdminFABProps) {
           description: `+${amount.toLocaleString()} ${type === 'points' ? 'LP' : 'LG'}`,
         });
         // Trigger state refresh
-        dispatch({ type: 'SET_POINTS', payload: result.newPoints });
+        if (type === 'points') {
+          dispatch({ type: 'SET_POINTS', payload: result.newPoints });
+        } else {
+          dispatch({ type: 'SET_LUSTGEMS', payload: result.newLustGems });
+        }
       }
     } catch (error) {
+      // Fallback for testing - update state directly
+      if (type === 'points') {
+        dispatch({ type: 'SET_POINTS', payload: (state.lustPoints || state.points || 0) + amount });
+      } else {
+        dispatch({ type: 'SET_LUSTGEMS', payload: (state.lustGems || 0) + amount });
+      }
       toast({
-        title: "Error",
-        description: `Failed to add ${type}`,
-        variant: "destructive",
+        title: `Added ${type === 'points' ? 'LustPoints' : 'LustGems'} (Local)`,
+        description: `+${amount.toLocaleString()} ${type === 'points' ? 'LP' : 'LG'}`,
+      });
+    }
+  };
+
+  const handleBoost = async (action: 'enable' | 'disable') => {
+    try {
+      const response = await apiRequest('POST', '/api/admin/boost', {
+        action,
+        multiplier: action === 'enable' ? 2.0 : 1.0,
+        durationMinutes: action === 'enable' ? 10 : 0
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        dispatch({ type: 'SET_BOOST', payload: { 
+          active: result.boostActive, 
+          multiplier: result.boostMultiplier,
+          expiresAt: result.boostExpiresAt 
+        }});
+        toast({
+          title: action === 'enable' ? 'Boost Activated!' : 'Boost Cleared',
+          description: action === 'enable' ? '2x multiplier for 10 minutes' : 'Boost disabled',
+        });
+      }
+    } catch (error) {
+      // Fallback for testing - update state directly
+      const boostData = action === 'enable' 
+        ? { active: true, multiplier: 2.0, expiresAt: new Date(Date.now() + 10 * 60 * 1000) }
+        : { active: false, multiplier: 1.0, expiresAt: null };
+      
+      dispatch({ type: 'SET_BOOST', payload: boostData });
+      toast({
+        title: `${action === 'enable' ? 'Boost Activated!' : 'Boost Cleared'} (Local)`,
+        description: action === 'enable' ? '2x multiplier for 10 minutes' : 'Boost disabled',
       });
     }
   };
@@ -120,6 +161,45 @@ export function AdminFAB({ onOpenDebugger }: AdminFABProps) {
             isOpen ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
           }`}>
             
+            {/* Clear Boost */}
+            <Button
+              onClick={() => {
+                handleBoost('disable');
+                setIsOpen(false);
+              }}
+              size="sm"
+              className="bg-red-600/90 hover:bg-red-700 text-white shadow-lg backdrop-blur border border-red-400/30"
+            >
+              <X className="w-4 h-4 mr-2" />
+              Clear Boost
+            </Button>
+
+            {/* Enable 2x Boost */}
+            <Button
+              onClick={() => {
+                handleBoost('enable');
+                setIsOpen(false);
+              }}
+              size="sm"
+              className="bg-orange-600/90 hover:bg-orange-700 text-white shadow-lg backdrop-blur border border-orange-400/30"
+            >
+              <Zap className="w-4 h-4 mr-2" />
+              2x Boost (10m)
+            </Button>
+
+            {/* Add LustGems */}
+            <Button
+              onClick={() => {
+                handleAddCurrency('gems', 100);
+                setIsOpen(false);
+              }}
+              size="sm"
+              className="bg-cyan-600/90 hover:bg-cyan-700 text-white shadow-lg backdrop-blur border border-cyan-400/30"
+            >
+              <Gem className="w-4 h-4 mr-2" />
+              +100 LG
+            </Button>
+            
             {/* LunaBug Debugger */}
             <Button
               onClick={() => {
@@ -144,19 +224,6 @@ export function AdminFAB({ onOpenDebugger }: AdminFABProps) {
             >
               <Plus className="w-4 h-4 mr-2" />
               +1K LP
-            </Button>
-
-            {/* Add LustGems */}
-            <Button
-              onClick={() => {
-                handleAddCurrency('gems', 100);
-                setIsOpen(false);
-              }}
-              size="sm"
-              className="bg-blue-600/90 hover:bg-blue-700 text-white shadow-lg backdrop-blur border border-blue-400/30"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              +100 LG
             </Button>
 
             {/* Import JSON */}
@@ -214,6 +281,16 @@ export function AdminFAB({ onOpenDebugger }: AdminFABProps) {
                   <div className="text-purple-300 text-xs pt-1 border-t border-purple-500/30">
                     🌙 LunaBug Active
                   </div>
+                  {/* Show current state */}
+                  <div className="text-green-300 text-xs pt-1 border-t border-green-500/30">
+                    LP: {Math.floor(state?.lustPoints || state?.points || 0).toLocaleString()}
+                  </div>
+                  <div className="text-blue-300 text-xs">
+                    LG: {Math.floor(state?.lustGems || 0).toLocaleString()}
+                  </div>
+                  <div className="text-orange-300 text-xs">
+                    Boost: {state?.boostActive ? `${state?.boostMultiplier}x` : 'OFF'}
+                  </div>
                 </>
               );
             })()} 
@@ -221,20 +298,8 @@ export function AdminFAB({ onOpenDebugger }: AdminFABProps) {
         </div>
       )}
 
-      {/* Admin Panel Modal - This opens on "Admin" button from AdminPanel's Images tab */}
+      {/* Admin Panel Modal - This opens the full AdminPanel */}
       <AdminPanel />
-
-      {/* Direct Image Uploader Modal - NOT FROM FAB MINI-MENU */}
-      {showImageUploader && (
-        <Dialog open={showImageUploader} onOpenChange={setShowImageUploader}>
-          <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
-            <DialogHeader><DialogTitle>Image Uploader - Admin Mode</DialogTitle></DialogHeader>
-            <div className="p-4">
-              <ImageUploader adminMode={true} />
-            </div>
-          </DialogContent>
-        </Dialog>
-      )}
     </>
   );
 }
