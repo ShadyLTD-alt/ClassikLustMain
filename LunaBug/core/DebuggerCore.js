@@ -12,6 +12,7 @@
  * ✅ Registers and initializes plugins in correct order
  * ✅ Provides error handling fallback
  * ✅ Emergency mode when game systems fail
+ * ❌ Does not hijack console (causes spam)
  * ❌ Does not care about actual feature logic (that belongs to plugins)
  */
 
@@ -25,38 +26,15 @@ class DebuggerCore {
     };
     this.isInitialized = false;
     this.logs = [];
+    this.maxLogs = 500; // Reduced from 2000
     
-    // Initialize logging immediately
-    this.setupLogging();
+    console.log('🌙 LunaBug Core initialized - clean logging mode');
   }
 
-  setupLogging() {
-    // Capture all console outputs
-    const originalLog = console.log;
-    const originalError = console.error;
-    const originalWarn = console.warn;
-
-    console.log = (...args) => {
-      this.logEvent('console_log', args.join(' '));
-      originalLog.apply(console, args);
-    };
-
-    console.error = (...args) => {
-      this.logEvent('console_error', args.join(' '));
-      originalError.apply(console, args);
-    };
-
-    console.warn = (...args) => {
-      this.logEvent('console_warn', args.join(' '));
-      originalWarn.apply(console, args);
-    };
-
-    console.log('🌙 LunaBug logging system active');
-  }
-
+  // Clean logging - no console hijacking
   logEvent(type, data, metadata = {}) {
     const entry = {
-      timestamp: new Date().toISOString(),
+      timestamp: Date.now(),
       type,
       data,
       metadata: {
@@ -68,16 +46,16 @@ class DebuggerCore {
 
     this.logs.push(entry);
     
-    // Keep last 2000 logs in memory
-    if (this.logs.length > 2000) {
-      this.logs = this.logs.slice(-2000);
+    // Keep reasonable log limit
+    if (this.logs.length > this.maxLogs) {
+      this.logs = this.logs.slice(-this.maxLogs);
     }
 
-    // Persist critical events
-    if (['console_error', 'module_error', 'game_crash'].includes(type)) {
+    // Only persist critical events - NO SPAM
+    if (['module_error', 'game_crash', 'emergency_mode'].includes(type)) {
       try {
         const criticalLogs = JSON.parse(localStorage.getItem('lunabug_critical') || '[]');
-        localStorage.setItem('lunabug_critical', JSON.stringify([...criticalLogs.slice(-499), entry]));
+        localStorage.setItem('lunabug_critical', JSON.stringify([...criticalLogs.slice(-99), entry]));
       } catch (err) {
         // Silent fail - don't break if localStorage is full
       }
@@ -86,27 +64,29 @@ class DebuggerCore {
 
   register(module) {
     if (!module.name) {
-      this.logEvent('module_error', 'Module must have a name property');
+      console.warn('🌙 Module must have a name property');
       return;
     }
 
     this.modules.push(module);
-    this.logEvent('module_registered', module.name);
+    console.log(`🌙 [${module.name}] Registered`);
   }
 
   async initAll() {
     if (this.isInitialized) {
-      this.logEvent('init_skip', 'Already initialized');
+      console.log('🌙 Already initialized');
       return;
     }
 
-    this.logEvent('init_start', `Initializing ${this.modules.length} modules`);
+    console.log(`🌙 Initializing ${this.modules.length} modules...`);
     
     for (const module of this.modules) {
       try {
+        console.log(`🌙 [${module.name}] Initializing...`);
         await module.init(this.context);
-        this.logEvent('module_init_success', module.name);
+        console.log(`🌙 [${module.name}] ✅ Initialized`);
       } catch (error) {
+        console.error(`🌙 [${module.name}] ❌ Init failed:`, error.message);
         this.logEvent('module_init_error', {
           module: module.name,
           error: error.message,
@@ -116,11 +96,11 @@ class DebuggerCore {
     }
 
     this.isInitialized = true;
-    this.logEvent('init_complete', 'All modules processed');
+    console.log('🌙 ✅ All modules processed');
   }
 
   async runCommand(command, data = {}) {
-    this.logEvent('command_start', { command, data });
+    console.log(`🌙 Running command: ${command}`);
     
     for (const module of this.modules) {
       try {
@@ -128,6 +108,7 @@ class DebuggerCore {
           await module.run(command, data);
         }
       } catch (error) {
+        console.error(`🌙 [${module.name}] Command '${command}' failed:`, error.message);
         this.logEvent('command_error', {
           module: module.name,
           command,
@@ -135,29 +116,24 @@ class DebuggerCore {
         });
       }
     }
-
-    this.logEvent('command_complete', command);
   }
 
   async stopAll() {
-    this.logEvent('stop_start', 'Stopping all modules');
+    console.log('🌙 Stopping all modules...');
     
     for (const module of this.modules) {
       try {
         if (module.stop) {
           await module.stop();
-          this.logEvent('module_stop_success', module.name);
+          console.log(`🌙 [${module.name}] Stopped`);
         }
       } catch (error) {
-        this.logEvent('module_stop_error', {
-          module: module.name,
-          error: error.message
-        });
+        console.error(`🌙 [${module.name}] Stop failed:`, error.message);
       }
     }
 
     this.isInitialized = false;
-    this.logEvent('stop_complete', 'All modules stopped');
+    console.log('🌙 All modules stopped');
   }
 
   getContext() {
@@ -166,14 +142,15 @@ class DebuggerCore {
 
   setContext(key, value) {
     this.context[key] = value;
-    this.logEvent('context_update', { key, value });
+    // Only log important context changes
+    if (['ai', 'functions', 'database'].includes(key)) {
+      console.log(`🌙 Context updated: ${key}`);
+    }
   }
 
-  getLogs(filter = null) {
-    if (filter) {
-      return this.logs.filter(log => log.type.includes(filter));
-    }
-    return this.logs;
+  getLogs(filter = null, limit = 50) {
+    let filtered = filter ? this.logs.filter(log => log.type.includes(filter)) : this.logs;
+    return filtered.slice(-limit); // Return recent logs only
   }
 
   // Emergency methods for when game crashes
@@ -181,14 +158,34 @@ class DebuggerCore {
     const dump = {
       timestamp: new Date().toISOString(),
       uptime: Date.now() - this.context.startTime,
-      modules: this.modules.map(m => m.name),
-      recentLogs: this.logs.slice(-50),
-      context: this.context
+      modules: this.modules.map(m => ({ name: m.name, initialized: !!m.context })),
+      recentErrors: this.logs.filter(log => log.type.includes('error')).slice(-10),
+      context: {
+        version: this.context.version,
+        standalone: this.context.standalone,
+        modulesLoaded: Object.keys(this.context).filter(k => k !== 'startTime')
+      }
     };
     
-    localStorage.setItem('lunabug_emergency_dump', JSON.stringify(dump));
-    console.log('🚨 LunaBug emergency dump saved');
+    try {
+      localStorage.setItem('lunabug_emergency_dump', JSON.stringify(dump));
+      console.log('🚨 LunaBug emergency dump saved');
+    } catch (err) {
+      console.error('🚨 Failed to save emergency dump:', err.message);
+    }
     return dump;
+  }
+
+  // Get clean status without spam
+  getStatus() {
+    return {
+      version: this.context.version,
+      uptime: Math.round((Date.now() - this.context.startTime) / 1000),
+      modules: this.modules.length,
+      initialized: this.isInitialized,
+      logs: this.logs.length,
+      recentErrors: this.logs.filter(log => log.type.includes('error')).length
+    };
   }
 }
 
