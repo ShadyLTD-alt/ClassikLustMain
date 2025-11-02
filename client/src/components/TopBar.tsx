@@ -27,22 +27,22 @@ export function TopBar({ username = "Player", level, points, passivePerHour, ene
           )}
         </div>
 
-        {/* Right: Compact Stats */}
+        {/* Right: Compact Stats with anti-jitter */}
         <div className="grid grid-cols-3 gap-3 text-right text-[11px]">
-          <div className="px-2 py-1 rounded bg-black/30 border border-purple-500/20">
+          <div className="px-2 py-1 rounded bg-black/30 border border-purple-500/20 h-[60px]">
             <div className="text-purple-300">POINTS</div>
-            <div className="text-white text-sm font-bold tabular-nums">{Math.floor(points).toLocaleString()}</div>
-            <div className="text-gray-400">+{Math.floor(passivePerHour).toLocaleString()}/hr</div>
+            <div className="text-white text-sm font-bold tabular-nums min-w-[84px] inline-block leading-[18px]">{Math.floor(points).toLocaleString()}</div>
+            <div className="text-gray-400 leading-[14px]">+{Math.floor(passivePerHour).toLocaleString()}/hr</div>
           </div>
-          <div className="px-2 py-1 rounded bg-black/30 border border-purple-500/20">
+          <div className="px-2 py-1 rounded bg-black/30 border border-purple-500/20 h-[60px]">
             <div className="text-purple-300">POINTS/HR</div>
-            <div className="text-white text-sm font-bold tabular-nums">{Math.floor(passivePerHour).toLocaleString()}</div>
-            <div className="text-gray-400">Passive</div>
+            <div className="text-white text-sm font-bold tabular-nums min-w-[84px] inline-block leading-[18px]">{Math.floor(passivePerHour).toLocaleString()}</div>
+            <div className="text-gray-400 leading-[14px]">Passive</div>
           </div>
-          <div className="px-2 py-1 rounded bg-black/30 border border-purple-500/20">
+          <div className="px-2 py-1 rounded bg-black/30 border border-purple-500/20 h-[60px]">
             <div className="text-yellow-300">ENERGY</div>
-            <div className="text-white text-sm font-bold tabular-nums">{energy}/{maxEnergy}</div>
-            <div className="text-yellow-400">+{energyRegen}/s</div>
+            <div className="text-white text-sm font-bold tabular-nums min-w-[84px] inline-block leading-[18px]">{energy}/{maxEnergy}</div>
+            <div className="text-yellow-400 leading-[14px]">+{energyRegen}/s</div>
           </div>
         </div>
       </div>
