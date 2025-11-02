@@ -2,7 +2,7 @@
   "id": "8e2e5ac9-d623-4daa-b797-ea332a805d31",
   "telegramId": "dev_shadyltdx",
   "username": "ShadyLTDx",
-  "points": "1932",
+  "points": "1770",
   "energy": 1000,
   "maxEnergy": 1000,
   "level": 2,
@@ -12,7 +12,7 @@
   "selectedCharacterId": "aria",
   "displayImage": null,
   "upgrades": {
-    "perTap": 20,
+    "perTap": 21,
     "perHour": 3,
     "energyMax": 2,
     "criticalChance": 4,
