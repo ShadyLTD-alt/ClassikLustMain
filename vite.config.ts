@@ -23,10 +23,11 @@ export default defineConfig({
       "@": r("client", "src"),
       "@shared": r("shared"),
       "@assets": r("attached_assets"),
-      // New: single source of truth for game data JSONs
+      // Game data aliases
       "@data": r("main-gamedata"),
-      // Optional: direct shortcuts
       "@master": r("main-gamedata", "master-data"),
+      // 🌙 LUNABUG ALIAS - Bulletproof import path!
+      "@lunabug": r("LunaBug"),
     },
   },
   root: r("client"),
@@ -37,8 +38,8 @@ export default defineConfig({
   server: {
     fs: {
       strict: true,
-      // Allow serving JSON from main-gamedata via the new aliases
-      allow: [r("main-gamedata")],
+      // Allow serving files from these directories
+      allow: [r("main-gamedata"), r("LunaBug")],
       deny: ["**/.*"],
     },
   },
