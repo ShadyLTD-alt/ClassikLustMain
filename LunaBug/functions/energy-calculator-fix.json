@@ -1,0 +1,64 @@
+{
+  "name": "energyCalculatorFix",
+  "version": "1.0.0",
+  "description": "Detects and fixes energy calculation bugs in ClassikLust",
+  "category": "gameplay",
+  "autoLoad": true,
+  "triggers": ["energy", "maxEnergy", "1003", "calculation", "level"],
+  "config": {
+    "enabled": true,
+    "priority": "high",
+    "dependencies": ["GameContext"]
+  },
+  "mistralPrompts": {
+    "system": "You are an expert at debugging game energy calculation logic. Focus on detecting off-by-one errors, incorrect formulas, and energy cap issues.",
+    "context": "ClassikLust uses a base energy of 1000 with per-level increases. Common issues: starting from wrong level, incorrect multipliers, wrong energy caps."
+  },
+  "function": {
+    "type": "analysis",
+    "input": {
+      "schema": "{ code: string, error?: string, playerLevel?: number, currentEnergy?: number }",
+      "required": ["code"]
+    },
+    "output": {
+      "schema": "{ detected: boolean, issues: array, fixes: array, confidence: number }"
+    },
+    "patterns": [
+      {
+        "detect": "1000 + level \\* (\\d+)",
+        "issue": "Energy calculation should start from level 1, not level 0",
+        "fix": "1000 + (level - 1) * $1",
+        "confidence": 0.95
+      },
+      {
+        "detect": "energy.*1003",
+        "issue": "Hardcoded energy value 1003 detected - should be calculated",
+        "fix": "Use calculated maxEnergy from level progression",
+        "confidence": 0.9
+      },
+      {
+        "detect": "maxEnergy.*level.*\\+.*3",
+        "issue": "Energy formula likely has off-by-one error (+3 instead of per-level)",
+        "fix": "Review energy progression formula: base + (level - 1) * increment",
+        "confidence": 0.85
+      }
+    ],
+    "examples": [
+      {
+        "input": "const maxEnergy = 1000 + level * 3;",
+        "output": "const maxEnergy = 1000 + (level - 1) * 3; // Start from level 1"
+      },
+      {
+        "input": "energy: 1003",
+        "output": "energy: calculateMaxEnergy(playerLevel) // Use dynamic calculation"
+      }
+    ]
+  },
+  "metadata": {
+    "author": "Steven",
+    "created": "2025-11-02",
+    "lastUsed": null,
+    "effectiveness": 0.95,
+    "tags": ["energy", "gamelogic", "calculation", "level-progression"]
+  }
+}
