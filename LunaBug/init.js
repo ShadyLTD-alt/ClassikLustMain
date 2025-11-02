@@ -13,6 +13,7 @@
 import DebuggerCore from './core/DebuggerCore.js';
 import DatabaseModule from './modules/DatabaseModule.js';
 import GameplayModule from './modules/GameplayModule.js';
+import AIModule from './modules/AIModule.js';
 
 // Global LunaBug instance
 let lunaBugInstance = null;
@@ -36,6 +37,7 @@ export async function initLunaBug() {
     // Register all modules in dependency order
     core.register(new DatabaseModule());
     core.register(new GameplayModule());
+    core.register(new AIModule()); // NEW: AI Module for Mistral integration
     
     // Initialize all modules
     await core.initAll();
@@ -43,20 +45,48 @@ export async function initLunaBug() {
     // Set up global error monitoring (emergency mode)
     setupEmergencyHandlers(core);
     
-    // Expose global interface for emergency access
+    // Expose enhanced global interface for emergency access
     window.LunaBug = {
       core,
       logs: () => core.getLogs(),
       emergency: () => activateEmergencyMode(core),
       clear: () => core.logEvent('manual_clear', 'Logs cleared by user'),
       status: () => getSystemStatus(core),
-      version: '1.0.0'
+      // AI-specific methods
+      chat: (message, options) => core.context.ai?.chat(message, options),
+      debug: (code, error, options) => core.context.ai?.debug(code, error, options),
+      instructions: {
+        get: () => core.context.ai?.getInstructions(),
+        set: (instructions) => core.context.ai?.setInstructions(instructions),
+        add: (instruction) => core.context.ai?.module.addInstruction(instruction),
+        remove: (index) => core.context.ai?.module.removeInstruction(index)
+      },
+      metrics: () => core.context.ai?.getMetrics(),
+      version: '1.0.1'
     };
     
     lunaBugInstance = core;
     
     console.log('🌙✅ LunaBug initialized successfully!');
     console.log('🌙🎯 Emergency access: window.LunaBug');
+    console.log('🤖🌙 AI integration: window.LunaBug.chat("hello")');
+    
+    // Test AI connection if available
+    if (core.context.ai) {
+      try {
+        console.log('🤖 Testing AI connection...');
+        // Don't await - let it run in background
+        core.context.ai.chat('LunaBug initialization test - respond briefly', { debugMode: false })
+          .then(response => {
+            console.log('🤖✅ AI connection successful:', response.response);
+          })
+          .catch(err => {
+            console.log('🤖⚠️ AI connection using fallback endpoint:', err.message);
+          });
+      } catch (err) {
+        console.log('🤖💻 AI will use server endpoint fallback');
+      }
+    }
     
     return core;
     
@@ -66,7 +96,12 @@ export async function initLunaBug() {
     // Even if initialization fails, provide basic emergency mode
     window.LunaBug = {
       emergency: () => console.log('🚨 LunaBug Emergency Mode - Init Failed'),
-      status: () => ({ status: 'failed', error: error.message })
+      status: () => ({ status: 'failed', error: error.message }),
+      chat: () => console.log('🤖❌ AI unavailable - init failed'),
+      instructions: {
+        get: () => [],
+        set: () => console.log('Instructions unavailable - init failed')
+      }
     };
     
     return null;
@@ -128,6 +163,8 @@ function activateEmergencyMode(core) {
   
   core.logEvent('emergency_mode_activated', 'User triggered emergency mode');
   
+  const aiMetrics = core.context.ai?.getMetrics() || { requestCount: 0, successRate: 0 };
+  
   // Create emergency overlay
   const emergency = document.createElement('div');
   emergency.id = 'lunabug-emergency';
@@ -155,7 +192,7 @@ function activateEmergencyMode(core) {
         </button>
       </div>
       
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px;">
         <div>
           <h3 style="color: #c084fc;">System Status</h3>
           <div style="background: #1a1a1a; padding: 15px; border-radius: 8px; border-left: 4px solid #9333ea;">
@@ -167,13 +204,23 @@ function activateEmergencyMode(core) {
         </div>
         
         <div>
+          <h3 style="color: #c084fc;">AI Status</h3>
+          <div style="background: #1a1a1a; padding: 15px; border-radius: 8px; border-left: 4px solid #10b981;">
+            <div>Requests: ${aiMetrics.requestCount}</div>
+            <div>Success Rate: ${aiMetrics.successRate}%</div>
+            <div>Avg Response: ${aiMetrics.averageResponseTime}ms</div>
+            <div>Instructions: ${core.context.ai?.getInstructions()?.length || 0}</div>
+          </div>
+        </div>
+        
+        <div>
           <h3 style="color: #c084fc;">Recent Events</h3>
           <div style="background: #1a1a1a; padding: 15px; border-radius: 8px; border-left: 4px solid #dc2626; font-size: 12px; max-height: 200px; overflow: auto;">
-            ${core.logs.slice(-10).map(log => `
+            ${core.logs.slice(-8).map(log => `
               <div style="margin-bottom: 8px; padding: 4px; background: #2a2a2a; border-radius: 4px;">
                 <strong style="color: #f59e0b;">${log.type}</strong><br>
                 <span style="color: #6b7280;">${new Date(log.timestamp).toLocaleTimeString()}</span><br>
-                <span style="color: #e5e7eb;">${JSON.stringify(log.data).substring(0, 100)}...</span>
+                <span style="color: #e5e7eb;">${JSON.stringify(log.data).substring(0, 80)}...</span>
               </div>
             `).join('')}
           </div>
@@ -195,6 +242,10 @@ function activateEmergencyMode(core) {
             style="background: #7c3aed; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer;">
             Dump Logs
           </button>
+          <button onclick="window.LunaBug.chat('Emergency test - are you online?').then(r => console.log('AI Response:', r))" 
+            style="background: #0ea5e9; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer;">
+            Test AI
+          </button>
         </div>
       </div>
     </div>
@@ -211,12 +262,13 @@ function activateEmergencyMode(core) {
 function getSystemStatus(core) {
   return {
     lunabug: {
-      version: '1.0.0',
+      version: '1.0.1',
       uptime: Date.now() - core.context.startTime,
       modules: core.modules.length,
       logs: core.logs.length,
       initialized: core.isInitialized
     },
+    ai: core.context.ai?.getMetrics() || { disabled: true },
     browser: {
       userAgent: navigator.userAgent,
       language: navigator.language,
