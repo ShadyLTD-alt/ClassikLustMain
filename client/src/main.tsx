@@ -11,8 +11,8 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
 
-// Import LunaBug bootstrap - FIXED PATH
-import { initLunaBug } from "../../LunaBug/init.js";
+// Import LunaBug bootstrap - CORRECTED PATH FROM ROOT
+import { initLunaBug } from "../../../LunaBug/init.js";
 
 /**
  * Initialize LunaBug FIRST - before React even starts
@@ -27,7 +27,15 @@ async function bootstrap() {
     console.log('🌙✅ LunaBug online - React can now proceed safely');
   } catch (error) {
     console.error('🌙❌ LunaBug failed to initialize:', error);
-    // Continue anyway - game should still work without LunaBug
+    console.log('🌙🚨 Creating emergency fallback...');
+    
+    // Create minimal emergency fallback
+    window.LunaBug = {
+      status: () => ({ error: 'Init failed', fallback: true }),
+      chat: () => Promise.resolve({ response: 'LunaBug unavailable - init failed' }),
+      emergency: () => console.log('🚨 LunaBug Emergency Fallback Active'),
+      functions: { list: () => [], run: () => 'Functions unavailable' }
+    };
   }
   
   // Now initialize React with LunaBug watching
@@ -43,6 +51,8 @@ async function bootstrap() {
       rootElement: 'mounted'
     });
   }
+  
+  console.log('🌙🚀 Bootstrap complete - LunaBug + React ready!');
 }
 
 // Start the bootstrap sequence
