@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Settings, Save, RotateCcw, Plus, X, Users, Upload, Palette, Crown, Star, Zap, Heart, Gem, TrendingUp, Trash2, Edit } from 'lucide-react';
+import { Save, RotateCcw, Plus, X, Users, Upload, Palette, Crown, Star, Zap, Heart, Gem, TrendingUp, Trash2, Edit, Shield } from 'lucide-react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient } from '@/lib/queryClient';
 import { useGame } from '@/contexts/GameContext';
@@ -55,7 +55,10 @@ export default function AdminPanel() {
       };
       if (adminToken) headers['x-admin-token'] = adminToken;
       const response = await fetch(url, { method, headers, body: JSON.stringify(upgrade) });
-      if (!response.ok) throw new Error('Failed to save upgrade');
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to save upgrade: ${errorText}`);
+      }
       return response.json();
     },
     onSuccess: (_data, variables) => {
@@ -80,7 +83,10 @@ export default function AdminPanel() {
       };
       if (adminToken) headers['x-admin-token'] = adminToken;
       const response = await fetch(url, { method, headers, body: JSON.stringify(character) });
-      if (!response.ok) throw new Error('Failed to save character');
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to save character: ${errorText}`);
+      }
       return response.json();
     },
     onSuccess: (_data, variables) => {
@@ -105,7 +111,10 @@ export default function AdminPanel() {
       };
       if (adminToken) headers['x-admin-token'] = adminToken;
       const response = await fetch(url, { method, headers, body: JSON.stringify(level) });
-      if (!response.ok) throw new Error('Failed to save level');
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to save level: ${errorText}`);
+      }
       return response.json();
     },
     onSuccess: (_data, variables) => {
@@ -255,8 +264,9 @@ export default function AdminPanel() {
   return (
     <Dialog>
       <DialogTrigger asChild>
+        {/* CHANGED FROM SETTINGS TO SHIELD TO AVOID DUPLICATE WITH ADMINFAB */}
         <Button variant="outline" size="icon" className="bg-purple-600/10 border-purple-500/30 hover:bg-purple-600/20">
-          <Settings className="w-4 h-4" />
+          <Shield className="w-4 h-4" />
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden">
