@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import GameLayout from "@/components/GameLayout";
 import { useGame } from "@/contexts/GameContext";
-import CharacterSelector from "@/components/CharacterSelector";
+import CharacterSelectionScrollable from "@/components/CharacterSelectionScrollable";
 import UpgradePanel from "@/components/UpgradePanel";
 import LevelUp from "@/components/LevelUp";
 import ChatModal from "@/components/ChatModal";
@@ -122,7 +122,7 @@ export default function GameInterfaceV2() {
                   <div className="flex items-center justify-between">
                     <div className="text-left">
                       <div className="text-white font-semibold text-lg">{currentCharacter.name}</div>
-                      <div className="text-purple-300 text-sm">Level {state?.level}</div>
+                      <div className="text-purple-300 text-sm">Tap to interact</div>
                     </div>
                     <div className="flex items-center gap-2">
                       {state?.isAdmin && (
@@ -158,8 +158,8 @@ export default function GameInterfaceV2() {
       {/* USE EXISTING AdminFAB */}
       <AdminFAB onOpenDebugger={() => setShowDebugger(true)} />
 
-      {/* Modals */}
-      {showCharacters && <CharacterSelector isOpen={showCharacters} onClose={() => setShowCharacters(false)} />}
+      {/* Modals - USING SCROLLABLE CHARACTER SELECTOR */}
+      {showCharacters && <CharacterSelectionScrollable isOpen={showCharacters} onClose={() => setShowCharacters(false)} />}
       {showUpgrades && <UpgradePanel isOpen={showUpgrades} onClose={() => setShowUpgrades(false)} />}
       {showLevel && <LevelUp isOpen={showLevel} onClose={() => setShowLevel(false)} />}
       {showChat && <ChatModal isOpen={showChat} onClose={() => setShowChat(false)} />}
