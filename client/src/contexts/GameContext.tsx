@@ -3,6 +3,8 @@ import { DEFAULT_THEME, calculateUpgradeCost, calculateUpgradeValue, checkLevelR
 
 interface GameState {
   points: number;
+  lustPoints: number;        // NEW: alias for points but separate for clarity
+  lustGems: number;          // NEW: premium currency
   energy: number;
   maxEnergy: number;
   level: number;
@@ -18,6 +20,15 @@ interface GameState {
   isAdmin: boolean;
   displayImage: string | null;
   lastTapValue?: number; // For floating animation sync
+  // NEW BOOST SYSTEM
+  boostActive: boolean;
+  boostMultiplier: number;
+  boostExpiresAt: Date | null;
+  // NEW TRACKING
+  totalTapsToday: number;
+  totalTapsAllTime: number;
+  lastDailyReset: Date;
+  lastWeeklyReset: Date;
 }
 
 interface GameContextType {
@@ -54,6 +65,8 @@ const GameContext = createContext<GameContextType | undefined>(undefined);
 
 const INITIAL_STATE: GameState = {
   points: 0,
+  lustPoints: 0,           // NEW
+  lustGems: 0,             // NEW
   energy: 1000,
   maxEnergy: 1000,
   level: 1,
@@ -68,7 +81,16 @@ const INITIAL_STATE: GameState = {
   energyRegenRate: 1,
   isAdmin: false,
   displayImage: null,
-  lastTapValue: 1
+  lastTapValue: 1,
+  // NEW BOOST SYSTEM
+  boostActive: false,
+  boostMultiplier: 1.0,
+  boostExpiresAt: null,
+  // NEW TRACKING
+  totalTapsToday: 0,
+  totalTapsAllTime: 0,
+  lastDailyReset: new Date(),
+  lastWeeklyReset: new Date()
 };
 
 export function GameProvider({ children }: { children: React.ReactNode }) {
@@ -81,7 +103,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [pendingPurchases, setPendingPurchases] = useState<Set<string>>(new Set());
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // Calculate tap value (shared with CharacterDisplay)
+  // Calculate tap value (shared with CharacterDisplay) - NOW WITH BOOST
   const calculateTapValue = useCallback(() => {
     const tapPowerUpgrades = upgrades.filter(u => u.type === 'perTap');
     let tapValue = 1; // Base tap value
@@ -91,8 +113,25 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       tapValue += calculateUpgradeValue(upgrade, level);
     });
 
-    return tapValue;
-  }, [upgrades, state.upgrades]);
+    // Apply boost multiplier if active
+    if (state.boostActive && state.boostExpiresAt && new Date() < state.boostExpiresAt) {
+      tapValue *= state.boostMultiplier;
+    }
+
+    return Math.floor(tapValue);
+  }, [upgrades, state.upgrades, state.boostActive, state.boostMultiplier, state.boostExpiresAt]);
+
+  // Check for expired boosts
+  useEffect(() => {
+    if (state.boostActive && state.boostExpiresAt && new Date() >= state.boostExpiresAt) {
+      setState(prev => ({
+        ...prev,
+        boostActive: false,
+        boostMultiplier: 1.0,
+        boostExpiresAt: null
+      }));
+    }
+  }, [state.boostActive, state.boostExpiresAt]);
 
   // Load player data from server on mount
   useEffect(() => {
@@ -126,6 +165,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           setState(prev => ({
             ...prev,
             points: typeof player.points === 'string' ? parseFloat(player.points) : player.points,
+            lustPoints: typeof player.lustPoints === 'string' ? parseFloat(player.lustPoints) : (player.lustPoints || player.points || 0),
+            lustGems: player.lustGems || 0,
             energy: player.energy || prev.energy,
             maxEnergy: player.maxEnergy || prev.maxEnergy,
             level: player.level || prev.level,
@@ -135,7 +176,16 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
             upgrades: player.upgrades || {},
             unlockedCharacters: Array.isArray(player.unlockedCharacters) ? player.unlockedCharacters : ['aria'],
             passiveIncomeRate: player.passiveIncomeRate || 0,
-            isAdmin: player.isAdmin || false
+            isAdmin: player.isAdmin || false,
+            // NEW BOOST FIELDS
+            boostActive: player.boostActive || false,
+            boostMultiplier: player.boostMultiplier || 1.0,
+            boostExpiresAt: player.boostExpiresAt ? new Date(player.boostExpiresAt) : null,
+            // NEW TRACKING FIELDS
+            totalTapsToday: player.totalTapsToday || 0,
+            totalTapsAllTime: player.totalTapsAllTime || 0,
+            lastDailyReset: player.lastDailyReset ? new Date(player.lastDailyReset) : new Date(),
+            lastWeeklyReset: player.lastWeeklyReset ? new Date(player.lastWeeklyReset) : new Date()
           }));
           console.log('✅ Loaded player data:', player.username);
         }
@@ -270,6 +320,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         // Use sendBeacon for reliable save on page unload
         const data = JSON.stringify({
           points: state.points,
+          lustPoints: state.lustPoints,
+          lustGems: state.lustGems,
           energy: state.energy,
           passiveIncomeRate: state.passiveIncomeRate,
           upgrades: state.upgrades,
@@ -277,7 +329,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           level: state.level,
           maxEnergy: state.maxEnergy,
           energyRegenRate: state.energyRegenRate,
-          displayImage: state.displayImage
+          displayImage: state.displayImage,
+          boostActive: state.boostActive,
+          boostMultiplier: state.boostMultiplier,
+          boostExpiresAt: state.boostExpiresAt,
+          totalTapsToday: state.totalTapsToday,
+          totalTapsAllTime: state.totalTapsAllTime
         });
 
         const blob = new Blob([data], { type: 'application/json' });
@@ -295,10 +352,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       setState(prev => {
         let newEnergy = Math.min(prev.maxEnergy, prev.energy + prev.energyRegenRate);
         let newPoints = prev.points;
+        let newLustPoints = prev.lustPoints;
 
         if (prev.passiveIncomeRate > 0 && prev.points < prev.passiveIncomeCap) {
           const incomePerSecond = prev.passiveIncomeRate / 3600;
           newPoints = Math.min(prev.passiveIncomeCap, prev.points + incomePerSecond);
+          newLustPoints = newPoints; // Keep in sync
         }
 
         if (newEnergy === prev.energy && newPoints === prev.points) {
@@ -318,6 +377,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
             body: JSON.stringify({
               energy: newEnergy,
               points: newPoints,
+              lustPoints: newLustPoints,
               passiveIncomeRate: prev.passiveIncomeRate,
               upgrades: prev.upgrades,
               unlockedCharacters: prev.unlockedCharacters,
@@ -326,7 +386,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           }).catch(err => console.error('Failed to sync to DB:', err));
         }
 
-        return { ...prev, energy: newEnergy, points: newPoints };
+        return { ...prev, energy: newEnergy, points: newPoints, lustPoints: newLustPoints };
       });
     }, 1000);
 
@@ -337,16 +397,21 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setState(prev => {
       if (prev.energy < 1) return prev;
 
-      // Calculate actual tap value
+      // Calculate actual tap value (with boost)
       const actualTapValue = calculateTapValue();
 
       const newPoints = prev.points + actualTapValue;
+      const newLustPoints = prev.lustPoints + actualTapValue;
       const newEnergy = prev.energy - 1;
+      const newTotalTapsToday = prev.totalTapsToday + 1;
+      const newTotalTapsAllTime = prev.totalTapsAllTime + 1;
 
       // Log tap to LunaBug if available
       if ((window as any).LunaBug?.core) {
         (window as any).LunaBug.core.logEvent('tap_event', {
           tapValue: actualTapValue,
+          boostActive: prev.boostActive,
+          boostMultiplier: prev.boostMultiplier,
           energyBefore: prev.energy,
           pointsBefore: prev.points
         });
@@ -361,15 +426,21 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         },
         body: JSON.stringify({
           points: newPoints,
-          energy: newEnergy
+          lustPoints: newLustPoints,
+          energy: newEnergy,
+          totalTapsToday: newTotalTapsToday,
+          totalTapsAllTime: newTotalTapsAllTime
         })
       }).catch(err => console.error('Failed to sync tap to DB:', err));
 
       return {
         ...prev,
         points: newPoints,
+        lustPoints: newLustPoints,
         energy: newEnergy,
-        lastTapValue: actualTapValue // Store for CharacterDisplay animation
+        lastTapValue: actualTapValue, // Store for CharacterDisplay animation
+        totalTapsToday: newTotalTapsToday,
+        totalTapsAllTime: newTotalTapsAllTime
       };
     });
   }, [calculateTapValue]);
@@ -377,7 +448,18 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const dispatch = useCallback((action: any) => {
     switch (action.type) {
       case 'SET_POINTS':
-        setState(prev => ({ ...prev, points: action.payload }));
+        setState(prev => ({ ...prev, points: action.payload, lustPoints: action.payload }));
+        break;
+      case 'SET_LUSTGEMS':
+        setState(prev => ({ ...prev, lustGems: action.payload }));
+        break;
+      case 'SET_BOOST':
+        setState(prev => ({
+          ...prev,
+          boostActive: action.payload.active,
+          boostMultiplier: action.payload.multiplier,
+          boostExpiresAt: action.payload.expiresAt ? new Date(action.payload.expiresAt) : null
+        }));
         break;
       case 'SET_ENERGY':
         setState(prev => ({ ...prev, energy: action.payload }));
@@ -482,6 +564,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         return {
           ...prev,
           points: prev.points - cost,
+          lustPoints: prev.lustPoints - cost,
           upgrades: newUpgrades,
           passiveIncomeRate: newPassiveRate,
           maxEnergy: newMaxEnergy,
@@ -595,7 +678,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         },
         body: JSON.stringify({
           level: nextLevel,
-          points: state.points - levelConfig.cost
+          points: state.points - levelConfig.cost,
+          lustPoints: state.lustPoints - levelConfig.cost
         })
       });
 
@@ -618,6 +702,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         ...prev,
         level: nextLevel,
         points: prev.points - levelConfig.cost,
+        lustPoints: prev.lustPoints - levelConfig.cost,
         unlockedCharacters: [...prev.unlockedCharacters, ...newUnlockedChars]
       };
 
@@ -638,7 +723,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     });
 
     return true;
-  }, [canLevelUp, levelConfigs, characters, state.level, state.points, state.unlockedCharacters]);
+  }, [canLevelUp, levelConfigs, characters, state.level, state.points, state.lustPoints, state.unlockedCharacters]);
 
   const toggleAdmin = useCallback(() => {
     setState(prev => ({ ...prev, isAdmin: !prev.isAdmin }));
