@@ -221,18 +221,17 @@ class LunaBug {
   }
 }
 
-// Export for global access
+// Export for both CommonJS and ESM
 module.exports = LunaBug;
+module.exports.default = LunaBug;
+module.exports.LunaBug = LunaBug;
 
-// Auto-initialize if running in browser context
-if (typeof window !== 'undefined') {
-  window.LunaBug = new LunaBug();
-  console.log('🌙 Luna is available globally as window.LunaBug');
-  
-  // Auto-start after 2 seconds
-  setTimeout(async () => {
-    if (window.LunaBug) {
-      await window.LunaBug.start();
-    }
-  }, 2000);
+// Also export a named function for easier imports
+module.exports.initLunaBug = () => new LunaBug();
+
+// Export as default for ESM
+if (typeof exports !== 'undefined') {
+  exports.default = LunaBug;
+  exports.LunaBug = LunaBug;
+  exports.initLunaBug = () => new LunaBug();
 }
