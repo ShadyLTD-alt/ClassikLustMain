@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react';
 import { useGame } from '@/contexts/GameContext';
 import { Badge } from '@/components/ui/badge';
 import { motion, AnimatePresence } from 'framer-motion';
+import { calculateUpgradeValue } from '@shared/gameConfig';
 
 export default function CharacterDisplay() {
-  const { state, characters, images, tap } = useGame();
+  const { state, characters, images, tap, upgrades } = useGame();
   const [tapEffects, setTapEffects] = useState<Array<{ id: number; x: number; y: number; value: number }>>([]);
   const [nextId, setNextId] = useState(0);
 
@@ -16,6 +17,18 @@ export default function CharacterDisplay() {
   // Prioritize displayImage from state, then selected image, then character default
   const displayImage = state.displayImage || selectedImage?.url || selectedCharacter?.defaultImage;
 
+  const calculateTapValue = () => {
+    const tapPowerUpgrades = upgrades.filter(u => u.type === 'perTap');
+    let tapValue = 1; // Base tap value
+
+    tapPowerUpgrades.forEach(upgrade => {
+      const level = state.upgrades[upgrade.id] || 0;
+      tapValue += calculateUpgradeValue(upgrade, level);
+    });
+
+    return tapValue;
+  };
+
   const handleTap = (e: React.MouseEvent<HTMLDivElement>) => {
     if (state.energy < 1) return;
     
@@ -25,10 +38,10 @@ export default function CharacterDisplay() {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     
-    const tapPowerUpgrades = state.upgrades['tap-power'] || 0;
-    const value = 1 + tapPowerUpgrades;
+    // Calculate actual tap value from upgrades
+    const actualTapValue = calculateTapValue();
     
-    setTapEffects(prev => [...prev, { id: nextId, x, y, value }]);
+    setTapEffects(prev => [...prev, { id: nextId, x, y, value: actualTapValue }]);
     setNextId(prev => prev + 1);
   };
 
@@ -42,21 +55,24 @@ export default function CharacterDisplay() {
   }, [tapEffects]);
 
   return (
-    <div className="flex flex-col items-center justify-center flex-1 p-8">
-      <div className="mb-4">
-        <Badge variant="secondary" className="text-lg px-4 py-1">
+    <div className="flex flex-col items-center justify-center flex-1 p-4">
+      <div className="mb-6">
+        <Badge 
+          variant="secondary" 
+          className="text-xl px-6 py-2 lust-brand border border-purple-400/30 bg-black/40"
+        >
           {selectedCharacter?.name || 'Loading...'}
         </Badge>
       </div>
 
       <div className="relative select-none">
         <motion.div
-          whileTap={{ scale: 0.98 }}
+          whileTap={{ scale: 0.95 }}
           onClick={handleTap}
-          className="cursor-pointer hover-elevate active-elevate-2 rounded-2xl overflow-hidden"
+          className="cursor-pointer hover-elevate active-elevate-2 rounded-2xl overflow-hidden shadow-2xl border border-purple-400/20"
           style={{ 
-            width: '400px',
-            maxWidth: '90vw',
+            width: '480px', // Enlarged from 400px
+            maxWidth: '95vw',
             aspectRatio: '3/4'
           }}
           data-testid="character-tap-area"
@@ -69,22 +85,26 @@ export default function CharacterDisplay() {
               draggable={false}
             />
           ) : (
-            <div className="w-full h-full bg-muted flex items-center justify-center">
-              <span className="text-muted-foreground">No character selected</span>
+            <div className="w-full h-full bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center border-2 border-dashed border-gray-600">
+              <div className="text-center text-gray-400">
+                <div className="text-6xl mb-4">🎆</div>
+                <span className="text-lg">Tap to select character</span>
+              </div>
             </div>
           )}
         </motion.div>
 
+        {/* Floating Tap Effects */}
         <AnimatePresence>
           {tapEffects.map(effect => (
             <motion.div
               key={effect.id}
-              initial={{ opacity: 1, y: 0, scale: 1 }}
-              animate={{ opacity: 0, y: -50, scale: 1.5 }}
+              initial={{ opacity: 1, y: 0, scale: 0.8 }}
+              animate={{ opacity: 0, y: -60, scale: 1.2 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 1.5 }}
-              className="absolute pointer-events-none text-2xl font-bold text-primary"
-              style={{ left: effect.x, top: effect.y }}
+              transition={{ duration: 1.2, ease: "easeOut" }}
+              className="absolute pointer-events-none text-3xl font-bold text-green-400 drop-shadow-lg z-10"
+              style={{ left: effect.x - 20, top: effect.y - 10 }}
             >
               +{effect.value}
             </motion.div>
@@ -92,10 +112,22 @@ export default function CharacterDisplay() {
         </AnimatePresence>
       </div>
 
+      {/* Energy Warning */}
       {state.energy < state.maxEnergy * 0.2 && (
-        <p className="mt-4 text-sm text-muted-foreground">
-          Low energy! Wait for regeneration...
-        </p>
+        <motion.p 
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mt-6 text-sm text-yellow-400 text-center px-4 py-2 bg-yellow-900/20 rounded-lg border border-yellow-500/30"
+        >
+          ⚡ Low energy! Wait for regeneration or upgrade energy capacity...
+        </motion.p>
+      )}
+
+      {/* Tap Value Info for Debug */}
+      {state.isAdmin && (
+        <div className="mt-4 text-xs text-gray-400 text-center">
+          Tap Value: +{calculateTapValue()} | Energy: {state.energy}/{state.maxEnergy}
+        </div>
       )}
     </div>
   );
