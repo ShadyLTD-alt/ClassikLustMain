@@ -149,7 +149,7 @@ export default function LunaBugDebugger({ isOpen, onClose }: LunaBugDebuggerProp
     onSuccess: (data) => {
       setAssistance(data);
       const debugMessage: ChatMessage = {
-        text: `🌙 Debug Analysis Complete!\\n\\n${data.analysis}\\n\\nSolutions:\\n${data.solutions.map((s, i) => `${i + 1}. ${s}`).join('\\n')}`,
+        text: `🌙 Debug Analysis Complete!\n\n${data.analysis}\n\nSolutions:\n${data.solutions.map((s, i) => `${i + 1}. ${s}`).join('\n')}`,
         sender: 'bot',
         timestamp: new Date().toISOString(),
         type: 'debug'
@@ -163,7 +163,7 @@ export default function LunaBugDebugger({ isOpen, onClose }: LunaBugDebuggerProp
     onError: (error: any) => {
       console.error('🌙 LunaBug debug error:', error);
       const errorMessage: ChatMessage = {
-        text: `❌ Error: ${error.message}\\n\\n🔧 Troubleshooting:\\n1. Check your Mistral AI API key\\n2. Verify account has sufficient credits\\n3. Check internet connection\\n4. Try again in a few moments`,
+        text: `❌ Error: ${error.message}\n\n🔧 Troubleshooting:\n1. Check your Mistral AI API key\n2. Verify account has sufficient credits\n3. Check internet connection\n4. Try again in a few moments`,
         sender: 'bot',
         timestamp: new Date().toISOString(),
         type: 'chat'
@@ -236,7 +236,7 @@ export default function LunaBugDebugger({ isOpen, onClose }: LunaBugDebuggerProp
     onError: (error: any) => {
       console.error('🌙 LunaBug chat error:', error);
       const errorMessage: ChatMessage = {
-        text: `❌ ${error.message}\\n\\nTip: Make sure your Mistral AI API key is valid and has sufficient credits.`,
+        text: `❌ ${error.message}\n\nTip: Make sure your Mistral AI API key is valid and has sufficient credits.`,
         sender: 'bot',
         timestamp: new Date().toISOString(),
         type: 'chat'
@@ -246,28 +246,60 @@ export default function LunaBugDebugger({ isOpen, onClose }: LunaBugDebuggerProp
     }
   });
 
+  // FIXED FUNCTION - PROPER SYNTAX
   const createDebugPrompt = (data: { code: string; error: string; context?: string; language: string; debugType: string }) => {
     const { code, error, context, language, debugType } = data;
-    return `Please analyze this ${language} code issue and provide debugging help.\\n\\nDebug Type: ${debugType}\\nProgramming Language: ${language}\\n\\nCode:\\n\\`\\`\\`${language}\\n${code}\\n\\`\\`\\`\\n\\nError/Issue: ${error}\\n${context ? `\\nAdditional Context: ${context}` : ''}\\n\\nPlease provide:\\n1. Analysis of what's wrong\\n2. Possible causes\\n3. Step-by-step solutions\\n4. Code fixes if applicable\\n\\nBe concise but thorough.`;
+    return [
+      `Please analyze this ${language} code issue and provide debugging help.`,
+      ``,
+      `Debug Type: ${debugType}`,
+      `Programming Language: ${language}`,
+      ``,
+      `Code:`,
+      '```' + language,
+      code,
+      '```',
+      ``,
+      `Error/Issue: ${error}`,
+      context ? `Additional Context: ${context}` : '',
+      ``,
+      `Please provide:`,
+      `1. Analysis of what's wrong`,
+      `2. Possible causes`,
+      `3. Step-by-step solutions`,
+      `4. Code fixes if applicable`,
+      ``,
+      `Be concise but thorough.`
+    ].join('\n');
   };
 
+  // FIXED FUNCTION - PROPER SYNTAX
   const createChatPrompt = (message: string, chatHistory: ChatMessage[]) => {
-    const recentHistory = chatHistory.slice(-6).map(msg => `${msg.sender === 'user' ? 'User:' : 'Luna:'} ${msg.text}`).join('\\n');
-    return `You are Luna, a helpful coding and debugging assistant for ClassikLust game development.\\n\\nRecent conversation:\\n${recentHistory}\\n\\nUser: ${message}\\n\\nPlease provide a helpful, conversational response about coding, debugging, or technical issues.`;
+    const recentHistory = chatHistory.slice(-6).map(msg => `${msg.sender === 'user' ? 'User:' : 'Luna:'} ${msg.text}`).join('\n');
+    return [
+      `You are Luna, a helpful coding and debugging assistant for ClassikLust game development.`,
+      ``,
+      `Recent conversation:`,
+      recentHistory,
+      ``,
+      `User: ${message}`,
+      ``,
+      `Please provide a helpful, conversational response about coding, debugging, or technical issues.`
+    ].join('\n');
   };
 
   const parseDebugResponse = (response: string): DebugResponse => {
     // Try to extract structured information from response
-    const analysisMatch = response.match(/Analysis[:\\s]*([^\\n]+)/i);
-    const causesSection = response.match(/(?:causes?|reasons?)[:\\s]*([\\s\\S]*?)(?:solutions?|fixes?|steps?)/i);
-    const solutionsSection = response.match(/(?:solutions?|fixes?)[:\\s]*([\\s\\S]*?)(?:code|example|steps|$)/i);
-    const codeMatch = response.match(/```[\\s\\S]*?```/);
+    const analysisMatch = response.match(/Analysis[:\s]*([^\n]+)/i);
+    const causesSection = response.match(/(?:causes?|reasons?)[:.\s]*([^\n\r]*(?:\n[^\n\r]*)*?)(?:solutions?|fixes?|steps?)/i);
+    const solutionsSection = response.match(/(?:solutions?|fixes?)[:.\s]*([^\n\r]*(?:\n[^\n\r]*)*?)(?:code|example|steps|$)/i);
+    const codeMatch = response.match(/```[\s\S]*?```/);
     
     return {
       analysis: analysisMatch?.[1]?.trim() || response.substring(0, 200) + '...',
       possibleCauses: extractListItems(causesSection?.[1]),
       solutions: extractListItems(solutionsSection?.[1]),
-      codeExample: codeMatch?.[0]?.replace(/```[a-z]*\\n?|```/g, '')?.trim(),
+      codeExample: codeMatch?.[0]?.replace(/```[a-z]*\n?|```/g, '')?.trim(),
       confidence: 85,
       debugSteps: ['Review the analysis', 'Check possible causes', 'Apply suggested solutions']
     };
@@ -275,7 +307,7 @@ export default function LunaBugDebugger({ isOpen, onClose }: LunaBugDebuggerProp
 
   const extractListItems = (text?: string): string[] => {
     if (!text) return [];
-    const items = text.split(/\\d+\\.|[-•*]/).filter(item => item.trim()).map(item => item.trim().replace(/^\\s*[\\d.]*\\s*/, ''));
+    const items = text.split(/\d+\.|[-•*]/).filter(item => item.trim()).map(item => item.trim().replace(/^\s*[\d.]*\s*/, ''));
     return items.length > 0 ? items.slice(0, 5) : [text.trim()];
   };
 
@@ -299,7 +331,7 @@ export default function LunaBugDebugger({ isOpen, onClose }: LunaBugDebuggerProp
     }
 
     const debugRequestMessage: ChatMessage = {
-      text: `🔍 Debug Request: ${language} (${debugType})\\n${error.substring(0, 100)}...`,
+      text: `🔍 Debug Request: ${language} (${debugType})\n${error.substring(0, 100)}...`,
       sender: 'user',
       timestamp: new Date().toISOString(),
       type: 'debug'
