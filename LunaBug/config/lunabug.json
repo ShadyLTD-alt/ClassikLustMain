@@ -30,7 +30,7 @@
         "endpoint": "/api/lunabug",
         "fallbackEndpoint": "/api/mistral",
         "maxChatHistory": 50,
-        "model": "mistral-large-latest",
+        "model": "Ministral-3B",
         "temperature": 0.05,
         "maxTokens": 2048,
         "topP": 1,
