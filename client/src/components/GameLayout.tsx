@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { TopBar } from "@/components/TopBar";
 import BottomNav from "@/components/BottomNav";
 import { AdminFAB } from "@/components/AdminFAB";
-import { MistralDebugger } from "../../LunaBug/interface/MistralDebugger";
+import { MistralDebugger } from "../../../LunaBug/interface/MistralDebugger";
 import { AchievementSystem } from "@/components/AchievementSystem";
 import ChatModal from "@/components/ChatModal";
 import ModalPortal from "@/components/ModalPortal";
