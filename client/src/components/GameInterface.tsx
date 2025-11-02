@@ -20,64 +20,51 @@ import CharacterSelector from "./CharacterSelector";
 import type { Player } from "@shared/schema";
 
 export default function GameInterface() {
-  console.log('🎮 [v3.1] GameInterface component rendering');
+  console.log('🎮 [v3.2] GameInterface component rendering');
   
-  // Remove isLoading - it doesn't exist in GameContext!
+  // Get state from GameContext
   const { state, tap } = useGame();
-  console.log('🎮 [v3.1] GameInterface state:', state);
+  console.log('🎮 [v3.2] GameInterface state:', state);
 
   const [showUpgrades, setShowUpgrades] = useState(false);
   const [showLevelUp, setShowLevelUp] = useState(false);
   const [showCharacterSelector, setShowCharacterSelector] = useState(false);
 
-  // Fetch player data
-  const { data: player, refetch: refetchPlayer } = useQuery<Player>({
+  // Fetch player data for username (GameContext doesn't have this)
+  const { data: player } = useQuery<Player>({
     queryKey: ['/api/player/me'],
     queryFn: async () => {
       const response = await apiRequest('GET', '/api/player/me');
       return await response.json() as Player;
     },
-    refetchInterval: 30000, // Refetch every 30 seconds
+    refetchInterval: 30000,
+    enabled: !!localStorage.getItem('sessionToken')
   });
 
-  // Fetch current character
+  // Fetch current character data
   const { data: currentCharacter } = useQuery({
-    queryKey: ['/api/characters', player?.selectedCharacterId],
+    queryKey: ['/api/characters', state?.selectedCharacterId],
     queryFn: async () => {
-      if (!player?.selectedCharacterId) return null;
-      const response = await apiRequest('GET', `/api/characters/${player.selectedCharacterId}`);
+      if (!state?.selectedCharacterId) return null;
+      const response = await apiRequest('GET', `/api/characters/${state.selectedCharacterId}`);
       return await response.json();
     },
-    enabled: !!player?.selectedCharacterId,
+    enabled: !!state?.selectedCharacterId,
   });
-
-  // Auto-refetch player data when modals close
-  useEffect(() => {
-    if (!showUpgrades && !showLevelUp && !showCharacterSelector) {
-      refetchPlayer();
-    }
-  }, [showUpgrades, showLevelUp, showCharacterSelector, refetchPlayer]);
 
   // Handle tap using GameContext tap function
   const handleTap = () => {
-    console.log('💯 [v3.1] Tap triggered via GameContext');
-    tap(); // Use the tap function from GameContext
+    console.log('💯 [v3.2] Tap triggered via GameContext');
+    if (state?.energy > 0) {
+      tap();
+    }
   };
 
-  // Use state from GameContext instead of separate query
-  // The GameContext already loads and manages all the player data
-  const gamePlayer = {
-    ...state,
-    username: player?.username || 'Player', // Get username from query if needed
-    isAdmin: state.isAdmin || false
-  };
-
-  console.log('🎮 [v3.1] Using game player data:', gamePlayer);
-
+  // Wait for GameContext to initialize
   if (!state || state.points === undefined) {
-    console.log('⏳ [v3.1] GameInterface waiting for GameContext to initialize...');
+    console.log('⏳ [v3.2] GameInterface waiting for GameContext to initialize...');
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 flex items-center justify-center">
         <div className="text-white text-center">
           <div className="animate-spin w-8 h-8 border-2 border-purple-400 border-t-transparent rounded-full mx-auto mb-4"></div>
           <p>Loading game...</p>
@@ -86,12 +73,12 @@ export default function GameInterface() {
     );
   }
 
-  const energyPercentage = (gamePlayer.energy / gamePlayer.maxEnergy) * 100;
+  const energyPercentage = (state.energy / state.maxEnergy) * 100;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 text-white">
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 text-white relative">
       {/* Header with User Info */}
-      <div className="p-4 bg-black/20 backdrop-blur-sm">
+      <div className="p-4 bg-black/20 backdrop-blur-sm relative z-10">
         <div className="flex items-center justify-between">
           {/* User Info with Username */}
           <div className="flex items-center gap-3">
@@ -121,14 +108,14 @@ export default function GameInterface() {
               </Button>
             </div>
             <div>
-              <div className="text-xs text-gray-400">@{gamePlayer.username || 'Unknown'}</div>
+              <div className="text-xs text-gray-400">@{player?.username || 'Player'}</div>
               <div className="font-semibold">
                 {currentCharacter ? currentCharacter.name : 'Select Character'}
               </div>
             </div>
           </div>
           {/* Admin Toggle */}
-          {gamePlayer.isAdmin && (
+          {state.isAdmin && (
             <div className="flex items-center gap-2 text-xs">
               <span className="text-green-400">Admin: ON</span>
               <Settings className="w-4 h-4" />
@@ -136,17 +123,18 @@ export default function GameInterface() {
           )}
         </div>
       </div>
+
       {/* Main Game Stats */}
-      <div className="px-4 py-6">
+      <div className="px-4 py-6 relative z-10">
         <div className="grid grid-cols-3 gap-4 mb-6">
           <Card className="bg-black/40 border-purple-500/30">
             <CardContent className="p-4 text-center">
               <div className="flex items-center justify-center mb-2">
                 <TrendingUp className="w-5 h-5 text-purple-400 mr-2" />
-                <span className="text-purple-400 font-semibold">POINTS</span>
+                <span className="text-purple-400 font-semibold text-sm">POINTS</span>
               </div>
-              <div className="text-2xl font-bold">{Math.floor(gamePlayer.points)}</div>
-              <div className="text-xs text-gray-400">+{Math.floor(gamePlayer.passiveIncomeRate)}/hr</div>
+              <div className="text-2xl font-bold">{Math.floor(state.points)}</div>
+              <div className="text-xs text-gray-400">+{Math.floor(state.passiveIncomeRate)}/hr</div>
               <div className="text-xs text-purple-400">Passive Income</div>
             </CardContent>
           </Card>
@@ -154,9 +142,9 @@ export default function GameInterface() {
             <CardContent className="p-4 text-center">
               <div className="flex items-center justify-center mb-2">
                 <TrendingDown className="w-5 h-5 text-purple-400 mr-2" />
-                <span className="text-purple-400 font-semibold">POINTS/HR</span>
+                <span className="text-purple-400 font-semibold text-sm">POINTS/HR</span>
               </div>
-              <div className="text-2xl font-bold">{Math.floor(gamePlayer.passiveIncomeRate)}</div>
+              <div className="text-2xl font-bold">{Math.floor(state.passiveIncomeRate)}</div>
               <div className="text-xs text-purple-400">Passive Income</div>
             </CardContent>
           </Card>
@@ -164,43 +152,53 @@ export default function GameInterface() {
             <CardContent className="p-4 text-center">
               <div className="flex items-center justify-center mb-2">
                 <Zap className="w-5 h-5 text-yellow-400 mr-2" />
-                <span className="text-yellow-400 font-semibold">ENERGY</span>
+                <span className="text-yellow-400 font-semibold text-sm">ENERGY</span>
               </div>
-              <div className="text-2xl font-bold">{gamePlayer.energy} / {gamePlayer.maxEnergy}</div>
+              <div className="text-2xl font-bold">{state.energy} / {state.maxEnergy}</div>
               <Progress value={energyPercentage} className="mt-2 h-2 bg-gray-700" />
-              <div className="text-xs text-yellow-400 mt-1">+1/s</div>
+              <div className="text-xs text-yellow-400 mt-1">+{state.energyRegenRate}/s</div>
             </CardContent>
           </Card>
         </div>
       </div>
+
       {/* Character Display Area */}
-      <div className="flex-1 flex items-center justify-center px-4">
+      <div className="flex-1 flex items-center justify-center px-4 pb-20 relative z-10">
         <div className="text-center">
           {currentCharacter ? (
             <div>
               <div className="text-xl font-bold mb-2">{currentCharacter.name}</div>
               <div 
-                className="w-64 h-64 mx-auto mb-4 rounded-lg bg-gray-800/50 backdrop-blur-sm border-2 border-purple-500/30 flex items-center justify-center cursor-pointer hover:border-purple-400/50 transition-all active:scale-95"
+                className="w-64 h-64 mx-auto mb-4 rounded-lg bg-gray-800/50 backdrop-blur-sm border-2 border-purple-500/30 flex items-center justify-center cursor-pointer hover:border-purple-400/50 transition-all active:scale-95 overflow-hidden"
                 onClick={handleTap}
               >
-                {gamePlayer.displayImage ? (
+                {state.displayImage ? (
                   <img
-                    src={gamePlayer.displayImage}
+                    src={state.displayImage}
                     alt={currentCharacter.name}
-                    className="w-full h-full object-cover rounded-lg"
+                    className="w-full h-full object-cover"
                     onError={(e) => {
                       (e.target as HTMLImageElement).src = currentCharacter.defaultImage || '/uploads/placeholder-character.jpg';
+                    }}
+                  />
+                ) : currentCharacter.defaultImage ? (
+                  <img
+                    src={currentCharacter.defaultImage}
+                    alt={currentCharacter.name}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = '/uploads/placeholder-character.jpg';
                     }}
                   />
                 ) : (
                   <div className="text-gray-400 text-center">
                     <div className="text-6xl mb-2">👤</div>
-                    <div>No character selected</div>
+                    <div>No character image</div>
                   </div>
                 )}
               </div>
               <div className="text-sm text-gray-400">
-                Tap to earn points!
+                Tap to earn points! ({state.energy > 0 ? 'Ready' : 'No energy'})
               </div>
             </div>
           ) : (
@@ -219,34 +217,68 @@ export default function GameInterface() {
           )}
         </div>
       </div>
-      {/* Bottom Navigation */}
-      <div className="fixed bottom-0 left-0 right-0 bg-black/80 backdrop-blur-sm border-t border-gray-700">
-        <div className="flex justify-around py-2">
-          <Button variant="ghost" size="sm" className="flex flex-col items-center gap-1 text-xs" onClick={() => setShowUpgrades(true)}>
+
+      {/* Bottom Navigation - Fixed Position */}
+      <div className="fixed bottom-0 left-0 right-0 bg-black/80 backdrop-blur-sm border-t border-gray-700 z-50">
+        <div className="flex justify-around py-3">
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="flex flex-col items-center gap-1 text-xs hover:bg-purple-600/20" 
+            onClick={() => setShowUpgrades(true)}
+          >
             <TrendingUp className="w-5 h-5" />
             <span>Upgrades</span>
             <span className="text-xs text-gray-400">0/6</span>
           </Button>
-          <Button variant="ghost" size="sm" className="flex flex-col items-center gap-1 text-xs" onClick={() => setShowCharacterSelector(true)}>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="flex flex-col items-center gap-1 text-xs hover:bg-purple-600/20" 
+            onClick={() => setShowCharacterSelector(true)}
+          >
             <User className="w-5 h-5" />
             <span>Characters</span>
-            <span className="text-xs text-gray-400">0</span>
+            <span className="text-xs text-gray-400">{state.unlockedCharacters?.length || 0}</span>
           </Button>
-          <Button variant="ghost" size="sm" className="flex flex-col items-center gap-1 text-xs" onClick={() => setShowLevelUp(true)}>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="flex flex-col items-center gap-1 text-xs hover:bg-purple-600/20" 
+            onClick={() => setShowLevelUp(true)}
+          >
             <MessageCircle className="w-5 h-5" />
             <span>AI Chat</span>
           </Button>
-          <Button variant="ghost" size="sm" className="flex flex-col items-center gap-1 text-xs" onClick={() => setShowLevelUp(true)}>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="flex flex-col items-center gap-1 text-xs hover:bg-purple-600/20" 
+            onClick={() => setShowLevelUp(true)}
+          >
             <TrendingDown className="w-5 h-5" />
             <span>Level Up</span>
-            <span className="text-xs text-gray-400">Lv.{gamePlayer.level}</span>
+            <span className="text-xs text-gray-400">Lv.{state.level}</span>
           </Button>
         </div>
       </div>
-      {/* Modals */}
-      <UpgradePanel isOpen={showUpgrades} onClose={() => setShowUpgrades(false)} />
-      <LevelUp isOpen={showLevelUp} onClose={() => setShowLevelUp(false)} />
-      <CharacterSelector isOpen={showCharacterSelector} onClose={() => setShowCharacterSelector(false)} />
+
+      {/* Modals - High z-index to appear above everything */}
+      {showUpgrades && (
+        <div className="fixed inset-0 z-[100]">
+          <UpgradePanel isOpen={showUpgrades} onClose={() => setShowUpgrades(false)} />
+        </div>
+      )}
+      {showLevelUp && (
+        <div className="fixed inset-0 z-[100]">
+          <LevelUp isOpen={showLevelUp} onClose={() => setShowLevelUp(false)} />
+        </div>
+      )}
+      {showCharacterSelector && (
+        <div className="fixed inset-0 z-[100]">
+          <CharacterSelector isOpen={showCharacterSelector} onClose={() => setShowCharacterSelector(false)} />
+        </div>
+      )}
     </div>
   );
 }
