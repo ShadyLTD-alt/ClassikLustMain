@@ -1,38 +1,23 @@
-// 🌙 Luna Bug - Initialization Module
-// This file provides the main entry point for @lunabug/init alias
+// 🌙 Luna Bug - Initialization Module (ESM-compatible)
+// Provides stable exports for both CJS and ESM importers
 
-// Re-export the main Luna class
 const LunaBug = require('./luna');
 
-// Convenience methods for easy initialization
-const createLuna = () => new LunaBug();
+// Factory creators
+function createLuna() { return new LunaBug(); }
+function initLunaBug() { return new LunaBug(); }
 
-const autoStart = async (delayMs = 2000) => {
-  const luna = new LunaBug();
-  
-  setTimeout(async () => {
-    try {
-      await luna.start();
-      console.log('✅ Luna auto-started successfully');
-    } catch (error) {
-      console.error('❌ Luna auto-start failed:', error);
-    }
-  }, delayMs);
-  
-  return luna;
-};
+// CJS exports
+module.exports = LunaBug;
+module.exports.default = LunaBug;
+module.exports.LunaBug = LunaBug;
+module.exports.createLuna = createLuna;
+module.exports.initLunaBug = initLunaBug;
 
-// Export everything for flexible usage
-module.exports = {
-  LunaBug,
-  createLuna,
-  autoStart,
-  // Direct class export for require('./init').LunaBug
-  default: LunaBug
-};
-
-// Also support ES6 imports if needed
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports.LunaBug = LunaBug;
-  module.exports.default = LunaBug;
+// ESM interop
+if (typeof exports !== 'undefined') {
+  exports.default = LunaBug;
+  exports.LunaBug = LunaBug;
+  exports.createLuna = createLuna;
+  exports.initLunaBug = initLunaBug;
 }
