@@ -8,6 +8,7 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Hand, Clock, Zap, Sparkles, TrendingUp, Battery } from 'lucide-react';
 import { calculateUpgradeCost, calculateUpgradeValue } from '@shared/gameConfig';
+import { UpgradeSkeletonList } from '@/components/UpgradeSkeletonList';
 
 const iconMap: Record<string, any> = { Hand, Clock, Zap, Sparkles, TrendingUp, Battery };
 
@@ -21,6 +22,7 @@ export default function UpgradePanel({ isOpen, onClose }: UpgradePanelProps) {
   const [activeTab, setActiveTab] = useState('all');
 
   const filtered = activeTab === 'all' ? upgrades : upgrades.filter(u => u.type === activeTab);
+  const isLoading = !upgrades; // if undefined during initial mount
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -44,7 +46,9 @@ export default function UpgradePanel({ isOpen, onClose }: UpgradePanelProps) {
 
           <TabsContent value={activeTab} className="flex-1 mt-0 overflow-hidden">
             <div className="max-h-[60vh] overflow-y-auto px-1 pb-2">
-              {!upgrades || upgrades.length === 0 ? (
+              {isLoading ? (
+                <UpgradeSkeletonList />
+              ) : filtered.length === 0 ? (
                 <div className="text-center py-12 text-gray-400">No upgrades available yet.</div>
               ) : (
                 <div className="space-y-3">
