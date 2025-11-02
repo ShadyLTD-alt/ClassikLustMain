@@ -10,6 +10,9 @@
  * Priority: MAXIMUM - Runs before everything else
  */
 
+// FIRST PRIORITY: Stop console spam before anything else
+import './utils/console-cleanup.js';
+
 import DebuggerCore from './core/DebuggerCore.js';
 import DatabaseModule from './modules/DatabaseModule.js';
 import GameplayModule from './modules/GameplayModule.js';
@@ -54,6 +57,7 @@ export async function initLunaBug() {
       emergency: () => activateEmergencyMode(core),
       clear: () => core.logEvent('manual_clear', 'Logs cleared by user'),
       status: () => getSystemStatus(core),
+      cleanup: window.LunaBugCleanup, // Console cleanup controls
       
       // AI-specific methods
       chat: (message, options) => core.context.ai?.chat(message, options),
@@ -101,6 +105,7 @@ export async function initLunaBug() {
     console.log('🌙🎯 Emergency access: window.LunaBug');
     console.log('🤖🌙 AI integration: window.LunaBug.chat("hello")');
     console.log('📋🌙 Function system: window.LunaBug.functions.list()');
+    console.log('🧹🌙 Console cleanup: window.LunaBug.cleanup.getStats()');
     
     // Test function system
     const functionCount = core.context.functions?.list()?.length || 0;
@@ -135,6 +140,7 @@ export async function initLunaBug() {
       emergency: () => console.log('🚨 LunaBug Emergency Mode - Init Failed'),
       status: () => ({ status: 'failed', error: error.message }),
       chat: () => console.log('🤖❌ AI unavailable - init failed'),
+      cleanup: window.LunaBugCleanup || { getStats: () => ({ active: false }) },
       functions: {
         list: () => [],
         run: () => console.log('Functions unavailable - init failed')
@@ -225,6 +231,7 @@ function activateEmergencyMode(core) {
   
   const aiMetrics = core.context.ai?.getMetrics() || { requestCount: 0, successRate: 0 };
   const functionCount = core.context.functions?.list()?.length || 0;
+  const cleanupStats = window.LunaBugCleanup?.getStats() || { active: false };
   
   // Create emergency overlay
   const emergency = document.createElement('div');
@@ -276,16 +283,26 @@ function activateEmergencyMode(core) {
         </div>
         
         <div>
-          <h3 style="color: #c084fc;">Recent Events</h3>
-          <div style="background: #1a1a1a; padding: 15px; border-radius: 8px; border-left: 4px solid #dc2626; font-size: 12px; max-height: 200px; overflow: auto;">
-            ${core.logs.slice(-8).map(log => `
-              <div style="margin-bottom: 8px; padding: 4px; background: #2a2a2a; border-radius: 4px;">
-                <strong style="color: #f59e0b;">${log.type}</strong><br>
-                <span style="color: #6b7280;">${new Date(log.timestamp).toLocaleTimeString()}</span><br>
-                <span style="color: #e5e7eb;">${JSON.stringify(log.data).substring(0, 80)}...</span>
-              </div>
-            `).join('')}
+          <h3 style="color: #c084fc;">Console Cleanup</h3>
+          <div style="background: #1a1a1a; padding: 15px; border-radius: 8px; border-left: 4px solid #f59e0b;">
+            <div>Active: ${cleanupStats.active ? 'Yes' : 'No'}</div>
+            <div>Total Messages: ${cleanupStats.totalMessages || 0}</div>
+            <div>Filtered: ${cleanupStats.filteredMessages || 0}</div>
+            <div>Unique: ${cleanupStats.uniqueMessages || 0}</div>
           </div>
+        </div>
+      </div>
+      
+      <div style="margin-top: 20px;">
+        <h3 style="color: #c084fc;">Recent Events</h3>
+        <div style="background: #1a1a1a; padding: 15px; border-radius: 8px; border-left: 4px solid #dc2626; font-size: 12px; max-height: 200px; overflow: auto;">
+          ${core.logs.slice(-8).map(log => `
+            <div style="margin-bottom: 8px; padding: 4px; background: #2a2a2a; border-radius: 4px;">
+              <strong style="color: #f59e0b;">${log.type}</strong><br>
+              <span style="color: #6b7280;">${new Date(log.timestamp).toLocaleTimeString()}</span><br>
+              <span style="color: #e5e7eb;">${JSON.stringify(log.data).substring(0, 80)}...</span>
+            </div>
+          `).join('')}
         </div>
       </div>
       
@@ -303,6 +320,10 @@ function activateEmergencyMode(core) {
           <button onclick="window.LunaBug.functions.reload()" 
             style="background: #dc2626; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer;">
             Reload Functions
+          </button>
+          <button onclick="window.LunaBug.cleanup.getStats()" 
+            style="background: #f59e0b; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer;">
+            Cleanup Stats
           </button>
           <button onclick="window.LunaBug.chat('Emergency test - are you online?').then(r => console.log('AI Response:', r))" 
             style="background: #0ea5e9; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer;">
@@ -322,6 +343,8 @@ function activateEmergencyMode(core) {
  * Get comprehensive system status
  */
 function getSystemStatus(core) {
+  const cleanupStats = window.LunaBugCleanup?.getStats() || {};
+  
   return {
     lunabug: {
       version: '1.0.1',
@@ -338,6 +361,10 @@ function getSystemStatus(core) {
         acc[func.category] = (acc[func.category] || 0) + 1;
         return acc;
       }, {}) || {}
+    },
+    console: {
+      cleanup: cleanupStats,
+      spamFiltered: cleanupStats.filteredMessages || 0
     },
     browser: {
       userAgent: navigator.userAgent,
