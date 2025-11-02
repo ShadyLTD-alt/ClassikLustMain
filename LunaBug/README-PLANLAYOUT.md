@@ -441,3 +441,143 @@ Add “Autofix” toggle → When enabled, the AI runs minor safe code fixes dir
 Integrate with Git hooks → Have Winston log commit diffs + link them to later bug reports.
 
 AI Log Query Tool → Ask: “show me all errors involving inventory null refs since yesterday,” and the AI fetches them.
+
+
+
+
+
+////////////
+
+State persistence & sync robustness
+
+Right now you save on beforeunload. Good. But network issues or partial-crashes can leave you in inconsistent states.
+
+Recommendation: Add a persistent local cache (IndexedDB or localStorage + fallback) for the last known good state. When a load fails or sync doesn’t respond, you can recover from that cache.
+
+LunaBug hook: On each major state transition (level up, upgrade purchase, tap, etc) push a log entry:
+
+logEvent('stateChange', { state: newState, reason: 'upgradePurchase' });
+
+Then your offline model can scan for “state change events that later caused bugs”.
+
+
+
+2. Performance profiling
+
+The regen loop runs every second: this is fine but over time might incur drift or redundant updates.
+
+Recommendation: Wrap heavy hooks (e.g., useEffect syncing, interval loops) in a profiler and log durations.
+
+LunaBug hook:
+
+const start = performance.now();
+// ... heavy work ...
+const duration = performance.now() - start;
+logEvent('perf', { label: 'regenLoopTick', duration });
+
+If duration > threshold, flag a warning.
+
+
+
+3. Error & anomaly detection
+
+In the loading sequence: you ``` if (!playerRes.ok) { console.error('Failed to load player data'); }
+
+That’s fine, but you could escalate.
+
+Recommendation: Report all errors/suspicious states to your debug log server (or local buffer if offline).
+
+LunaBug hook:
+
+if (!res.ok) {
+  logEvent('error', { stage: 'loadPlayerData', code: res.status, url: '/api/player/me' });
+}
+
+Later your model can aggregate: “loadPlayerData failed 27% of time in last 100 sessions”.
+
+
+
+4. Tool registry for game‐state introspection
+
+Since you’re already using GameContext, you can build a set of inspectors that LunaBug can call.
+
+Recommended tools/functions:
+
+getCurrentStateSnapshot() → returns simplified state (points, energy, level, upgrades).
+
+getRecentErrorLogs() → fetches last N logs.
+
+simulateTapAction(count: number) → simulate taps and measure outcome.
+
+validateUpgradeConfig() → check if any upgrade config is invalid or out-of-sync.
+
+
+LunaBug can execute these tools on-the-fly: e.g. if user asks “Why am I zero energy?”, she can call getCurrentStateSnapshot() + simulateTapAction() to diagnose.
+
+
+
+5. Offline local model & data collection
+
+You want LunaBug to function offline with a local library. Great.
+
+Recommendation: Capture all meaningful events (stateChanges, performance metrics, errors, tool invocations) into a local dataset (IndexedDB or SQLite). Periodically bundle them and store them as training data.
+
+LunaBug hook:
+
+logEvent('toolInvocation', { toolName: 'simulateTapAction', args, result });
+
+Over time you’ll build a rich history of “input → issue → solution”.
+
+
+
+6. UI for LunaBug Interactions
+
+Since you already have structured UI for debugging in your other component (MistralDebugger file) you can integrate a “Ask LunaBug” panel in your game interface or dev menu.
+
+Recommendation: In your GameContext, add a small overlay when developer mode is active: “LunaBug Diagnostics”.
+
+Allow commands like:
+
+/lunabug status
+/lunabug simulate 100 taps
+/lunabug check upgrades
+
+These map to the tool registry functions above.
+
+
+
+
+
+---
+
+🔮 Prioritized roadmap for LunaBug integration
+
+Here’s how I’d sequence the upgrades so you don’t get overwhelmed:
+
+Phase 1: Logging & tool registry
+
+Implement logEvent() for state changes, errors, perf.
+
+Build basic tools: getCurrentStateSnapshot(), getRecentErrorLogs().
+
+Hook state transitions (upgrade purchase, tap, level up) into logEvent().
+
+
+Phase 2: Debug UI + live introspection
+
+Add LunaBug overlay/dev menu.
+
+Allow manual tool invocations.
+
+Display log summaries: “Last 10 state changes”, “Errors in last hour”.
+
+
+Phase 3: Offline model dataset & local inference
+
+Store logged events locally.
+
+Preprocess dataset (timestamp, eventType, payload).
+
+If you’re using a local model (fine-tuned on your data), integrate a wrapper: when offline, route queries to local model.
+
+Build auto-diagnostic capabilities: if state remains unchanged for X minutes, trigger “analysis” from LunaBug.
