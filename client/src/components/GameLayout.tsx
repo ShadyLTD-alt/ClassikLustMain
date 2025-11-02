@@ -3,6 +3,7 @@ import { TopBar } from "@/components/TopBar";
 import BottomNav from "@/components/BottomNav";
 import { AdminFAB } from "@/components/AdminFAB";
 import { MistralDebugger } from "@/components/MistralDebugger";
+import { AchievementSystem } from "@/components/AchievementSystem";
 import ChatModal from "@/components/ChatModal";
 import ModalPortal from "@/components/ModalPortal";
 import { useGame } from "@/contexts/GameContext";
@@ -53,6 +54,9 @@ export default function GameLayout({
         isOpen={showLunaBugDebugger} 
         onClose={() => setShowLunaBugDebugger(false)} 
       />
+      
+      {/* Passive Achievement Tracking */}
+      <AchievementSystem />
     </div>
   );
 }
