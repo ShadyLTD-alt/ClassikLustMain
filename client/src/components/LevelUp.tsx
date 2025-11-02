@@ -7,7 +7,6 @@ import { Badge } from "@/components/ui/badge";
 import { CheckCircle, Lock, TrendingUp, X } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/context/AuthContext";
 
 interface LevelUpProps {
   isOpen: boolean;
@@ -59,7 +58,7 @@ export default function LevelUp({ isOpen, onClose }: LevelUpProps) {
               <DialogTitle className="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
                 Level Up
               </DialogTitle>
-              <Button variant="ghost" size="sm" onClick={onClose}>
+              <Button variant="ghost" size="sm" onClick={onClose} className="text-gray-400 hover:text-white">
                 <X className="w-5 h-5" />
               </Button>
             </div>
@@ -122,7 +121,7 @@ export default function LevelUp({ isOpen, onClose }: LevelUpProps) {
             <DialogTitle className="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
               Level Up - Level {nextLevel.level}
             </DialogTitle>
-            <Button variant="ghost" size="sm" onClick={onClose}>
+            <Button variant="ghost" size="sm" onClick={onClose} className="text-gray-400 hover:text-white">
               <X className="w-5 h-5" />
             </Button>
           </div>
