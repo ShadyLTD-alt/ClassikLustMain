@@ -8,10 +8,11 @@ export interface UpgradeConfig {
   baseValue: number;
   valueIncrement: number;
   icon: string;
-  type: 'perTap' | 'perHour' | 'energyMax';
+  type: 'perTap' | 'perHour' | 'energyMax' | 'energyRegen'; // ADD energyRegen
   isVip?: boolean;
   isEvent?: boolean;
   passiveIncomeTime?: number;
+  isHidden?: boolean; // ADD for admin control
 }
 
 export interface CharacterConfig {
@@ -23,6 +24,7 @@ export interface CharacterConfig {
   defaultImage: string;
   avatarImage: string;
   displayImage: string;
+  vip?: boolean; // ADD VIP flag
 }
 
 export interface ImageConfig {
@@ -30,15 +32,15 @@ export interface ImageConfig {
   characterId: string;
   url: string;
   unlockLevel: number;
-  isAvatar: boolean;
-  isDisplay: boolean;
+  isAvatar?: boolean;
+  isDisplay?: boolean;
   imageType?: 'character' | 'avatar' | 'vip' | 'other';
-  categories: {
-    nsfw: boolean;
-    vip: boolean;
-    event: boolean;
-    random: boolean;
-  };
+  categories?: {          // MAKE OPTIONAL to match GameContext
+    nsfw?: boolean;
+    vip?: boolean;
+    event?: boolean;
+    random?: boolean;
+  } | string[];          // ALLOW BOTH formats
   poses?: string[];
   isHidden?: boolean;
   chatEnable?: boolean;
@@ -60,12 +62,77 @@ export interface LevelConfig {
 }
 
 export interface ThemeConfig {
-  primary: string;
-  secondary: string;
-  accent: string;
-  background: string;
-  card: string;
-  muted: string;
+  primary?: string;
+  secondary?: string;
+  accent?: string;
+  background?: string;
+  card?: string;
+  muted?: string;
+  primaryColor?: string;  // ADD for backward compatibility
+}
+
+// NEW INTERFACES FOR EXPANSIONS
+export interface Achievement {
+  id: string;
+  name: string;
+  description?: string;
+  category: string;
+  icon?: string;
+  rarity: 'common' | 'rare' | 'epic' | 'legendary';
+  lustPointReward: number;
+  lustGemReward: number;
+  requirements: Record<string, any>;
+  isHidden: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface Task {
+  id: string;
+  name: string;
+  description?: string;
+  type: 'daily' | 'weekly' | 'special';
+  category: string;
+  targetValue: number;
+  lustPointReward: number;
+  lustGemReward: number;
+  energyReward: number;
+  requirements: Record<string, any>;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface PlayerUpgrade {
+  id: string;
+  playerId: string;
+  upgradeId: string;
+  currentLevel: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface PlayerAchievement {
+  id: string;
+  playerId: string;
+  achievementId: string;
+  progress: number;
+  isCompleted: boolean;
+  completedAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface PlayerTask {
+  id: string;
+  playerId: string;
+  taskId: string;
+  progress: number;
+  isCompleted: boolean;
+  completedAt?: Date;
+  expiresAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export const DEFAULT_THEME: ThemeConfig = {
@@ -74,7 +141,8 @@ export const DEFAULT_THEME: ThemeConfig = {
   accent: '280 65% 60%',
   background: '240 10% 8%',
   card: '240 8% 12%',
-  muted: '240 5% 20%'
+  muted: '240 5% 20%',
+  primaryColor: '#8b5cf6'
 };
 
 export function calculateUpgradeCost(upgrade: UpgradeConfig, currentLevel: number): number {
@@ -94,10 +162,10 @@ export function checkLevelRequirements(levelConfig: LevelConfig, upgradeLevels: 
 
 export function applyTheme(theme: ThemeConfig) {
   const root = document.documentElement;
-  root.style.setProperty('--primary', theme.primary);
-  root.style.setProperty('--secondary', theme.secondary);
-  root.style.setProperty('--accent', theme.accent);
-  root.style.setProperty('--background', theme.background);
-  root.style.setProperty('--card', theme.card);
-  root.style.setProperty('--muted', theme.muted);
+  if (theme.primary) root.style.setProperty('--primary', theme.primary);
+  if (theme.secondary) root.style.setProperty('--secondary', theme.secondary);
+  if (theme.accent) root.style.setProperty('--accent', theme.accent);
+  if (theme.background) root.style.setProperty('--background', theme.background);
+  if (theme.card) root.style.setProperty('--card', theme.card);
+  if (theme.muted) root.style.setProperty('--muted', theme.muted);
 }
