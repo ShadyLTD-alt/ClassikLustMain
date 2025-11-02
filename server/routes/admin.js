@@ -26,7 +26,7 @@ router.get('/players', async (req, res) => {
     const { data: players, error } = await supabase
       .from('players')
       .select('*')
-      .order('"createdAt"', { ascending: false });
+      .order('createdAt', { ascending: false });
 
     if (error) {
       console.error('Failed to fetch players:', error);
@@ -64,7 +64,7 @@ router.patch('/players/:playerId', async (req, res) => {
       .from('players')
       .update({
         ...updates,
-        "updatedAt": new Date().toISOString()
+        updatedAt: new Date().toISOString()
       })
       .eq('id', playerId)
       .select()
@@ -96,7 +96,7 @@ router.post('/add-currency', async (req, res) => {
     // Get current values
     const { data: player } = await supabase
       .from('players')
-      .select('"lustPoints", "lustGems"')
+      .select('lustPoints, lustGems')
       .eq('id', userId)
       .single();
 
@@ -104,20 +104,20 @@ router.post('/add-currency', async (req, res) => {
     const currentGems = parseInt(player?.lustGems || 0);
     
     const updates = {
-      "updatedAt": new Date().toISOString()
+      updatedAt: new Date().toISOString()
     };
     
     if (type === 'points') {
-      updates["lustPoints"] = currentPoints + amount;
+      updates.lustPoints = currentPoints + amount;
     } else {
-      updates["lustGems"] = currentGems + amount;
+      updates.lustGems = currentGems + amount;
     }
 
     const { data: updatedPlayer, error } = await supabase
       .from('players')
       .update(updates)
       .eq('id', userId)
-      .select('"lustPoints", "lustGems"')
+      .select('lustPoints, lustGems')
       .single();
 
     if (error) {
@@ -173,12 +173,12 @@ router.post('/levels', async (req, res) => {
     const { data: newLevel, error } = await supabase
       .from('levels')
       .insert({
-        "level": parseInt(levelData.level),
-        "cost": parseInt(levelData.cost),
-        "requirements": requirements,
-        "unlocks": unlocks,
-        "createdAt": new Date().toISOString(),
-        "updatedAt": new Date().toISOString()
+        level: parseInt(levelData.level),
+        cost: parseInt(levelData.cost),
+        requirements: requirements,
+        unlocks: unlocks,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
       })
       .select()
       .single();
@@ -228,10 +228,10 @@ router.patch('/levels/:levelNum', async (req, res) => {
     const { data: updatedLevel, error } = await supabase
       .from('levels')
       .update({
-        "cost": parseInt(levelData.cost) || 0,
-        "requirements": requirements,
-        "unlocks": unlocks,
-        "updatedAt": new Date().toISOString()
+        cost: parseInt(levelData.cost) || 0,
+        requirements: requirements,
+        unlocks: unlocks,
+        updatedAt: new Date().toISOString()
       })
       .eq('level', parseInt(levelNum))
       .select()
@@ -288,19 +288,19 @@ router.post('/upgrades', async (req, res) => {
     const { data: newUpgrade, error } = await supabase
       .from('upgrades')
       .insert({
-        "id": upgradeData.id,
-        "name": upgradeData.name,
-        "description": upgradeData.description || '',
-        "type": upgradeData.type || 'perTap',
-        "maxLevel": parseInt(upgradeData.maxLevel) || 30,
-        "baseCost": parseInt(upgradeData.baseCost) || 10,
-        "costMultiplier": parseFloat(upgradeData.costMultiplier) || 1.2,
-        "baseValue": parseFloat(upgradeData.baseValue) || 1,
-        "valueIncrement": parseFloat(upgradeData.valueIncrement) || 1,
-        "icon": upgradeData.icon || '⚡',
-        "isHidden": upgradeData.isHidden || false,
-        "createdAt": new Date().toISOString(),
-        "updatedAt": new Date().toISOString()
+        id: upgradeData.id,
+        name: upgradeData.name,
+        description: upgradeData.description || '',
+        type: upgradeData.type || 'perTap',
+        maxLevel: parseInt(upgradeData.maxLevel) || 30,
+        baseCost: parseInt(upgradeData.baseCost) || 10,
+        costMultiplier: parseFloat(upgradeData.costMultiplier) || 1.2,
+        baseValue: parseFloat(upgradeData.baseValue) || 1,
+        valueIncrement: parseFloat(upgradeData.valueIncrement) || 1,
+        icon: upgradeData.icon || '⚡',
+        isHidden: upgradeData.isHidden || false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
       })
       .select()
       .single();
@@ -328,17 +328,17 @@ router.patch('/upgrades/:upgradeId', async (req, res) => {
     const { data: updatedUpgrade, error } = await supabase
       .from('upgrades')
       .update({
-        "name": upgradeData.name,
-        "description": upgradeData.description || '',
-        "type": upgradeData.type,
-        "maxLevel": parseInt(upgradeData.maxLevel) || 30,
-        "baseCost": parseInt(upgradeData.baseCost) || 10,
-        "costMultiplier": parseFloat(upgradeData.costMultiplier) || 1.2,
-        "baseValue": parseFloat(upgradeData.baseValue) || 1,
-        "valueIncrement": parseFloat(upgradeData.valueIncrement) || 1,
-        "icon": upgradeData.icon || '⚡',
-        "isHidden": upgradeData.isHidden || false,
-        "updatedAt": new Date().toISOString()
+        name: upgradeData.name,
+        description: upgradeData.description || '',
+        type: upgradeData.type,
+        maxLevel: parseInt(upgradeData.maxLevel) || 30,
+        baseCost: parseInt(upgradeData.baseCost) || 10,
+        costMultiplier: parseFloat(upgradeData.costMultiplier) || 1.2,
+        baseValue: parseFloat(upgradeData.baseValue) || 1,
+        valueIncrement: parseFloat(upgradeData.valueIncrement) || 1,
+        icon: upgradeData.icon || '⚡',
+        isHidden: upgradeData.isHidden || false,
+        updatedAt: new Date().toISOString()
       })
       .eq('id', upgradeId)
       .select()
@@ -395,17 +395,17 @@ router.post('/characters', async (req, res) => {
     const { data: newCharacter, error } = await supabase
       .from('characters')
       .insert({
-        "id": characterData.id,
-        "name": characterData.name,
-        "description": characterData.description || '',
-        "unlockLevel": parseInt(characterData.unlockLevel) || 1,
-        "rarity": characterData.rarity || 'common',
-        "defaultImage": characterData.defaultImage || '',
-        "avatarImage": characterData.avatarImage || '',
-        "displayImage": characterData.displayImage || '',
-        "vip": characterData.vip || false,
-        "createdAt": new Date().toISOString(),
-        "updatedAt": new Date().toISOString()
+        id: characterData.id,
+        name: characterData.name,
+        description: characterData.description || '',
+        unlockLevel: parseInt(characterData.unlockLevel) || 1,
+        rarity: characterData.rarity || 'common',
+        defaultImage: characterData.defaultImage || '',
+        avatarImage: characterData.avatarImage || '',
+        displayImage: characterData.displayImage || '',
+        vip: characterData.vip || false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
       })
       .select()
       .single();
@@ -433,15 +433,15 @@ router.patch('/characters/:characterId', async (req, res) => {
     const { data: updatedCharacter, error } = await supabase
       .from('characters')
       .update({
-        "name": characterData.name,
-        "description": characterData.description || '',
-        "unlockLevel": parseInt(characterData.unlockLevel) || 1,
-        "rarity": characterData.rarity,
-        "defaultImage": characterData.defaultImage || '',
-        "avatarImage": characterData.avatarImage || '',
-        "displayImage": characterData.displayImage || '',
-        "vip": characterData.vip || false,
-        "updatedAt": new Date().toISOString()
+        name: characterData.name,
+        description: characterData.description || '',
+        unlockLevel: parseInt(characterData.unlockLevel) || 1,
+        rarity: characterData.rarity,
+        defaultImage: characterData.defaultImage || '',
+        avatarImage: characterData.avatarImage || '',
+        displayImage: characterData.displayImage || '',
+        vip: characterData.vip || false,
+        updatedAt: new Date().toISOString()
       })
       .eq('id', characterId)
       .select()
@@ -487,28 +487,57 @@ router.delete('/characters/:characterId', async (req, res) => {
 // POST /api/admin/boost - Enable/disable boost for current user
 router.post('/boost', async (req, res) => {
   try {
-    const { action, multiplier, durationMinutes } = validateAndCleanFormData(req.body);
+    const { action, multiplier, durationMinutes, cost, boostId } = validateAndCleanFormData(req.body);
     const userId = req.user.id;
     
     let updates = {
-      "updatedAt": new Date().toISOString()
+      updatedAt: new Date().toISOString()
     };
     
     if (action === 'enable') {
-      updates["boostActive"] = true;
-      updates["boostMultiplier"] = multiplier || 2.0;
-      updates["boostExpiresAt"] = new Date(Date.now() + (durationMinutes || 10) * 60 * 1000).toISOString();
+      // Deduct LustGems if cost specified
+      if (cost && cost > 0) {
+        const { data: player } = await supabase
+          .from('players')
+          .select('lustGems')
+          .eq('id', userId)
+          .single();
+          
+        if (!player || (player.lustGems || 0) < cost) {
+          return res.status(400).json({ error: 'Not enough LustGems' });
+        }
+        
+        updates.lustGems = (player.lustGems || 0) - cost;
+        
+        // Log purchase to boostPurchases table
+        await supabase
+          .from('boostPurchases')
+          .insert({
+            playerId: userId,
+            boostId: boostId || 'unknown',
+            cost: cost,
+            effect: req.body.effect || 'boost',
+            duration: durationMinutes || 0,
+            multiplier: multiplier || 2.0,
+            purchasedAt: new Date().toISOString(),
+            expiresAt: durationMinutes > 0 ? new Date(Date.now() + durationMinutes * 60 * 1000).toISOString() : null
+          });
+      }
+      
+      updates.boostActive = true;
+      updates.boostMultiplier = multiplier || 2.0;
+      updates.boostExpiresAt = durationMinutes > 0 ? new Date(Date.now() + durationMinutes * 60 * 1000).toISOString() : null;
     } else {
-      updates["boostActive"] = false;
-      updates["boostMultiplier"] = 1.0;
-      updates["boostExpiresAt"] = null;
+      updates.boostActive = false;
+      updates.boostMultiplier = 1.0;
+      updates.boostExpiresAt = null;
     }
 
     const { data: updatedPlayer, error } = await supabase
       .from('players')
       .update(updates)
       .eq('id', userId)
-      .select('"boostActive", "boostMultiplier", "boostExpiresAt"')
+      .select('boostActive, boostMultiplier, boostExpiresAt, lustGems')
       .single();
 
     if (error) {
@@ -520,7 +549,8 @@ router.post('/boost', async (req, res) => {
     res.json({
       boostActive: updatedPlayer.boostActive,
       boostMultiplier: parseFloat(updatedPlayer.boostMultiplier),
-      boostExpiresAt: updatedPlayer.boostExpiresAt
+      boostExpiresAt: updatedPlayer.boostExpiresAt,
+      lustGems: updatedPlayer.lustGems
     });
   } catch (err) {
     console.error('Error updating boost:', err);
