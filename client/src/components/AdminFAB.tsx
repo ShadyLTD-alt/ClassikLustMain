@@ -4,6 +4,9 @@ import { Button } from "@/components/ui/button";
 import { useGame } from "@/contexts/GameContext";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import AdminPanel from "@/components/AdminPanel";
+import ImageUploader from "@/components/ImageUploader";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface AdminFABProps {
   onOpenDebugger: () => void;
@@ -14,6 +17,8 @@ export function AdminFAB({ onOpenDebugger }: AdminFABProps) {
   const { toast } = useToast();
   const [isOpen, setIsOpen] = useState(false);
   const [showDevHUD, setShowDevHUD] = useState(false);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [showImageUploader, setShowImageUploader] = useState(false);
 
   // Only show for admins
   if (!state?.isAdmin) return null;
@@ -115,6 +120,32 @@ export function AdminFAB({ onOpenDebugger }: AdminFABProps) {
             isOpen ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
           }`}>
             
+            {/* Image Uploader */}
+            <Button
+              onClick={() => {
+                setShowImageUploader(true);
+                setIsOpen(false);
+              }}
+              size="sm"
+              className="bg-green-600/90 hover:bg-green-700 text-white shadow-lg backdrop-blur border border-green-400/30"
+            >
+              <Upload className="w-4 h-4 mr-2" />
+              Images
+            </Button>
+
+            {/* Admin Panel */}
+            <Button
+              onClick={() => {
+                setShowAdminPanel(true);
+                setIsOpen(false);
+              }}
+              size="sm"
+              className="bg-blue-600/90 hover:bg-blue-700 text-white shadow-lg backdrop-blur border border-blue-400/30"
+            >
+              <Settings className="w-4 h-4 mr-2" />
+              Admin
+            </Button>
+            
             {/* LunaBug Debugger */}
             <Button
               onClick={() => {
@@ -214,6 +245,26 @@ export function AdminFAB({ onOpenDebugger }: AdminFABProps) {
             })()} 
           </div>
         </div>
+      )}
+
+      {/* Admin Panel Modal */}
+      {showAdminPanel && (
+        <Dialog open={showAdminPanel} onOpenChange={setShowAdminPanel}>
+          <DialogContent className="max-w-5xl max-h-[85vh]">
+            <DialogHeader><DialogTitle>Admin Panel</DialogTitle></DialogHeader>
+            <AdminPanel />
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Image Uploader Modal */}
+      {showImageUploader && (
+        <Dialog open={showImageUploader} onOpenChange={setShowImageUploader}>
+          <DialogContent className="max-w-4xl max-h-[80vh]">
+            <DialogHeader><DialogTitle>Image Uploader</DialogTitle></DialogHeader>
+            <ImageUploader adminMode={true} />
+          </DialogContent>
+        </Dialog>
       )}
     </>
   );
