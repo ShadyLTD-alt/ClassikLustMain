@@ -1,11 +1,289 @@
 var __defProp = Object.defineProperty;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require : typeof Proxy !== "undefined" ? new Proxy(x, {
+  get: (a, b) => (typeof require !== "undefined" ? require : a)[b]
+}) : x)(function(x) {
+  if (typeof require !== "undefined") return require.apply(this, arguments);
+  throw Error('Dynamic require of "' + x + '" is not supported');
+});
+var __esm = (fn, res) => function __init() {
+  return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+};
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, { get: all[name], enumerable: true });
 };
 
+// server/routes/lunabug.js
+var lunabug_exports = {};
+var express, winston2, router, MISTRAL_API_URL, MISTRAL_API_KEY, MISTRAL_DEBUG_API_KEY, lunaBugLogger;
+var init_lunabug = __esm({
+  "server/routes/lunabug.js"() {
+    "use strict";
+    express = __require("express");
+    winston2 = __require("winston");
+    router = express.Router();
+    MISTRAL_API_URL = "https://api.mistral.ai/v1/chat/completions";
+    MISTRAL_API_KEY = process.env.MISTRAL_API_KEY;
+    MISTRAL_DEBUG_API_KEY = process.env.MISTRAL_DEBUG_API_KEY;
+    lunaBugLogger = winston2.createLogger({
+      level: "debug",
+      format: winston2.format.combine(
+        winston2.format.timestamp(),
+        winston2.format.json()
+      ),
+      defaultMeta: { service: "lunabug" },
+      transports: [
+        new winston2.transports.Console({
+          format: winston2.format.combine(
+            winston2.format.colorize(),
+            winston2.format.simple(),
+            winston2.format.printf(({ timestamp: timestamp2, level, message, service, ...meta }) => {
+              return `\u{1F319} [${service}] ${level}: ${message} ${Object.keys(meta).length ? JSON.stringify(meta) : ""}`;
+            })
+          )
+        })
+      ]
+    });
+    router.post("/debug", async (req, res) => {
+      const startTime = Date.now();
+      try {
+        const { system, language, debugType, code, error, context, requestId } = req.body;
+        lunaBugLogger.info("Debug request received", {
+          requestId,
+          language,
+          debugType,
+          codeLength: code?.length || 0
+        });
+        const apiKey = MISTRAL_DEBUG_API_KEY || MISTRAL_API_KEY;
+        if (!apiKey) {
+          lunaBugLogger.error("No Mistral API key configured");
+          return res.status(500).json({
+            error: "AI service unavailable",
+            message: "No Mistral API key configured. Add MISTRAL_API_KEY or MISTRAL_DEBUG_API_KEY to environment."
+          });
+        }
+        const messages = [
+          { role: "system", content: system },
+          {
+            role: "user",
+            content: `Please analyze this ${language} code:
+
+${code}${error ? `
+
+Error: ${error}` : ""}${context ? `
+
+Context: ${context}` : ""}`
+          }
+        ];
+        const mistralResponse = await fetch(MISTRAL_API_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({
+            model: "mistral-large-latest",
+            messages,
+            temperature: 0.05,
+            max_tokens: 2048,
+            top_p: 1
+          })
+        });
+        if (!mistralResponse.ok) {
+          const errorData = await mistralResponse.json().catch(() => ({}));
+          lunaBugLogger.error("Mistral API error", {
+            status: mistralResponse.status,
+            error: errorData
+          });
+          return res.status(mistralResponse.status).json({
+            error: "Mistral API error",
+            details: errorData
+          });
+        }
+        const mistralData = await mistralResponse.json();
+        const aiResponse = mistralData.choices[0]?.message?.content;
+        let parsedResponse;
+        try {
+          parsedResponse = JSON.parse(aiResponse);
+        } catch {
+          parsedResponse = {
+            analysis: aiResponse,
+            suggestions: ["Check the provided analysis for detailed recommendations"],
+            confidence: 0.8,
+            severity: "medium"
+          };
+        }
+        const responseTime = Date.now() - startTime;
+        lunaBugLogger.info("Debug request completed", {
+          requestId,
+          responseTime,
+          confidence: parsedResponse.confidence || 0.8
+        });
+        res.json({
+          ...parsedResponse,
+          requestId,
+          responseTime,
+          model: "mistral-large-latest",
+          timestamp: (/* @__PURE__ */ new Date()).toISOString()
+        });
+      } catch (error) {
+        const responseTime = Date.now() - startTime;
+        lunaBugLogger.error("Debug request failed", {
+          error: error.message,
+          stack: error.stack,
+          responseTime
+        });
+        res.status(500).json({
+          error: "Debug analysis failed",
+          message: error.message,
+          responseTime
+        });
+      }
+    });
+    router.post("/chat", async (req, res) => {
+      const startTime = Date.now();
+      try {
+        const { system, message, requestId } = req.body;
+        lunaBugLogger.info("Chat request received", {
+          requestId,
+          messageLength: message?.length || 0
+        });
+        const apiKey = MISTRAL_API_KEY || MISTRAL_DEBUG_API_KEY;
+        if (!apiKey) {
+          return res.status(500).json({
+            error: "AI service unavailable",
+            message: "No Mistral API key configured"
+          });
+        }
+        const messages = [
+          { role: "system", content: system },
+          { role: "user", content: message }
+        ];
+        const mistralResponse = await fetch(MISTRAL_API_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({
+            model: "mistral-large-latest",
+            messages,
+            temperature: 0.1,
+            // Slightly higher for chat
+            max_tokens: 1e3,
+            // Smaller for chat responses
+            top_p: 1
+          })
+        });
+        if (!mistralResponse.ok) {
+          const errorData = await mistralResponse.json().catch(() => ({}));
+          lunaBugLogger.error("Mistral API error", {
+            status: mistralResponse.status,
+            error: errorData
+          });
+          return res.status(mistralResponse.status).json({
+            error: "Mistral API error",
+            details: errorData
+          });
+        }
+        const mistralData = await mistralResponse.json();
+        const responseTime = Date.now() - startTime;
+        lunaBugLogger.info("Chat request completed", {
+          requestId,
+          responseTime,
+          tokensUsed: mistralData.usage?.total_tokens || 0
+        });
+        res.json({
+          response: mistralData.choices[0]?.message?.content || "No response",
+          requestId,
+          responseTime,
+          model: "mistral-large-latest",
+          usage: mistralData.usage,
+          timestamp: (/* @__PURE__ */ new Date()).toISOString()
+        });
+      } catch (error) {
+        const responseTime = Date.now() - startTime;
+        lunaBugLogger.error("Chat request failed", {
+          error: error.message,
+          stack: error.stack,
+          responseTime
+        });
+        res.status(500).json({
+          error: "Chat request failed",
+          message: error.message,
+          responseTime
+        });
+      }
+    });
+    router.get("/status", (req, res) => {
+      res.json({
+        service: "LunaBug",
+        version: "1.0.1",
+        timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+        apiKeys: {
+          primary: !!MISTRAL_API_KEY,
+          debug: !!MISTRAL_DEBUG_API_KEY
+        },
+        endpoints: {
+          debug: "/api/lunabug/debug",
+          chat: "/api/lunabug/chat",
+          status: "/api/lunabug/status"
+        },
+        uptime: process.uptime(),
+        status: "operational"
+      });
+    });
+    router.post("/test", async (req, res) => {
+      try {
+        const apiKey = MISTRAL_DEBUG_API_KEY || MISTRAL_API_KEY;
+        if (!apiKey) {
+          return res.status(500).json({ error: "No API key configured" });
+        }
+        const testResponse = await fetch(MISTRAL_API_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({
+            model: "mistral-large-latest",
+            messages: [
+              { role: "user", content: "Respond with exactly: LunaBug AI connection test successful" }
+            ],
+            temperature: 0,
+            max_tokens: 50
+          })
+        });
+        if (!testResponse.ok) {
+          const errorData = await testResponse.json().catch(() => ({}));
+          return res.status(testResponse.status).json({
+            error: "Mistral API test failed",
+            details: errorData
+          });
+        }
+        const data = await testResponse.json();
+        lunaBugLogger.info("API connection test successful");
+        res.json({
+          success: true,
+          response: data.choices[0]?.message?.content,
+          usage: data.usage,
+          model: "mistral-large-latest"
+        });
+      } catch (error) {
+        lunaBugLogger.error("API test failed", error);
+        res.status(500).json({
+          error: "Connection test failed",
+          message: error.message
+        });
+      }
+    });
+    module.exports = router;
+  }
+});
+
 // server/index.ts
-import express2 from "express";
+import express3 from "express";
 
 // server/routes.ts
 import { createServer } from "http";
@@ -444,9 +722,9 @@ var storage = new DatabaseStorage();
 
 // server/routes.ts
 import multer from "multer";
-import path2 from "path";
+import path3 from "path";
 import { fileURLToPath as fileURLToPath2 } from "url";
-import fs2 from "fs";
+import fs3 from "fs";
 import { AuthDataValidator } from "@telegram-auth/server";
 
 // server/middleware/auth.ts
@@ -934,8 +1212,8 @@ async function saveLevelToJSON(level) {
   const masterFilePath = path.join(__dirname, "../../main-gamedata/master-data/levelup-master.json");
   try {
     const masterData = await loadJSONFile(masterFilePath);
-    const levels3 = masterData?.levels || [];
-    const existingIndex = levels3.findIndex((l) => l.level === level.level);
+    const levels2 = masterData?.levels || [];
+    const existingIndex = levels2.findIndex((l) => l.level === level.level);
     const levelData = {
       level: level.level,
       experienceRequired: level.experienceRequired,
@@ -943,12 +1221,12 @@ async function saveLevelToJSON(level) {
       unlocks: level.unlocks
     };
     if (existingIndex >= 0) {
-      levels3[existingIndex] = levelData;
+      levels2[existingIndex] = levelData;
     } else {
-      levels3.push(levelData);
-      levels3.sort((a, b) => a.level - b.level);
+      levels2.push(levelData);
+      levels2.sort((a, b) => a.level - b.level);
     }
-    await fs.writeFile(masterFilePath, JSON.stringify({ levels: levels3 }, null, 2));
+    await fs.writeFile(masterFilePath, JSON.stringify({ levels: levels2 }, null, 2));
     levelsCache.set(level.level, levelData);
     console.log(`\u2713 Updated master-data/levelup-master.json with level: ${level.level}`);
     return;
@@ -958,8 +1236,8 @@ async function saveLevelToJSON(level) {
   const rootMasterPath = path.join(__dirname, "../../main-gamedata/levelup-master.json");
   try {
     const masterData = await loadJSONFile(rootMasterPath);
-    const levels3 = masterData?.levels || [];
-    const existingIndex = levels3.findIndex((l) => l.level === level.level);
+    const levels2 = masterData?.levels || [];
+    const existingIndex = levels2.findIndex((l) => l.level === level.level);
     const levelData = {
       level: level.level,
       experienceRequired: level.experienceRequired,
@@ -967,12 +1245,12 @@ async function saveLevelToJSON(level) {
       unlocks: level.unlocks
     };
     if (existingIndex >= 0) {
-      levels3[existingIndex] = levelData;
+      levels2[existingIndex] = levelData;
     } else {
-      levels3.push(levelData);
-      levels3.sort((a, b) => a.level - b.level);
+      levels2.push(levelData);
+      levels2.sort((a, b) => a.level - b.level);
     }
-    await fs.writeFile(rootMasterPath, JSON.stringify({ levels: levels3 }, null, 2));
+    await fs.writeFile(rootMasterPath, JSON.stringify({ levels: levels2 }, null, 2));
     levelsCache.set(level.level, levelData);
     console.log(`\u2713 Updated root levelup-master.json with level: ${level.level}`);
   } catch (error) {
@@ -1081,20 +1359,75 @@ function getSessionExpiry() {
   return expiry;
 }
 
+// server/logger.ts
+import fs2 from "fs";
+import path2 from "path";
+import winston from "winston";
+var logDir = path2.resolve(process.cwd(), "logs");
+try {
+  if (!fs2.existsSync(logDir)) {
+    fs2.mkdirSync(logDir, { recursive: true });
+    console.log(`\u{1F4C1} Created logs directory: ${logDir}`);
+  }
+} catch (err) {
+  console.error("\u274C Failed to create logs directory:", err);
+}
+var logger;
+try {
+  logger = winston.createLogger({
+    level: process.env.LOG_LEVEL || "debug",
+    format: winston.format.combine(
+      winston.format.timestamp(),
+      winston.format.errors({ stack: true }),
+      winston.format.json()
+    ),
+    transports: [
+      new winston.transports.Console({
+        format: winston.format.combine(
+          winston.format.colorize(),
+          winston.format.simple()
+        )
+      }),
+      new winston.transports.File({
+        filename: path2.join(logDir, "server.log"),
+        maxsize: 10 * 1024 * 1024,
+        // 10MB
+        maxFiles: 5
+      })
+    ]
+  });
+  logger.info("\u{1F680} Winston logger initialized successfully");
+} catch (err) {
+  console.error("\u274C Winston logger failed to initialize:", err);
+  logger = {
+    info: console.log,
+    error: console.error,
+    warn: console.warn,
+    debug: console.debug
+  };
+}
+process.on("unhandledRejection", (reason) => {
+  logger.error("\u{1F4A5} Unhandled Rejection", { reason });
+});
+process.on("uncaughtException", (err) => {
+  logger.error("\u{1F4A5} Uncaught Exception", { err });
+});
+var logger_default = logger;
+
 // server/routes.ts
 var __filename2 = fileURLToPath2(import.meta.url);
-var __dirname2 = path2.dirname(__filename2);
+var __dirname2 = path3.dirname(__filename2);
 var storageConfig = multer.diskStorage({
   destination: function(req, _file, cb) {
-    const uploadPath = path2.join(__dirname2, "..", "uploads", "temp");
-    if (!fs2.existsSync(uploadPath)) {
-      fs2.mkdirSync(uploadPath, { recursive: true });
+    const uploadPath = path3.join(__dirname2, "..", "uploads", "temp");
+    if (!fs3.existsSync(uploadPath)) {
+      fs3.mkdirSync(uploadPath, { recursive: true });
     }
     cb(null, uploadPath);
   },
   filename: function(_req, file, cb) {
     const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(null, uniqueSuffix + path2.extname(file.originalname));
+    cb(null, uniqueSuffix + path3.extname(file.originalname));
   }
 });
 var upload = multer({
@@ -1102,7 +1435,7 @@ var upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const allowedTypes = /jpeg|jpg|png|gif|webp/;
-    const extname = allowedTypes.test(path2.extname(file.originalname).toLowerCase());
+    const extname = allowedTypes.test(path3.extname(file.originalname).toLowerCase());
     const mimetype = allowedTypes.test(file.mimetype);
     if (mimetype && extname) {
       return cb(null, true);
@@ -1112,14 +1445,31 @@ var upload = multer({
   }
 });
 async function registerRoutes(app2) {
-  console.log("\u{1F527} Initializing routes...");
-  console.log("\u{1F4E4} Setting up /api/upload route...");
+  logger_default.info("Initializing routes...");
+  logger_default.info("Setting up /api/health route...");
+  app2.get("/api/health", (req, res) => {
+    logger_default.info("Health check requested", { ip: req.ip, userAgent: req.get("User-Agent") });
+    res.json({
+      status: "ok",
+      timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+      env: process.env.NODE_ENV || "development",
+      port: process.env.PORT || "5000"
+    });
+  });
+  logger_default.info("\u{1F319} Setting up LunaBug routes...");
+  try {
+    const lunaBugRoutes = await Promise.resolve().then(() => (init_lunabug(), lunabug_exports));
+    app2.use("/api/lunabug", lunaBugRoutes.default);
+    logger_default.info("\u2705 LunaBug routes registered at /api/lunabug");
+  } catch (error) {
+    logger_default.error("\u274C Failed to register LunaBug routes:", error);
+    logger_default.warn("\u{1F319} LunaBug will use fallback endpoints");
+  }
+  logger_default.info("Setting up /api/upload route...");
   app2.post("/api/upload", requireAuth, upload.single("image"), async (req, res) => {
-    console.log("\u{1F4E4} Upload request received");
-    console.log("\u{1F4E6} Request body:", req.body);
-    console.log("\u{1F4C1} File:", req.file ? req.file.filename : "No file");
+    logger_default.info("Upload request received", { hasFile: !!req.file });
     if (!req.file) {
-      console.error("\u274C No file uploaded");
+      logger_default.error("No file uploaded");
       return res.status(400).json({ error: "No file uploaded" });
     }
     try {
@@ -1130,7 +1480,7 @@ async function registerRoutes(app2) {
       const allowedImageTypes = ["character", "avatar", "vip", "other"];
       const imageType = allowedImageTypes.includes(body.imageType) ? body.imageType : "character";
       if (!Array.isArray(poses) || !poses.every((p) => typeof p === "string")) {
-        fs2.unlinkSync(req.file.path);
+        fs3.unlinkSync(req.file.path);
         return res.status(400).json({ error: "Poses must be an array of strings" });
       }
       const categories = [
@@ -1150,22 +1500,22 @@ async function registerRoutes(app2) {
         chatEnable: body.chatEnable === "true",
         chatSendPercent: Math.min(100, Math.max(0, parseInt(body.chatSendPercent) || 0))
       };
-      console.log("\u{1F4CB} Parsed data:", parsedData);
+      logger_default.info("Parsed upload data", parsedData);
       if (!parsedData.characterId || !parsedData.characterName) {
-        console.error("\u274C Missing character ID or name");
-        fs2.unlinkSync(req.file.path);
+        logger_default.error("Missing character ID or name");
+        fs3.unlinkSync(req.file.path);
         return res.status(400).json({ error: "Character ID and name are required" });
       }
-      const finalDir = path2.join(__dirname2, "..", "uploads", "characters", parsedData.characterName, parsedData.imageType);
-      if (!fs2.existsSync(finalDir)) {
-        fs2.mkdirSync(finalDir, { recursive: true });
-        console.log("\u{1F4C1} Created directory:", finalDir);
+      const finalDir = path3.join(__dirname2, "..", "uploads", "characters", parsedData.characterName, parsedData.imageType);
+      if (!fs3.existsSync(finalDir)) {
+        fs3.mkdirSync(finalDir, { recursive: true });
+        logger_default.info("Created directory", { path: finalDir });
       }
-      const finalPath = path2.join(finalDir, req.file.filename);
-      fs2.renameSync(req.file.path, finalPath);
-      console.log("\u2705 File moved to:", finalPath);
+      const finalPath = path3.join(finalDir, req.file.filename);
+      fs3.renameSync(req.file.path, finalPath);
+      logger_default.info("File moved", { from: req.file.path, to: finalPath });
       const fileUrl = `/uploads/characters/${parsedData.characterName}/${parsedData.imageType}/${req.file.filename}`;
-      console.log("\u{1F4BE} Creating media upload in database...");
+      logger_default.info("Creating media upload in database...");
       const mediaUpload = await storage.createMediaUpload({
         characterId: parsedData.characterId,
         url: fileUrl,
@@ -1177,18 +1527,19 @@ async function registerRoutes(app2) {
         chatEnable: parsedData.chatEnable,
         chatSendPercent: parsedData.chatSendPercent
       });
-      console.log("\u2705 Media upload created:", mediaUpload.id);
+      logger_default.info("Media upload created", { id: mediaUpload.id });
       res.json({ url: fileUrl, media: mediaUpload });
     } catch (error) {
-      if (req.file && fs2.existsSync(req.file.path)) {
-        fs2.unlinkSync(req.file.path);
+      if (req.file && fs3.existsSync(req.file.path)) {
+        fs3.unlinkSync(req.file.path);
       }
-      console.error("\u{1F4A5} Error uploading file:", error);
+      logger_default.error("Error uploading file", { error });
       res.status(500).json({ error: "Failed to upload file", details: error.message });
     }
   });
-  console.log("\u{1F510} Setting up auth routes...");
+  logger_default.info("Setting up auth routes...");
   app2.get("/api/auth/me", requireAuth, async (req, res) => {
+    logger_default.info("Auth me request", { playerId: req.player?.id });
     try {
       const player = await storage.getPlayer(req.player.id);
       if (!player) {
@@ -1196,7 +1547,7 @@ async function registerRoutes(app2) {
       }
       res.json({ success: true, player });
     } catch (error) {
-      console.error("Error fetching current player:", error);
+      logger_default.error("Error fetching current player", { error });
       res.status(500).json({ error: "Failed to fetch player data" });
     }
   });
@@ -1204,20 +1555,19 @@ async function registerRoutes(app2) {
     if (process.env.NODE_ENV === "production") {
       return res.status(403).json({ error: "Development login not available in production" });
     }
-    console.log("\u{1F6E0}\uFE0F Dev auth request received");
-    console.log("\u{1F4E6} Request body:", req.body);
+    logger_default.info("Dev auth request received", { body: req.body });
     try {
       const { username } = req.body;
       if (!username || username.trim().length === 0) {
-        console.log("\u274C No username provided");
+        logger_default.warn("No username provided for dev auth");
         return res.status(400).json({ error: "Username is required" });
       }
       const sanitizedUsername = username.trim().substring(0, 50);
       const devTelegramId = `dev_${sanitizedUsername.toLowerCase().replace(/[^a-z0-9]/g, "_")}`;
-      console.log("\u{1F464} Dev login for:", sanitizedUsername);
+      logger_default.info("Dev login attempt", { username: sanitizedUsername, telegramId: devTelegramId });
       let player = await storage.getPlayerByTelegramId(devTelegramId);
       if (!player) {
-        console.log("\u2795 Creating new dev player...");
+        logger_default.info("Creating new dev player...");
         player = await storage.createPlayer({
           telegramId: devTelegramId,
           username: sanitizedUsername,
@@ -1229,10 +1579,10 @@ async function registerRoutes(app2) {
           passiveIncomeRate: 0,
           isAdmin: false
         });
-        console.log("\u2705 New dev player created:", player.id);
+        logger_default.info("New dev player created", { playerId: player.id });
         await savePlayerDataToJSON(player);
       } else {
-        console.log("\u{1F44B} Existing dev player found, updating last login...");
+        logger_default.info("Existing dev player found, updating last login...");
         await storage.updatePlayer(player.id, {
           lastLogin: /* @__PURE__ */ new Date()
         });
@@ -1244,57 +1594,57 @@ async function registerRoutes(app2) {
         token: sessionToken,
         expiresAt: getSessionExpiry()
       });
-      console.log("\u{1F389} Dev auth successful for player:", player.username);
+      logger_default.info("Dev auth successful", { username: player.username, playerId: player.id });
       res.json({
         success: true,
         player,
         sessionToken
       });
     } catch (error) {
-      console.error("\u{1F4A5} Dev auth error:", error);
-      console.error("\u{1F4CD} Error stack:", error.stack);
+      logger_default.error("Dev auth error", { error, stack: error.stack });
       res.status(500).json({ error: "Authentication failed", details: error.message });
     }
   });
-  console.log("\u{1F4F1} Setting up Telegram auth...");
+  logger_default.info("Setting up Telegram auth...");
   app2.post("/api/auth/telegram", async (req, res) => {
-    console.log("\u{1F510} Telegram auth request received");
-    console.log("\u{1F4E6} Request body:", JSON.stringify(req.body, null, 2));
+    logger_default.info("Telegram auth request received", { body: req.body });
     try {
       const { initData } = req.body;
       const botToken = process.env.TELEGRAM_BOT_TOKEN;
-      console.log("\u{1F511} Bot token exists:", !!botToken);
-      console.log("\u{1F4DD} InitData exists:", !!initData);
-      console.log("\u{1F4DD} InitData length:", initData?.length || 0);
+      logger_default.info("Telegram auth check", {
+        hasBotToken: !!botToken,
+        hasInitData: !!initData,
+        initDataLength: initData?.length || 0
+      });
       if (!botToken) {
-        console.error("\u274C Missing TELEGRAM_BOT_TOKEN");
+        logger_default.error("Missing TELEGRAM_BOT_TOKEN");
         return res.status(500).json({ error: "Telegram authentication not configured" });
       }
       if (!initData) {
-        console.error("\u274C Missing initData in request");
+        logger_default.error("Missing initData in request");
         return res.status(400).json({ error: "Missing initData" });
       }
-      console.log("\u{1F50D} Parsing initData...");
+      logger_default.info("Parsing initData...");
       const validator = new AuthDataValidator({ botToken });
       const dataMap = new Map(new URLSearchParams(initData).entries());
-      console.log("\u{1F4CA} Parsed data map entries:", Array.from(dataMap.entries()));
-      console.log("\u2705 Validating Telegram data...");
+      logger_default.info("Parsed data map entries", { entries: Array.from(dataMap.entries()) });
+      logger_default.info("Validating Telegram data...");
       const validationResult = await validator.validate(dataMap);
-      console.log("\u{1F4CB} Validation result:", JSON.stringify(validationResult, null, 2));
+      logger_default.info("Validation result", { result: validationResult });
       if (!validationResult || !validationResult.id) {
-        console.error("\u274C Invalid validation result or missing ID");
+        logger_default.error("Invalid validation result or missing ID");
         return res.status(401).json({ error: "Invalid Telegram authentication" });
       }
       const telegramId = validationResult.id.toString();
-      console.log("\u{1F464} Telegram ID:", telegramId);
+      logger_default.info("Telegram auth for user", { telegramId });
       if (!telegramId) {
-        console.error("\u274C Failed to extract Telegram ID");
+        logger_default.error("Failed to extract Telegram ID");
         return res.status(400).json({ error: "Missing Telegram user ID" });
       }
-      console.log("\u{1F50D} Looking up player by Telegram ID...");
+      logger_default.info("Looking up player by Telegram ID...");
       let player = await storage.getPlayerByTelegramId(telegramId);
       if (!player) {
-        console.log("\u2795 Creating new player...");
+        logger_default.info("Creating new player...");
         player = await storage.createPlayer({
           telegramId,
           username: validationResult.username || validationResult.first_name || "TelegramUser",
@@ -1305,10 +1655,10 @@ async function registerRoutes(app2) {
           passiveIncomeRate: 0,
           isAdmin: false
         });
-        console.log("\u2705 New player created:", player.id);
+        logger_default.info("New player created", { playerId: player.id });
         await savePlayerDataToJSON(player);
       } else {
-        console.log("\u{1F44B} Existing player found, updating last login...");
+        logger_default.info("Existing player found, updating last login...");
         await storage.updatePlayer(player.id, {
           lastLogin: /* @__PURE__ */ new Date()
         });
@@ -1320,19 +1670,18 @@ async function registerRoutes(app2) {
         token: sessionToken,
         expiresAt: getSessionExpiry()
       });
-      console.log("\u{1F389} Auth successful for player:", player.username);
+      logger_default.info("Telegram auth successful", { username: player.username, playerId: player.id });
       res.json({
         success: true,
         player,
         sessionToken
       });
     } catch (error) {
-      console.error("\u{1F4A5} Telegram auth error:", error);
-      console.error("\u{1F4CD} Error stack:", error.stack);
+      logger_default.error("Telegram auth error", { error, stack: error.stack });
       res.status(500).json({ error: "Authentication failed", details: error.message });
     }
   });
-  console.log("\u2699\uFE0F Setting up game data routes...");
+  logger_default.info("Setting up game data routes...");
   app2.get("/api/upgrades", requireAuth, async (_req, res) => {
     try {
       const upgrades2 = getUpgradesFromMemory();
@@ -1351,8 +1700,8 @@ async function registerRoutes(app2) {
   });
   app2.get("/api/levels", requireAuth, async (_req, res) => {
     try {
-      const levels3 = getLevelsFromMemory();
-      res.json({ levels: levels3 });
+      const levels2 = getLevelsFromMemory();
+      res.json({ levels: levels2 });
     } catch (error) {
       res.status(500).json({ success: false, message: error.message });
     }
@@ -1364,11 +1713,11 @@ async function registerRoutes(app2) {
       const mediaUploads2 = await storage.getMediaUploads(characterId, includeHidden);
       res.json({ media: mediaUploads2 });
     } catch (error) {
-      console.error("Error fetching media uploads:", error);
+      logger_default.error("Error fetching media uploads", { error });
       res.status(500).json({ error: "Failed to fetch media uploads" });
     }
   });
-  console.log("\u{1F464} Setting up player routes...");
+  logger_default.info("Setting up player routes...");
   app2.get("/api/player/me", requireAuth, async (req, res) => {
     try {
       const player = await storage.getPlayer(req.player.id);
@@ -1377,7 +1726,7 @@ async function registerRoutes(app2) {
       }
       res.json({ player });
     } catch (error) {
-      console.error("Error fetching player:", error);
+      logger_default.error("Error fetching player", { error });
       res.status(500).json({ error: "Failed to fetch player data" });
     }
   });
@@ -1415,7 +1764,7 @@ async function registerRoutes(app2) {
         res.json({ player: updatedPlayer });
       }
     } catch (error) {
-      console.error("Error updating player:", error);
+      logger_default.error("Error updating player", { error });
       res.status(500).json({ error: "Failed to update player" });
     }
   });
@@ -1424,7 +1773,7 @@ async function registerRoutes(app2) {
       const playerUpgrades2 = await storage.getPlayerUpgrades(req.player.id);
       res.json({ upgrades: playerUpgrades2 });
     } catch (error) {
-      console.error("Error fetching player upgrades:", error);
+      logger_default.error("Error fetching player upgrades", { error });
       res.status(500).json({ error: "Failed to fetch player upgrades" });
     }
   });
@@ -1466,7 +1815,7 @@ async function registerRoutes(app2) {
       }
       res.json({ upgrade: playerUpgrade });
     } catch (error) {
-      console.error("Error setting player upgrade:", error);
+      logger_default.error("Error setting player upgrade", { error });
       res.status(500).json({ error: "Failed to set player upgrade" });
     }
   });
@@ -1475,7 +1824,7 @@ async function registerRoutes(app2) {
       const playerCharacters2 = await storage.getPlayerCharacters(req.player.id);
       res.json({ characters: playerCharacters2 });
     } catch (error) {
-      console.error("Error fetching player characters:", error);
+      logger_default.error("Error fetching player characters", { error });
       res.status(500).json({ error: "Failed to fetch player characters" });
     }
   });
@@ -1507,17 +1856,17 @@ async function registerRoutes(app2) {
       }
       res.json({ character: playerCharacter });
     } catch (error) {
-      console.error("Error unlocking character:", error);
+      logger_default.error("Error unlocking character", { error });
       res.status(500).json({ error: "Failed to unlock character" });
     }
   });
-  console.log("\u{1F451} Setting up admin routes...");
+  logger_default.info("Setting up admin routes...");
   app2.post("/api/admin/sync-data", requireAuth, requireAdmin, async (_req, res) => {
     try {
       await syncAllGameData();
       res.json({ success: true, message: "Game data synchronized successfully" });
     } catch (error) {
-      console.error("Error syncing game data:", error);
+      logger_default.error("Error syncing game data", { error });
       res.status(500).json({ error: "Failed to sync game data" });
     }
   });
@@ -1527,7 +1876,7 @@ async function registerRoutes(app2) {
       const upgrades2 = getUpgradesFromMemory(includeHidden);
       res.json({ upgrades: upgrades2 });
     } catch (error) {
-      console.error("Error fetching upgrades for admin:", error);
+      logger_default.error("Error fetching upgrades for admin", { error });
       res.status(500).json({ error: "Failed to fetch upgrades" });
     }
   });
@@ -1541,7 +1890,7 @@ async function registerRoutes(app2) {
       await saveUpgradeToJSON(validation.data);
       res.json({ upgrade, message: "Upgrade created, saved to JSON and DB" });
     } catch (error) {
-      console.error("Error creating upgrade:", error);
+      logger_default.error("Error creating upgrade", { error });
       res.status(500).json({ error: "Failed to create upgrade" });
     }
   });
@@ -1554,7 +1903,7 @@ async function registerRoutes(app2) {
       }
       res.json({ upgrade });
     } catch (error) {
-      console.error("Error fetching upgrade:", error);
+      logger_default.error("Error fetching upgrade", { error });
       res.status(500).json({ error: "Failed to fetch upgrade" });
     }
   });
@@ -1569,7 +1918,7 @@ async function registerRoutes(app2) {
       await saveUpgradeToJSON(updatedUpgrade);
       res.json({ upgrade: updatedUpgrade });
     } catch (error) {
-      console.error("Error updating upgrade:", error);
+      logger_default.error("Error updating upgrade", { error });
       res.status(500).json({ error: "Failed to update upgrade" });
     }
   });
@@ -1582,7 +1931,7 @@ async function registerRoutes(app2) {
       }
       res.json({ success: true, message: "Upgrade deleted" });
     } catch (error) {
-      console.error("Error deleting upgrade:", error);
+      logger_default.error("Error deleting upgrade", { error });
       res.status(500).json({ error: "Failed to delete upgrade" });
     }
   });
@@ -1592,7 +1941,7 @@ async function registerRoutes(app2) {
       const characters2 = getCharactersFromMemory(includeHidden);
       res.json({ characters: characters2 });
     } catch (error) {
-      console.error("Error fetching characters for admin:", error);
+      logger_default.error("Error fetching characters for admin", { error });
       res.status(500).json({ error: "Failed to fetch characters" });
     }
   });
@@ -1606,7 +1955,7 @@ async function registerRoutes(app2) {
       await saveCharacterToJSON(validation.data);
       res.json({ character, message: "Character created, saved to JSON and DB" });
     } catch (error) {
-      console.error("Error creating character:", error);
+      logger_default.error("Error creating character", { error });
       res.status(500).json({ error: "Failed to create character" });
     }
   });
@@ -1619,7 +1968,7 @@ async function registerRoutes(app2) {
       }
       res.json({ character });
     } catch (error) {
-      console.error("Error fetching character:", error);
+      logger_default.error("Error fetching character", { error });
       res.status(500).json({ error: "Failed to fetch character" });
     }
   });
@@ -1634,7 +1983,7 @@ async function registerRoutes(app2) {
       await saveCharacterToJSON(updatedCharacter);
       res.json({ character: updatedCharacter });
     } catch (error) {
-      console.error("Error updating character:", error);
+      logger_default.error("Error updating character", { error });
       res.status(500).json({ error: "Failed to update character" });
     }
   });
@@ -1647,16 +1996,16 @@ async function registerRoutes(app2) {
       }
       res.json({ success: true, message: "Character deleted" });
     } catch (error) {
-      console.error("Error deleting character:", error);
+      logger_default.error("Error deleting character", { error });
       res.status(500).json({ error: "Failed to delete character" });
     }
   });
   app2.get("/api/admin/levels", requireAuth, requireAdmin, async (_req, res) => {
     try {
-      const levels3 = getLevelsFromMemory();
-      res.json({ levels: levels3 });
+      const levels2 = getLevelsFromMemory();
+      res.json({ levels: levels2 });
     } catch (error) {
-      console.error("Error fetching levels for admin:", error);
+      logger_default.error("Error fetching levels for admin", { error });
       res.status(500).json({ error: "Failed to fetch levels" });
     }
   });
@@ -1670,7 +2019,7 @@ async function registerRoutes(app2) {
       await saveLevelToJSON(validation.data);
       res.json({ level, message: "Level created, saved to JSON and DB" });
     } catch (error) {
-      console.error("Error creating level:", error);
+      logger_default.error("Error creating level", { error });
       res.status(500).json({ error: "Failed to create level" });
     }
   });
@@ -1683,7 +2032,7 @@ async function registerRoutes(app2) {
       }
       res.json({ level: levelData });
     } catch (error) {
-      console.error("Error fetching level:", error);
+      logger_default.error("Error fetching level", { error });
       res.status(500).json({ error: "Failed to fetch level" });
     }
   });
@@ -1699,7 +2048,7 @@ async function registerRoutes(app2) {
       await saveLevelToJSON(updatedLevel);
       res.json({ level: updatedLevel });
     } catch (error) {
-      console.error("Error updating level:", error);
+      logger_default.error("Error updating level", { error });
       res.status(500).json({ error: "Failed to update level" });
     }
   });
@@ -1712,29 +2061,29 @@ async function registerRoutes(app2) {
       }
       res.json({ success: true, message: "Level deleted" });
     } catch (error) {
-      console.error("Error deleting level:", error);
+      logger_default.error("Error deleting level", { error });
       res.status(500).json({ error: "Failed to delete level" });
     }
   });
-  console.log("\u{1F527} Creating HTTP server...");
+  logger_default.info("Creating HTTP server...");
   const httpServer = createServer(app2);
-  console.log("\u2705 All routes registered successfully");
+  logger_default.info("All routes registered successfully");
   return httpServer;
 }
 
 // server/vite.ts
-import express from "express";
-import fs3 from "fs";
-import path4 from "path";
+import express2 from "express";
+import fs4 from "fs";
+import path5 from "path";
 import { createServer as createViteServer, createLogger } from "vite";
 
 // vite.config.ts
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import path3 from "path";
+import path4 from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
-var r = (...segs) => path3.resolve(path3.dirname(fileURLToPath3(import.meta.url)), ...segs);
+var r = (...segs) => path4.resolve(path4.dirname(fileURLToPath3(import.meta.url)), ...segs);
 var vite_config_default = defineConfig({
   plugins: [
     react(),
@@ -1773,15 +2122,6 @@ var vite_config_default = defineConfig({
 // server/vite.ts
 import { nanoid } from "nanoid";
 var viteLogger = createLogger();
-function log(message, source = "express") {
-  const formattedTime = (/* @__PURE__ */ new Date()).toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: true
-  });
-  console.log(`${formattedTime} [${source}] ${message}`);
-}
 async function setupVite(app2, server) {
   const serverOptions = {
     middlewareMode: true,
@@ -1805,13 +2145,13 @@ async function setupVite(app2, server) {
   app2.use("*", async (req, res, next) => {
     const url = req.originalUrl;
     try {
-      const clientTemplate = path4.resolve(
+      const clientTemplate = path5.resolve(
         import.meta.dirname,
         "..",
         "client",
         "index.html"
       );
-      let template = await fs3.promises.readFile(clientTemplate, "utf-8");
+      let template = await fs4.promises.readFile(clientTemplate, "utf-8");
       template = template.replace(
         `src="/src/main.tsx"`,
         `src="/src/main.tsx?v=${nanoid()}"`
@@ -1825,97 +2165,29 @@ async function setupVite(app2, server) {
   });
 }
 function serveStatic(app2) {
-  const distPath = path4.resolve(import.meta.dirname, "public");
-  if (!fs3.existsSync(distPath)) {
+  const distPath = path5.resolve(import.meta.dirname, "public");
+  if (!fs4.existsSync(distPath)) {
     throw new Error(
       `Could not find the build directory: ${distPath}, make sure to build the client first`
     );
   }
-  app2.use(express.static(distPath));
+  app2.use(express2.static(distPath));
   app2.use("*", (_req, res) => {
-    res.sendFile(path4.resolve(distPath, "index.html"));
+    res.sendFile(path5.resolve(distPath, "index.html"));
   });
 }
 
-// server/utils/logger.ts
-import winston from "winston";
-import DailyRotateFile from "winston-daily-rotate-file";
-import path5 from "path";
-import { fileURLToPath as fileURLToPath4 } from "url";
-var __filename3 = fileURLToPath4(import.meta.url);
-var __dirname3 = path5.dirname(__filename3);
-var levels2 = {
-  error: 0,
-  warn: 1,
-  info: 2,
-  http: 3,
-  debug: 4
-};
-var colors = {
-  error: "red",
-  warn: "yellow",
-  info: "green",
-  http: "magenta",
-  debug: "white"
-};
-winston.addColors(colors);
-var format = winston.format.combine(
-  winston.format.timestamp({ format: "YYYY-MM-DD HH:mm:ss:ms" }),
-  winston.format.colorize({ all: true }),
-  winston.format.printf(
-    (info) => `${info.timestamp} ${info.level}: ${info.message}`
-  )
-);
-var transports = [
-  // Console transport
-  new winston.transports.Console(),
-  // Error logs
-  new DailyRotateFile({
-    filename: path5.join(__dirname3, "../../logs/error-%DATE%.log"),
-    datePattern: "YYYY-MM-DD",
-    level: "error",
-    maxFiles: "14d",
-    maxSize: "20m"
-  }),
-  // All logs
-  new DailyRotateFile({
-    filename: path5.join(__dirname3, "../../logs/combined-%DATE%.log"),
-    datePattern: "YYYY-MM-DD",
-    maxFiles: "14d",
-    maxSize: "20m"
-  }),
-  // MCP-specific logs for Perplexity
-  new DailyRotateFile({
-    filename: path5.join(__dirname3, "../../logs/mcp-%DATE%.log"),
-    datePattern: "YYYY-MM-DD",
-    level: "info",
-    maxFiles: "30d",
-    maxSize: "50m",
-    format: winston.format.combine(
-      winston.format.timestamp(),
-      winston.format.json()
-    )
-  })
-];
-var logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || "info",
-  levels: levels2,
-  format,
-  transports
-});
-var logger_default = logger;
-
 // server/index.ts
 import path6 from "path";
-import { fileURLToPath as fileURLToPath5 } from "url";
-import fs4 from "fs";
-var __filename4 = fileURLToPath5(import.meta.url);
-var __dirname4 = path6.dirname(__filename4);
-var logsDir = path6.join(__dirname4, "..", "logs");
-if (!fs4.existsSync(logsDir)) {
-  fs4.mkdirSync(logsDir, { recursive: true });
+import { fileURLToPath as fileURLToPath4 } from "url";
+import fs5 from "fs";
+var __filename3 = fileURLToPath4(import.meta.url);
+var __dirname3 = path6.dirname(__filename3);
+var logsDir = path6.join(__dirname3, "..", "logs");
+if (!fs5.existsSync(logsDir)) {
+  fs5.mkdirSync(logsDir, { recursive: true });
 }
-var app = express2();
+var app = express3();
 process.on("unhandledRejection", (reason, promise) => {
   logger_default.error("\u{1F4A5} Unhandled Rejection at:", { promise, reason });
 });
@@ -1923,16 +2195,15 @@ process.on("uncaughtException", (error) => {
   logger_default.error("\u{1F4A5} Uncaught Exception:", error);
   process.exit(1);
 });
-app.use(express2.json({
+app.use(express3.json({
   verify: (req, _res, buf) => {
     req.rawBody = buf;
   }
 }));
-app.use(express2.urlencoded({ extended: false }));
+app.use(express3.urlencoded({ extended: false }));
 app.use((req, res, next) => {
-  console.log(`[${(/* @__PURE__ */ new Date()).toISOString()}] ${req.method} ${req.url}`);
   const start = Date.now();
-  const path7 = req.path;
+  const p = req.path;
   let capturedJsonResponse = void 0;
   const originalResJson = res.json;
   res.json = function(bodyJson, ...args) {
@@ -1941,21 +2212,17 @@ app.use((req, res, next) => {
   };
   res.on("finish", () => {
     const duration = Date.now() - start;
-    if (path7.startsWith("/api")) {
-      let logLine = `${req.method} ${path7} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-      }
-      if (logLine.length > 80) {
-        logLine = logLine.slice(0, 79) + "\u2026";
-      }
-      log(logLine);
+    const base = { method: req.method, path: p, status: res.statusCode, duration };
+    if (p.startsWith("/api")) {
+      const payload = capturedJsonResponse && JSON.stringify(capturedJsonResponse).slice(0, 500);
+      logger_default.info({ ...base, payload });
+    } else {
+      logger_default.debug(base);
     }
-    console.log(`[${(/* @__PURE__ */ new Date()).toISOString()}] ${req.method} ${req.url} - ${res.statusCode} (${duration}ms)`);
   });
   setTimeout(() => {
     if (!res.headersSent) {
-      console.error(`\u26A0\uFE0F REQUEST HANGING: ${req.method} ${req.url} - ${Date.now() - start}ms`);
+      logger_default.warn({ msg: "REQUEST HANGING", method: req.method, url: req.url, ms: Date.now() - start });
     }
   }, 5e3);
   next();
@@ -1974,7 +2241,7 @@ app.use((req, res, next) => {
   const server = await registerRoutes(app);
   logger_default.info("\u2705 Routes registered successfully");
   logger_default.info("\u{1F4C1} Setting up static file serving...");
-  app.use("/uploads", express2.static(path6.join(__dirname4, "..", "uploads")));
+  app.use("/uploads", express3.static(path6.join(__dirname3, "..", "uploads")));
   logger_default.info("\u2705 Static files configured");
   app.use((err, _req, res, _next) => {
     const status = err.status || err.statusCode || 500;
@@ -1985,16 +2252,17 @@ app.use((req, res, next) => {
       stack: err.stack,
       ...err
     });
+    logger_default.error("ERROR handler", { status, message, stack: err.stack, ...err });
     res.status(status).json({ message, error: err.message });
   });
   if (app.get("env") === "development") {
-    logger_default.info("\u2699\uFE0F Setting up Vite dev server...");
+    logger_default.info("Setting up Vite dev server...");
     await setupVite(app, server);
-    logger_default.info("\u2705 Vite dev server ready");
+    logger_default.info("Vite dev server ready");
   } else {
-    logger_default.info("\u{1F4E6} Serving static files (production mode)...");
+    logger_default.info("Serving static files (production mode)...");
     serveStatic(app);
-    logger_default.info("\u2705 Static files ready");
+    logger_default.info("Static files ready");
   }
   const port = parseInt(process.env.PORT || "5000", 10);
   logger_default.info(`\u{1F310} Starting server on port ${port}...`);
@@ -2003,7 +2271,7 @@ app.use((req, res, next) => {
     host: "0.0.0.0",
     reusePort: true
   }, () => {
-    log(`\u2705 Server listening on port ${port}`);
+    logger_default.info(`\u2705 Server listening on port ${port}`);
     logger_default.info(`\u2705 Server is ready and accepting connections on http://0.0.0.0:${port}`);
   });
 })();
