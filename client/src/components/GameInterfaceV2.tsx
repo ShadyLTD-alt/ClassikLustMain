@@ -6,13 +6,10 @@ import CharacterSelector from "@/components/CharacterSelector";
 import UpgradePanel from "@/components/UpgradePanel";
 import LevelUp from "@/components/LevelUp";
 import ChatModal from "@/components/ChatModal";
-import AdminPanel from "@/components/AdminPanel";
 import { AdminFAB } from "@/components/AdminFAB";
-import ImageUploader from "@/components/ImageUploader";
 import { apiRequest } from "@/lib/queryClient";
 import { User, Crown } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { debouncedSave } from "@/utils/debouncedSave";
 
 export default function GameInterfaceV2() {
   const { state, tap } = useGame();
@@ -20,8 +17,6 @@ export default function GameInterfaceV2() {
   const [showUpgrades, setShowUpgrades] = useState(false);
   const [showLevel, setShowLevel] = useState(false);
   const [showChat, setShowChat] = useState(false);
-  const [showAdmin, setShowAdmin] = useState(false);
-  const [showImageUploader, setShowImageUploader] = useState(false);
   const [showDebugger, setShowDebugger] = useState(false);
   const [tapEffects, setTapEffects] = useState<Array<{id: string, x: number, y: number, value: number}>>([]);
 
@@ -44,8 +39,9 @@ export default function GameInterfaceV2() {
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
     
-    // Calculate tap value (base 1, upgrades calculated in context)
-    const tapValue = 1; // This will be enhanced by GameContext tap() logic
+    // Calculate tap value based on upgrades (this will be enhanced by GameContext)
+    const baseTapValue = 1;
+    const tapValue = baseTapValue; // GameContext tap() will handle upgrade multipliers
     
     // Add floating animation
     const effectId = crypto.randomUUID();
@@ -120,16 +116,20 @@ export default function GameInterfaceV2() {
                 </div>
               )}
               
-              {/* Character name overlay */}
+              {/* Character name overlay - FIXED LAYOUT */}
               {currentCharacter && (
                 <div className="absolute bottom-4 left-4 right-4 bg-black/60 backdrop-blur-sm rounded-lg px-3 py-2 border border-purple-400/30">
-                  <div className="text-white font-semibold text-lg flex items-center justify-between">
-                    <span>{currentCharacter.name}</span>
-                    {state?.isAdmin && (
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-300 border border-yellow-400/30">Admin</span>
-                    )}
+                  <div className="flex items-center justify-between">
+                    <div className="text-left">
+                      <div className="text-white font-semibold text-lg">{currentCharacter.name}</div>
+                      <div className="text-purple-300 text-sm">Level {state?.level}</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {state?.isAdmin && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-300 border border-yellow-400/30">Admin</span>
+                      )}
+                    </div>
                   </div>
-                  <div className="text-purple-300 text-sm">Level {state?.level} • Tap to interact</div>
                 </div>
               )}
             </div>
@@ -138,7 +138,7 @@ export default function GameInterfaceV2() {
             {tapEffects.map(effect => (
               <div
                 key={effect.id}
-                className="absolute pointer-events-none text-green-400 font-bold text-xl animate-bounce"
+                className="absolute pointer-events-none text-green-400 font-bold text-xl z-10"
                 style={{
                   left: `${effect.x}px`,
                   top: `${effect.y}px`,
@@ -151,11 +151,11 @@ export default function GameInterfaceV2() {
             ))}
           </div>
           
-          {/* Energy line removed as requested */}
+          {/* NO ENERGY LINE - REMOVED COMPLETELY */}
         </div>
       </div>
 
-      {/* USE YOUR EXISTING AdminFAB */}
+      {/* USE EXISTING AdminFAB */}
       <AdminFAB onOpenDebugger={() => setShowDebugger(true)} />
 
       {/* Modals */}
@@ -163,9 +163,27 @@ export default function GameInterfaceV2() {
       {showUpgrades && <UpgradePanel isOpen={showUpgrades} onClose={() => setShowUpgrades(false)} />}
       {showLevel && <LevelUp isOpen={showLevel} onClose={() => setShowLevel(false)} />}
       {showChat && <ChatModal isOpen={showChat} onClose={() => setShowChat(false)} />}
-      {showAdmin && <AdminPanel />}
-      {showImageUploader && <ImageUploader adminMode={true} />}
-      {showDebugger && <div className="fixed inset-0 z-50 bg-black/80 text-white p-4">DEBUG PANEL PLACEHOLDER</div>}
+      {showDebugger && (
+        <div className="fixed inset-0 z-50 bg-black/80 text-white p-4 overflow-y-auto">
+          <div className="max-w-4xl mx-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">🌙 LunaBug Debug Panel</h2>
+              <Button onClick={() => setShowDebugger(false)} variant="outline">Close</Button>
+            </div>
+            <div className="bg-gray-900 p-4 rounded-lg font-mono text-sm">
+              <div className="text-green-400">LunaBug Debug Status: {(window as any).LunaBug ? "Active" : "Inactive"}</div>
+              <div className="text-blue-400 mt-2">Game State:</div>
+              <pre className="text-xs mt-1 text-gray-300">{JSON.stringify({
+                level: state?.level,
+                lustPoints: state?.lustPoints,
+                energy: state?.energy,
+                selectedCharacterId: state?.selectedCharacterId,
+                isAdmin: state?.isAdmin
+              }, null, 2)}</pre>
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* CSS Animation for floating points */}
       <style jsx>{`
