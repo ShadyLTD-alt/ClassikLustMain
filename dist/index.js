@@ -1,11 +1,5 @@
 var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
-var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require : typeof Proxy !== "undefined" ? new Proxy(x, {
-  get: (a, b) => (typeof require !== "undefined" ? require : a)[b]
-}) : x)(function(x) {
-  if (typeof require !== "undefined") return require.apply(this, arguments);
-  throw Error('Dynamic require of "' + x + '" is not supported');
-});
 var __esm = (fn, res) => function __init() {
   return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
 };
@@ -14,271 +8,404 @@ var __export = (target, all) => {
     __defProp(target, name, { get: all[name], enumerable: true });
 };
 
-// server/routes/lunabug.js
+// server/routes/lunabug.mjs
 var lunabug_exports = {};
-var express, winston2, router, MISTRAL_API_URL, MISTRAL_API_KEY, MISTRAL_DEBUG_API_KEY, lunaBugLogger;
-var init_lunabug = __esm({
-  "server/routes/lunabug.js"() {
-    "use strict";
-    express = __require("express");
-    winston2 = __require("winston");
-    router = express.Router();
-    MISTRAL_API_URL = "https://api.mistral.ai/v1/chat/completions";
-    MISTRAL_API_KEY = process.env.MISTRAL_API_KEY;
-    MISTRAL_DEBUG_API_KEY = process.env.MISTRAL_DEBUG_API_KEY;
-    lunaBugLogger = winston2.createLogger({
-      level: "debug",
-      format: winston2.format.combine(
-        winston2.format.timestamp(),
-        winston2.format.json()
-      ),
-      defaultMeta: { service: "lunabug" },
-      transports: [
-        new winston2.transports.Console({
-          format: winston2.format.combine(
-            winston2.format.colorize(),
-            winston2.format.simple(),
-            winston2.format.printf(({ timestamp: timestamp2, level, message, service, ...meta }) => {
-              return `\u{1F319} [${service}] ${level}: ${message} ${Object.keys(meta).length ? JSON.stringify(meta) : ""}`;
-            })
-          )
-        })
-      ]
-    });
-    router.post("/debug", async (req, res) => {
-      const startTime = Date.now();
-      try {
-        const { system, language, debugType, code, error, context, requestId } = req.body;
-        lunaBugLogger.info("Debug request received", {
-          requestId,
-          language,
-          debugType,
-          codeLength: code?.length || 0
-        });
-        const apiKey = MISTRAL_DEBUG_API_KEY || MISTRAL_API_KEY;
-        if (!apiKey) {
-          lunaBugLogger.error("No Mistral API key configured");
-          return res.status(500).json({
-            error: "AI service unavailable",
-            message: "No Mistral API key configured. Add MISTRAL_API_KEY or MISTRAL_DEBUG_API_KEY to environment."
-          });
-        }
-        const messages = [
-          { role: "system", content: system },
-          {
-            role: "user",
-            content: `Please analyze this ${language} code:
+__export(lunabug_exports, {
+  default: () => lunabug_default
+});
+import express from "express";
+import fetch from "node-fetch";
+function checkCircuitBreaker(provider) {
+  const health = providerHealth[provider];
+  if (health.circuitOpen && Date.now() - health.lastFailure > CIRCUIT_BREAKER_TIMEOUT) {
+    health.circuitOpen = false;
+    health.failures = 0;
+    console.log(`\u{1F319} [${provider}] Circuit breaker reset`);
+  }
+  return !health.circuitOpen;
+}
+function recordFailure(provider, error) {
+  const health = providerHealth[provider];
+  health.failures++;
+  health.lastFailure = Date.now();
+  if (health.failures >= CIRCUIT_BREAKER_THRESHOLD) {
+    health.circuitOpen = true;
+    console.log(`\u{1F319} [${provider}] Circuit breaker OPEN after ${health.failures} failures`);
+  }
+}
+function recordSuccess(provider) {
+  const health = providerHealth[provider];
+  health.failures = Math.max(0, health.failures - 1);
+}
+function generateLocalFallback(message, code, error, context) {
+  if (message && /^(hi|hello|hey|ping|test)\b/i.test(message.trim())) {
+    return `\u{1F319} Hello! LunaBug here running in local fallback mode. 
 
-${code}${error ? `
+My AI providers are currently unavailable, but I'm still actively monitoring your ClassikLust game systems!
 
-Error: ${error}` : ""}${context ? `
+Available commands:
+\u2022 window.LunaBug.status() - System health
+\u2022 window.LunaBug.emergency() - Emergency mode
+\u2022 window.LunaBug.functions.list() - Available tools
 
-Context: ${context}` : ""}`
-          }
-        ];
-        const mistralResponse = await fetch(MISTRAL_API_URL, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${apiKey}`
-          },
-          body: JSON.stringify({
-            model: "mistral-large-latest",
-            messages,
-            temperature: 0.05,
-            max_tokens: 2048,
-            top_p: 1
-          })
-        });
-        if (!mistralResponse.ok) {
-          const errorData = await mistralResponse.json().catch(() => ({}));
-          lunaBugLogger.error("Mistral API error", {
-            status: mistralResponse.status,
-            error: errorData
-          });
-          return res.status(mistralResponse.status).json({
-            error: "Mistral API error",
-            details: errorData
-          });
-        }
-        const mistralData = await mistralResponse.json();
-        const aiResponse = mistralData.choices[0]?.message?.content;
-        let parsedResponse;
-        try {
-          parsedResponse = JSON.parse(aiResponse);
-        } catch {
-          parsedResponse = {
-            analysis: aiResponse,
-            suggestions: ["Check the provided analysis for detailed recommendations"],
-            confidence: 0.8,
-            severity: "medium"
-          };
-        }
-        const responseTime = Date.now() - startTime;
-        lunaBugLogger.info("Debug request completed", {
-          requestId,
-          responseTime,
-          confidence: parsedResponse.confidence || 0.8
-        });
-        res.json({
-          ...parsedResponse,
-          requestId,
-          responseTime,
-          model: "mistral-large-latest",
-          timestamp: (/* @__PURE__ */ new Date()).toISOString()
-        });
-      } catch (error) {
-        const responseTime = Date.now() - startTime;
-        lunaBugLogger.error("Debug request failed", {
-          error: error.message,
-          stack: error.stack,
-          responseTime
-        });
-        res.status(500).json({
-          error: "Debug analysis failed",
-          message: error.message,
-          responseTime
-        });
+Add MISTRAL_API_KEY or PERPLEXITY_API_KEY to Replit Secrets for full AI capabilities!`;
+  }
+  if (error && code) {
+    const errorPatterns = [
+      {
+        pattern: /(undefined|cannot read property|cannot access)/i,
+        fix: `**Issue:** Null/undefined reference
+        
+**Quick Fix:**
+\u2022 Add null checks: \`if (object && object.property)\`
+\u2022 Use optional chaining: \`object?.property\`
+\u2022 Provide defaults: \`const value = data?.field || 'default'\`
+
+**Prevention:**
+\u2022 Always validate API responses
+\u2022 Use TypeScript for compile-time checking
+\u2022 Add defensive programming patterns`
+      },
+      {
+        pattern: /(import|module not found|require.*not defined)/i,
+        fix: `**Issue:** Import/Module resolution failure
+
+**Quick Fix:**
+\u2022 Check file path: \`../../path/to/file\`
+\u2022 Verify file exists and has correct extension
+\u2022 For Node modules: \`npm install missing-package\`
+\u2022 Check package.json dependencies
+
+**ESM/CJS Issues:**
+\u2022 Use .mjs for ES modules in mixed projects
+\u2022 Convert require() to import statements
+\u2022 Check "type": "module" in package.json`
+      },
+      {
+        pattern: /(fetch.*failed|network.*error|cors)/i,
+        fix: `**Issue:** Network/API failure
+
+**Quick Fix:**
+\u2022 Check API endpoint URL and method
+\u2022 Verify CORS settings on server
+\u2022 Add proper error handling with try/catch
+\u2022 Check network connectivity
+
+**For APIs:**
+\u2022 Add timeout configurations
+\u2022 Implement retry logic
+\u2022 Validate response status codes`
       }
-    });
-    router.post("/chat", async (req, res) => {
+    ];
+    const matchedPattern = errorPatterns.find((p) => p.pattern.test(error));
+    if (matchedPattern) {
+      return `\u{1F319} **LunaBug Local Analysis**
+
+**Error:** ${error}
+
+${matchedPattern.fix}
+
+**Code Context:**
+\`\`\`
+${code.slice(0, 300)}${code.length > 300 ? "..." : ""}
+\`\`\`
+
+*This is a local heuristic response. Add API keys to Secrets for advanced AI debugging.*`;
+    }
+    return `\u{1F319} **LunaBug Local Analysis**
+
+**Error:** ${error}
+
+**General Debugging Steps:**
+1. Check browser console for additional error details
+2. Verify all imports and dependencies are correct
+3. Add error handling with try/catch blocks
+4. Use debugger statements or console.log for step-by-step debugging
+5. Review recent code changes that might have introduced the issue
+
+**Code:**
+\`\`\`
+${code.slice(0, 400)}${code.length > 400 ? "..." : ""}
+\`\`\`
+
+**Need more help?** Add MISTRAL_API_KEY or PERPLEXITY_API_KEY to Replit Secrets for advanced AI-powered debugging assistance.`;
+  }
+  if (message) {
+    return `\u{1F319} **LunaBug Local Response**
+
+Message received: "${message.slice(0, 150)}${message.length > 150 ? "..." : ""}"
+
+I'm currently running in local fallback mode. For full AI-powered responses, add your API keys to Replit Secrets:
+
+**Required Secrets:**
+\u2022 \`MISTRAL_API_KEY\` - Primary AI provider
+\u2022 \`PERPLEXITY_API_KEY\` - Fallback AI provider
+
+**What I can still do:**
+\u2022 System monitoring and health checks
+\u2022 Function discovery and execution
+\u2022 Basic error pattern matching
+\u2022 Emergency debugging mode
+\u2022 Console spam filtering
+
+**Quick Access:**
+\u2022 \`window.LunaBug.status()\` - Check system status
+\u2022 \`window.LunaBug.functions.list()\` - See available tools`;
+  }
+  return "\u{1F319} LunaBug local mode active. Send a message or debugging request to get help!";
+}
+var router, providerHealth, CIRCUIT_BREAKER_THRESHOLD, CIRCUIT_BREAKER_TIMEOUT, lunabug_default;
+var init_lunabug = __esm({
+  "server/routes/lunabug.mjs"() {
+    "use strict";
+    router = express.Router();
+    providerHealth = {
+      mistral: { failures: 0, lastFailure: 0, circuitOpen: false },
+      perplexity: { failures: 0, lastFailure: 0, circuitOpen: false }
+    };
+    CIRCUIT_BREAKER_THRESHOLD = 3;
+    CIRCUIT_BREAKER_TIMEOUT = 6e4;
+    router.post("/ai", async (req, res) => {
+      const { message, code, error, context, system } = req.body;
       const startTime = Date.now();
+      console.log(`\u{1F319} AI request: ${message?.slice(0, 40) || "debug request"}...`);
       try {
-        const { system, message, requestId } = req.body;
-        lunaBugLogger.info("Chat request received", {
-          requestId,
-          messageLength: message?.length || 0
-        });
-        const apiKey = MISTRAL_API_KEY || MISTRAL_DEBUG_API_KEY;
-        if (!apiKey) {
-          return res.status(500).json({
-            error: "AI service unavailable",
-            message: "No Mistral API key configured"
-          });
+        if (process.env.MISTRAL_API_KEY && checkCircuitBreaker("mistral")) {
+          try {
+            const response = await fetch("https://api.mistral.ai/v1/chat/completions", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${process.env.MISTRAL_API_KEY}`
+              },
+              body: JSON.stringify({
+                model: "mistral-large-latest",
+                messages: [
+                  { role: "system", content: system || "You are LunaBug, a helpful AI assistant for ClassikLust game development. Be concise and practical." },
+                  { role: "user", content: message || `Debug this code:
+
+${code}
+
+Error: ${error}` }
+                ],
+                max_tokens: 1200,
+                temperature: 0.3
+              }),
+              timeout: 12e3
+            });
+            if (response.ok) {
+              const data = await response.json();
+              recordSuccess("mistral");
+              console.log(`\u{1F319} \u2705 Mistral responded (${Date.now() - startTime}ms)`);
+              return res.json({
+                provider: "mistral",
+                response: data.choices[0]?.message?.content || "Empty response from Mistral",
+                fallbackCount: 0,
+                metrics: {
+                  latency: Date.now() - startTime,
+                  provider: "mistral",
+                  tokens: data.usage?.total_tokens || 0
+                }
+              });
+            } else {
+              throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+          } catch (err) {
+            recordFailure("mistral", err);
+            console.log(`\u{1F319} \u26A0\uFE0F Mistral failed (${err.message}), trying Perplexity...`);
+          }
         }
-        const messages = [
-          { role: "system", content: system },
-          { role: "user", content: message }
-        ];
-        const mistralResponse = await fetch(MISTRAL_API_URL, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${apiKey}`
-          },
-          body: JSON.stringify({
-            model: "mistral-large-latest",
-            messages,
-            temperature: 0.1,
-            // Slightly higher for chat
-            max_tokens: 1e3,
-            // Smaller for chat responses
-            top_p: 1
-          })
-        });
-        if (!mistralResponse.ok) {
-          const errorData = await mistralResponse.json().catch(() => ({}));
-          lunaBugLogger.error("Mistral API error", {
-            status: mistralResponse.status,
-            error: errorData
-          });
-          return res.status(mistralResponse.status).json({
-            error: "Mistral API error",
-            details: errorData
-          });
+        if (process.env.PERPLEXITY_API_KEY && checkCircuitBreaker("perplexity")) {
+          try {
+            const response = await fetch("https://api.perplexity.ai/chat/completions", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${process.env.PERPLEXITY_API_KEY}`
+              },
+              body: JSON.stringify({
+                model: "llama-3.1-sonar-small-128k-online",
+                messages: [
+                  { role: "system", content: system || "You are LunaBug, a concise AI debugging assistant. Provide practical solutions." },
+                  { role: "user", content: message || `Debug: ${code}
+Error: ${error}` }
+                ],
+                max_tokens: 800,
+                temperature: 0.2
+              }),
+              timeout: 1e4
+            });
+            if (response.ok) {
+              const data = await response.json();
+              recordSuccess("perplexity");
+              console.log(`\u{1F319} \u2705 Perplexity responded (${Date.now() - startTime}ms, fallback used)`);
+              return res.json({
+                provider: "perplexity",
+                response: data.choices[0]?.message?.content || "Empty response from Perplexity",
+                fallbackCount: 1,
+                metrics: {
+                  latency: Date.now() - startTime,
+                  provider: "perplexity",
+                  tokens: data.usage?.total_tokens || 0
+                }
+              });
+            } else {
+              throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+          } catch (err) {
+            recordFailure("perplexity", err);
+            console.log(`\u{1F319} \u26A0\uFE0F Perplexity failed (${err.message}), using local fallback...`);
+          }
         }
-        const mistralData = await mistralResponse.json();
-        const responseTime = Date.now() - startTime;
-        lunaBugLogger.info("Chat request completed", {
-          requestId,
-          responseTime,
-          tokensUsed: mistralData.usage?.total_tokens || 0
-        });
+        const localResponse = generateLocalFallback(message, code, error, context);
+        console.log(`\u{1F319} \u{1F4BB} Using local fallback (${Date.now() - startTime}ms)`);
         res.json({
-          response: mistralData.choices[0]?.message?.content || "No response",
-          requestId,
-          responseTime,
-          model: "mistral-large-latest",
-          usage: mistralData.usage,
-          timestamp: (/* @__PURE__ */ new Date()).toISOString()
+          provider: "local",
+          response: localResponse,
+          fallbackCount: 2,
+          metrics: {
+            latency: Date.now() - startTime,
+            provider: "local",
+            apiKeysAvailable: {
+              mistral: !!process.env.MISTRAL_API_KEY,
+              perplexity: !!process.env.PERPLEXITY_API_KEY
+            }
+          }
         });
-      } catch (error) {
-        const responseTime = Date.now() - startTime;
-        lunaBugLogger.error("Chat request failed", {
-          error: error.message,
-          stack: error.stack,
-          responseTime
-        });
+      } catch (error2) {
+        console.error(`\u{1F319} \u274C AI endpoint failed completely:`, error2.message);
         res.status(500).json({
-          error: "Chat request failed",
-          message: error.message,
-          responseTime
+          provider: "error",
+          response: "LunaBug AI system temporarily unavailable. Check server logs for details.",
+          error: error2.message,
+          fallbackCount: 3
         });
       }
     });
     router.get("/status", (req, res) => {
+      const uptime = process.uptime();
+      const health = {
+        mistral: checkCircuitBreaker("mistral"),
+        perplexity: checkCircuitBreaker("perplexity"),
+        local: true
+      };
       res.json({
-        service: "LunaBug",
+        status: "online",
         version: "1.0.1",
+        uptime: Math.round(uptime),
+        providers: {
+          mistral: {
+            available: !!process.env.MISTRAL_API_KEY,
+            healthy: health.mistral,
+            failures: providerHealth.mistral.failures
+          },
+          perplexity: {
+            available: !!process.env.PERPLEXITY_API_KEY,
+            healthy: health.perplexity,
+            failures: providerHealth.perplexity.failures
+          },
+          local: {
+            available: true,
+            healthy: true,
+            failures: 0
+          }
+        },
+        routes: ["POST /ai", "GET /status", "GET /functions", "GET /health"],
         timestamp: (/* @__PURE__ */ new Date()).toISOString(),
-        apiKeys: {
-          primary: !!MISTRAL_API_KEY,
-          debug: !!MISTRAL_DEBUG_API_KEY
-        },
-        endpoints: {
-          debug: "/api/lunabug/debug",
-          chat: "/api/lunabug/chat",
-          status: "/api/lunabug/status"
-        },
-        uptime: process.uptime(),
-        status: "operational"
+        metrics: {
+          totalFailures: providerHealth.mistral.failures + providerHealth.perplexity.failures,
+          circuitBreakersOpen: Object.values(providerHealth).filter((h) => h.circuitOpen).length
+        }
       });
     });
-    router.post("/test", async (req, res) => {
-      try {
-        const apiKey = MISTRAL_DEBUG_API_KEY || MISTRAL_API_KEY;
-        if (!apiKey) {
-          return res.status(500).json({ error: "No API key configured" });
-        }
-        const testResponse = await fetch(MISTRAL_API_URL, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${apiKey}`
+    router.get("/functions", (req, res) => {
+      res.json({
+        functions: [
+          {
+            name: "javascript_error_analysis",
+            description: "Analyze JavaScript/TypeScript errors and provide specific fixes",
+            triggers: ["TypeError", "ReferenceError", "SyntaxError", "undefined", "null"],
+            category: "debugging",
+            enabled: true,
+            priority: "high"
           },
-          body: JSON.stringify({
-            model: "mistral-large-latest",
-            messages: [
-              { role: "user", content: "Respond with exactly: LunaBug AI connection test successful" }
-            ],
-            temperature: 0,
-            max_tokens: 50
-          })
+          {
+            name: "import_resolver",
+            description: "Resolve import/export issues and module dependencies",
+            triggers: ["import", "export", "module not found", "require"],
+            category: "dependencies",
+            enabled: true,
+            priority: "high"
+          },
+          {
+            name: "api_diagnostics",
+            description: "Diagnose API and network related issues",
+            triggers: ["fetch", "cors", "network", "404", "500"],
+            category: "networking",
+            enabled: true,
+            priority: "medium"
+          },
+          {
+            name: "performance_analyzer",
+            description: "Analyze performance issues and suggest optimizations",
+            triggers: ["slow", "performance", "memory", "lag", "fps"],
+            category: "performance",
+            enabled: true,
+            priority: "medium"
+          },
+          {
+            name: "console_spam_filter",
+            description: "Filter and reduce console spam automatically",
+            triggers: ["spam", "debug", "[object Object]", "verbose"],
+            category: "cleanup",
+            enabled: true,
+            priority: "low"
+          },
+          {
+            name: "database_helper",
+            description: "Help with PostgreSQL and Supabase database issues",
+            triggers: ["database", "postgresql", "supabase", "sql", "migration"],
+            category: "database",
+            enabled: true,
+            priority: "high"
+          }
+        ],
+        autoDiscovery: true,
+        jsonFunctionLoader: "Available via LunaBug FunctionLoader module",
+        totalFunctions: 6,
+        categories: ["debugging", "dependencies", "networking", "performance", "cleanup", "database"]
+      });
+    });
+    router.get("/health", (req, res) => {
+      res.json({
+        service: "LunaBug",
+        status: "healthy",
+        timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+        uptime: Math.round(process.uptime()),
+        memory: process.memoryUsage(),
+        env: process.env.NODE_ENV || "development"
+      });
+    });
+    router.post("/providers/reset", (req, res) => {
+      const { provider } = req.body;
+      if (provider && providerHealth[provider]) {
+        providerHealth[provider].failures = 0;
+        providerHealth[provider].circuitOpen = false;
+        console.log(`\u{1F319} Manually reset ${provider} circuit breaker`);
+        res.json({ success: true, provider, status: "reset" });
+      } else if (!provider) {
+        Object.keys(providerHealth).forEach((key) => {
+          providerHealth[key].failures = 0;
+          providerHealth[key].circuitOpen = false;
         });
-        if (!testResponse.ok) {
-          const errorData = await testResponse.json().catch(() => ({}));
-          return res.status(testResponse.status).json({
-            error: "Mistral API test failed",
-            details: errorData
-          });
-        }
-        const data = await testResponse.json();
-        lunaBugLogger.info("API connection test successful");
-        res.json({
-          success: true,
-          response: data.choices[0]?.message?.content,
-          usage: data.usage,
-          model: "mistral-large-latest"
-        });
-      } catch (error) {
-        lunaBugLogger.error("API test failed", error);
-        res.status(500).json({
-          error: "Connection test failed",
-          message: error.message
-        });
+        console.log("\u{1F319} All provider circuit breakers reset");
+        res.json({ success: true, providers: Object.keys(providerHealth), status: "all_reset" });
+      } else {
+        res.status(400).json({ error: "Invalid provider name" });
       }
     });
-    module.exports = router;
+    console.log("\u{1F319} \u2705 LunaBug ESM routes initialized successfully");
+    lunabug_default = router;
   }
 });
 
@@ -756,26 +883,6 @@ async function requireAuth(req, res, next) {
     res.status(500).json({ error: "Authentication failed" });
   }
 }
-function requireAdmin(req, res, next) {
-  const adminToken = req.headers["x-admin-token"];
-  const envAdminToken = process.env.ADMIN_TOKEN;
-  if (envAdminToken && adminToken === envAdminToken) {
-    return next();
-  }
-  if (!req.player) {
-    return res.status(401).json({
-      error: "Authentication required",
-      message: "You must be logged in as an admin to access this resource."
-    });
-  }
-  if (!req.player.isAdmin) {
-    return res.status(403).json({
-      error: "Forbidden",
-      message: "Admin access required. This action is restricted to administrators."
-    });
-  }
-  next();
-}
 
 // server/utils/dataLoader.ts
 import fs from "fs/promises";
@@ -1127,9 +1234,6 @@ function getUpgradesFromMemory(includeHidden = false) {
   }
   return upgrades2.filter((u) => !u.isHidden);
 }
-function getUpgradeFromMemory(id) {
-  return upgradesCache.get(id);
-}
 function getCharactersFromMemory(includeHidden = false) {
   const characters2 = Array.from(charactersCache.values());
   if (includeHidden) {
@@ -1137,184 +1241,8 @@ function getCharactersFromMemory(includeHidden = false) {
   }
   return characters2.filter((c) => !c.isHidden);
 }
-function getCharacterFromMemory(id) {
-  return charactersCache.get(id);
-}
 function getLevelsFromMemory() {
   return Array.from(levelsCache.values()).sort((a, b) => a.level - b.level);
-}
-function getLevelFromMemory(level) {
-  return levelsCache.get(level);
-}
-async function saveUpgradeToJSON(upgrade) {
-  const masterFilePath = path.join(__dirname, "../../main-gamedata/master-data/upgrades-master.json");
-  try {
-    const masterData = await loadJSONFile(masterFilePath);
-    const upgrades2 = masterData?.upgrades || [];
-    const existingIndex = upgrades2.findIndex((u) => u.id === upgrade.id);
-    const upgradeData = {
-      id: upgrade.id,
-      name: upgrade.name,
-      description: upgrade.description,
-      maxLevel: upgrade.maxLevel,
-      baseCost: upgrade.baseCost,
-      costMultiplier: upgrade.costMultiplier,
-      baseValue: upgrade.baseValue,
-      valueIncrement: upgrade.valueIncrement,
-      icon: upgrade.icon,
-      type: upgrade.type,
-      ...upgrade.isHidden && { isHidden: upgrade.isHidden }
-    };
-    if (existingIndex >= 0) {
-      upgrades2[existingIndex] = upgradeData;
-    } else {
-      upgrades2.push(upgradeData);
-    }
-    await fs.writeFile(masterFilePath, JSON.stringify({ upgrades: upgrades2 }, null, 2));
-    upgradesCache.set(upgrade.id, upgradeData);
-    console.log(`\u2713 Updated master-data/upgrades-master.json with upgrade: ${upgrade.name}`);
-    return;
-  } catch (error) {
-    console.warn(`\u26A0\uFE0F Failed to save to master-data directory, trying root...`);
-  }
-  const rootMasterPath = path.join(__dirname, "../../main-gamedata/upgrades-master.json");
-  try {
-    const masterData = await loadJSONFile(rootMasterPath);
-    const upgrades2 = masterData?.upgrades || [];
-    const existingIndex = upgrades2.findIndex((u) => u.id === upgrade.id);
-    const upgradeData = {
-      id: upgrade.id,
-      name: upgrade.name,
-      description: upgrade.description,
-      maxLevel: upgrade.maxLevel,
-      baseCost: upgrade.baseCost,
-      costMultiplier: upgrade.costMultiplier,
-      baseValue: upgrade.baseValue,
-      valueIncrement: upgrade.valueIncrement,
-      icon: upgrade.icon,
-      type: upgrade.type,
-      ...upgrade.isHidden && { isHidden: upgrade.isHidden }
-    };
-    if (existingIndex >= 0) {
-      upgrades2[existingIndex] = upgradeData;
-    } else {
-      upgrades2.push(upgradeData);
-    }
-    await fs.writeFile(rootMasterPath, JSON.stringify({ upgrades: upgrades2 }, null, 2));
-    upgradesCache.set(upgrade.id, upgradeData);
-    console.log(`\u2713 Updated root upgrades-master.json with upgrade: ${upgrade.name}`);
-  } catch (error) {
-    console.error(`\u274C Failed to save upgrade to master JSON:`, error);
-    throw error;
-  }
-}
-async function saveLevelToJSON(level) {
-  const masterFilePath = path.join(__dirname, "../../main-gamedata/master-data/levelup-master.json");
-  try {
-    const masterData = await loadJSONFile(masterFilePath);
-    const levels2 = masterData?.levels || [];
-    const existingIndex = levels2.findIndex((l) => l.level === level.level);
-    const levelData = {
-      level: level.level,
-      experienceRequired: level.experienceRequired,
-      requirements: level.requirements,
-      unlocks: level.unlocks
-    };
-    if (existingIndex >= 0) {
-      levels2[existingIndex] = levelData;
-    } else {
-      levels2.push(levelData);
-      levels2.sort((a, b) => a.level - b.level);
-    }
-    await fs.writeFile(masterFilePath, JSON.stringify({ levels: levels2 }, null, 2));
-    levelsCache.set(level.level, levelData);
-    console.log(`\u2713 Updated master-data/levelup-master.json with level: ${level.level}`);
-    return;
-  } catch (error) {
-    console.warn(`\u26A0\uFE0F Failed to save to master-data directory, trying root...`);
-  }
-  const rootMasterPath = path.join(__dirname, "../../main-gamedata/levelup-master.json");
-  try {
-    const masterData = await loadJSONFile(rootMasterPath);
-    const levels2 = masterData?.levels || [];
-    const existingIndex = levels2.findIndex((l) => l.level === level.level);
-    const levelData = {
-      level: level.level,
-      experienceRequired: level.experienceRequired,
-      requirements: level.requirements,
-      unlocks: level.unlocks
-    };
-    if (existingIndex >= 0) {
-      levels2[existingIndex] = levelData;
-    } else {
-      levels2.push(levelData);
-      levels2.sort((a, b) => a.level - b.level);
-    }
-    await fs.writeFile(rootMasterPath, JSON.stringify({ levels: levels2 }, null, 2));
-    levelsCache.set(level.level, levelData);
-    console.log(`\u2713 Updated root levelup-master.json with level: ${level.level}`);
-  } catch (error) {
-    console.error(`\u274C Failed to save level to master JSON:`, error);
-    throw error;
-  }
-}
-async function saveCharacterToJSON(character) {
-  const masterFilePath = path.join(__dirname, "../../main-gamedata/master-data/character-master.json");
-  try {
-    const masterData = await loadJSONFile(masterFilePath);
-    const characters2 = masterData?.characters || [];
-    const existingIndex = characters2.findIndex((c) => c.id === character.id);
-    const characterData = {
-      id: character.id,
-      name: character.name,
-      unlockLevel: character.unlockLevel,
-      description: character.description,
-      rarity: character.rarity,
-      ...character.defaultImage && { defaultImage: character.defaultImage },
-      ...character.avatarImage && { avatarImage: character.avatarImage },
-      ...character.displayImage && { displayImage: character.displayImage },
-      ...character.isHidden && { isHidden: character.isHidden }
-    };
-    if (existingIndex >= 0) {
-      characters2[existingIndex] = characterData;
-    } else {
-      characters2.push(characterData);
-    }
-    await fs.writeFile(masterFilePath, JSON.stringify({ characters: characters2 }, null, 2));
-    charactersCache.set(character.id, characterData);
-    console.log(`\u2713 Updated master-data/character-master.json with character: ${character.name}`);
-    return;
-  } catch (error) {
-    console.warn(`\u26A0\uFE0F Failed to save to master-data directory, trying root...`);
-  }
-  const rootMasterPath = path.join(__dirname, "../../main-gamedata/character-master.json");
-  try {
-    const masterData = await loadJSONFile(rootMasterPath);
-    const characters2 = masterData?.characters || [];
-    const existingIndex = characters2.findIndex((c) => c.id === character.id);
-    const characterData = {
-      id: character.id,
-      name: character.name,
-      unlockLevel: character.unlockLevel,
-      description: character.description,
-      rarity: character.rarity,
-      ...character.defaultImage && { defaultImage: character.defaultImage },
-      ...character.avatarImage && { avatarImage: character.avatarImage },
-      ...character.displayImage && { displayImage: character.displayImage },
-      ...character.isHidden && { isHidden: character.isHidden }
-    };
-    if (existingIndex >= 0) {
-      characters2[existingIndex] = characterData;
-    } else {
-      characters2.push(characterData);
-    }
-    await fs.writeFile(rootMasterPath, JSON.stringify({ characters: characters2 }, null, 2));
-    charactersCache.set(character.id, characterData);
-    console.log(`\u2713 Updated root character-master.json with character: ${character.name}`);
-  } catch (error) {
-    console.error(`\u274C Failed to save character to master JSON:`, error);
-    throw error;
-  }
 }
 async function savePlayerDataToJSON(player) {
   if (!player.telegramId) {
@@ -1367,50 +1295,192 @@ var logDir = path2.resolve(process.cwd(), "logs");
 try {
   if (!fs2.existsSync(logDir)) {
     fs2.mkdirSync(logDir, { recursive: true });
-    console.log(`\u{1F4C1} Created logs directory: ${logDir}`);
   }
 } catch (err) {
-  console.error("\u274C Failed to create logs directory:", err);
+  console.error("Failed to create logs directory:", err);
 }
+var UltraSpamKiller = class {
+  seenMessages = /* @__PURE__ */ new Map();
+  maxRepeats = 2;
+  // Allow 2 duplicates then suppress
+  timeWindow = 8e3;
+  // 8 second window
+  blacklist = [
+    /\[object Object\]/i,
+    /PostCSS plugin.*autoprefixer/i,
+    /Re-optimizing dependencies/i,
+    /dependencies.*changed/i,
+    /Vite dev server ready/i,
+    /require is not defined in ES module scope/i,
+    /Failed to register LunaBug routes.*Cannot find module/i,
+    /vite.*config.*changed/i,
+    /hmr.*update/i,
+    /internal.*server.*error/i
+  ];
+  shouldAllow(level, message) {
+    if (this.blacklist.some((pattern) => pattern.test(message))) {
+      return false;
+    }
+    if (process.env.NODE_ENV === "production" && !["warn", "error"].includes(level)) {
+      return false;
+    }
+    const fingerprint = this.generateFingerprint(level, message);
+    const now = Date.now();
+    const existing = this.seenMessages.get(fingerprint);
+    if (!existing) {
+      this.seenMessages.set(fingerprint, { count: 1, lastSeen: now, hash: fingerprint });
+      return true;
+    }
+    if (now - existing.lastSeen > this.timeWindow) {
+      existing.count = 1;
+      existing.lastSeen = now;
+      return true;
+    }
+    existing.count++;
+    existing.lastSeen = now;
+    return existing.count <= this.maxRepeats;
+  }
+  generateFingerprint(level, message) {
+    const normalized = message.replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/g, "[timestamp]").replace(/\d+ms/g, "[duration]").replace(/port \d+/g, "port [num]").replace(/\s+/g, " ").trim().slice(0, 80);
+    return `${level}:${normalized}`;
+  }
+  cleanup() {
+    const now = Date.now();
+    const cutoff = now - this.timeWindow * 2;
+    for (const [key, entry] of this.seenMessages.entries()) {
+      if (entry.lastSeen < cutoff) {
+        this.seenMessages.delete(key);
+      }
+    }
+  }
+  getStats() {
+    return {
+      trackedMessages: this.seenMessages.size,
+      totalSuppressed: Array.from(this.seenMessages.values()).reduce(
+        (sum, entry) => sum + Math.max(0, entry.count - this.maxRepeats),
+        0
+      )
+    };
+  }
+};
+var spamKiller = new UltraSpamKiller();
+var ultraCleanFormat = winston.format.printf(({ level, message, timestamp: timestamp2, ...meta }) => {
+  const time = new Date(timestamp2).toLocaleTimeString();
+  let cleanMsg;
+  if (typeof message === "string") {
+    cleanMsg = message;
+  } else if (message && typeof message === "object") {
+    try {
+      cleanMsg = JSON.stringify(message, null, 0);
+      if (cleanMsg === "{}" || cleanMsg.includes("[object")) {
+        cleanMsg = `[${message.constructor?.name || "Object"}]`;
+      }
+    } catch {
+      cleanMsg = `[${typeof message}]`;
+    }
+  } else {
+    cleanMsg = String(message);
+  }
+  if (cleanMsg.length > 250) {
+    cleanMsg = cleanMsg.slice(0, 250) + "...";
+  }
+  let metaStr = "";
+  if (meta && Object.keys(meta).length > 0) {
+    try {
+      const metaJson = JSON.stringify(meta, null, 0);
+      if (metaJson !== "{}" && metaJson.length < 150) {
+        metaStr = ` ${metaJson}`;
+      }
+    } catch {
+    }
+  }
+  return `${time} [${level.toUpperCase()}] ${cleanMsg}${metaStr}`;
+});
 var logger;
 try {
+  const isDev = process.env.NODE_ENV !== "production";
+  const logLevel = process.env.LOG_LEVEL || (isDev ? "info" : "warn");
   logger = winston.createLogger({
-    level: process.env.LOG_LEVEL || "debug",
+    level: logLevel,
     format: winston.format.combine(
       winston.format.timestamp(),
-      winston.format.errors({ stack: true }),
-      winston.format.json()
+      winston.format.errors({ stack: true })
     ),
     transports: [
+      // Console with spam filtering
       new winston.transports.Console({
         format: winston.format.combine(
-          winston.format.colorize(),
-          winston.format.simple()
-        )
+          winston.format.colorize({ all: true }),
+          ultraCleanFormat
+        ),
+        // Override log method to add spam filtering
+        log(info, callback) {
+          if (spamKiller.shouldAllow(info.level, info.message)) {
+            return winston.transports.Console.prototype.log.call(this, info, callback);
+          }
+          callback();
+          return true;
+        }
       }),
+      // Error log file
       new winston.transports.File({
-        filename: path2.join(logDir, "server.log"),
-        maxsize: 10 * 1024 * 1024,
-        // 10MB
-        maxFiles: 5
+        filename: path2.join(logDir, "error.log"),
+        level: "error",
+        format: winston.format.combine(
+          winston.format.timestamp(),
+          winston.format.json()
+        ),
+        maxsize: 5242880,
+        // 5MB
+        maxFiles: 3
       })
-    ]
+    ],
+    // Handle exceptions without spam
+    exceptionHandlers: [
+      new winston.transports.File({
+        filename: path2.join(logDir, "exceptions.log"),
+        maxsize: 2097152,
+        // 2MB
+        maxFiles: 2
+      })
+    ],
+    exitOnError: false
   });
-  logger.info("\u{1F680} Winston logger initialized successfully");
+  if (isDev) {
+    logger.add(new winston.transports.File({
+      filename: path2.join(logDir, "combined.log"),
+      level: "info",
+      format: winston.format.combine(
+        winston.format.timestamp(),
+        winston.format.json()
+      ),
+      maxsize: 10485760,
+      // 10MB
+      maxFiles: 2
+    }));
+  }
+  console.log("\u{1F319} Ultra-clean logger initialized");
 } catch (err) {
-  console.error("\u274C Winston logger failed to initialize:", err);
+  console.error("Logger initialization failed:", err);
   logger = {
-    info: console.log,
-    error: console.error,
-    warn: console.warn,
-    debug: console.debug
+    info: (msg, meta) => spamKiller.shouldAllow("info", String(msg)) ? console.log(msg, meta) : void 0,
+    error: (msg, meta) => console.error(msg, meta),
+    warn: (msg, meta) => spamKiller.shouldAllow("warn", String(msg)) ? console.warn(msg, meta) : void 0,
+    debug: (msg, meta) => process.env.NODE_ENV === "development" && spamKiller.shouldAllow("debug", String(msg)) ? console.debug(msg, meta) : void 0
   };
 }
+setInterval(() => {
+  spamKiller.cleanup();
+}, 3e4);
+logger.getSpamStats = () => spamKiller.getStats();
+logger.cleanup = () => spamKiller.cleanup();
 process.on("unhandledRejection", (reason) => {
-  logger.error("\u{1F4A5} Unhandled Rejection", { reason });
+  if (spamKiller.shouldAllow("error", String(reason))) {
+    logger.error("Unhandled Rejection", { reason });
+  }
 });
 process.on("uncaughtException", (err) => {
-  logger.error("\u{1F4A5} Uncaught Exception", { err });
+  logger.error("Uncaught Exception", { err, stack: err.stack });
 });
 var logger_default = logger;
 
@@ -1445,10 +1515,9 @@ var upload = multer({
   }
 });
 async function registerRoutes(app2) {
-  logger_default.info("Initializing routes...");
-  logger_default.info("Setting up /api/health route...");
+  logger_default.info("\u26A1 Registering routes...");
+  logger_default.info("\u2705 Setting up /api/health route...");
   app2.get("/api/health", (req, res) => {
-    logger_default.info("Health check requested", { ip: req.ip, userAgent: req.get("User-Agent") });
     res.json({
       status: "ok",
       timestamp: (/* @__PURE__ */ new Date()).toISOString(),
@@ -1462,14 +1531,12 @@ async function registerRoutes(app2) {
     app2.use("/api/lunabug", lunaBugRoutes.default);
     logger_default.info("\u2705 LunaBug routes registered at /api/lunabug");
   } catch (error) {
-    logger_default.error("\u274C Failed to register LunaBug routes:", error);
-    logger_default.warn("\u{1F319} LunaBug will use fallback endpoints");
+    logger_default.error(`\u274C LunaBug routes failed: ${error instanceof Error ? error.message : "Unknown error"}`);
+    logger_default.info("\u{1F319} LunaBug will use client-side fallback mode");
   }
-  logger_default.info("Setting up /api/upload route...");
+  logger_default.info("\u{1F4C1} Setting up /api/upload route...");
   app2.post("/api/upload", requireAuth, upload.single("image"), async (req, res) => {
-    logger_default.info("Upload request received", { hasFile: !!req.file });
     if (!req.file) {
-      logger_default.error("No file uploaded");
       return res.status(400).json({ error: "No file uploaded" });
     }
     try {
@@ -1500,22 +1567,17 @@ async function registerRoutes(app2) {
         chatEnable: body.chatEnable === "true",
         chatSendPercent: Math.min(100, Math.max(0, parseInt(body.chatSendPercent) || 0))
       };
-      logger_default.info("Parsed upload data", parsedData);
       if (!parsedData.characterId || !parsedData.characterName) {
-        logger_default.error("Missing character ID or name");
         fs3.unlinkSync(req.file.path);
         return res.status(400).json({ error: "Character ID and name are required" });
       }
       const finalDir = path3.join(__dirname2, "..", "uploads", "characters", parsedData.characterName, parsedData.imageType);
       if (!fs3.existsSync(finalDir)) {
         fs3.mkdirSync(finalDir, { recursive: true });
-        logger_default.info("Created directory", { path: finalDir });
       }
       const finalPath = path3.join(finalDir, req.file.filename);
       fs3.renameSync(req.file.path, finalPath);
-      logger_default.info("File moved", { from: req.file.path, to: finalPath });
       const fileUrl = `/uploads/characters/${parsedData.characterName}/${parsedData.imageType}/${req.file.filename}`;
-      logger_default.info("Creating media upload in database...");
       const mediaUpload = await storage.createMediaUpload({
         characterId: parsedData.characterId,
         url: fileUrl,
@@ -1527,19 +1589,17 @@ async function registerRoutes(app2) {
         chatEnable: parsedData.chatEnable,
         chatSendPercent: parsedData.chatSendPercent
       });
-      logger_default.info("Media upload created", { id: mediaUpload.id });
       res.json({ url: fileUrl, media: mediaUpload });
     } catch (error) {
       if (req.file && fs3.existsSync(req.file.path)) {
         fs3.unlinkSync(req.file.path);
       }
-      logger_default.error("Error uploading file", { error });
+      logger_default.error("Upload error", { error: error instanceof Error ? error.message : "Unknown error" });
       res.status(500).json({ error: "Failed to upload file", details: error.message });
     }
   });
-  logger_default.info("Setting up auth routes...");
+  logger_default.info("\u{1F510} Setting up auth routes...");
   app2.get("/api/auth/me", requireAuth, async (req, res) => {
-    logger_default.info("Auth me request", { playerId: req.player?.id });
     try {
       const player = await storage.getPlayer(req.player.id);
       if (!player) {
@@ -1547,7 +1607,7 @@ async function registerRoutes(app2) {
       }
       res.json({ success: true, player });
     } catch (error) {
-      logger_default.error("Error fetching current player", { error });
+      logger_default.error("Auth error", { error: error instanceof Error ? error.message : "Unknown error" });
       res.status(500).json({ error: "Failed to fetch player data" });
     }
   });
@@ -1555,19 +1615,15 @@ async function registerRoutes(app2) {
     if (process.env.NODE_ENV === "production") {
       return res.status(403).json({ error: "Development login not available in production" });
     }
-    logger_default.info("Dev auth request received", { body: req.body });
     try {
       const { username } = req.body;
       if (!username || username.trim().length === 0) {
-        logger_default.warn("No username provided for dev auth");
         return res.status(400).json({ error: "Username is required" });
       }
       const sanitizedUsername = username.trim().substring(0, 50);
       const devTelegramId = `dev_${sanitizedUsername.toLowerCase().replace(/[^a-z0-9]/g, "_")}`;
-      logger_default.info("Dev login attempt", { username: sanitizedUsername, telegramId: devTelegramId });
       let player = await storage.getPlayerByTelegramId(devTelegramId);
       if (!player) {
-        logger_default.info("Creating new dev player...");
         player = await storage.createPlayer({
           telegramId: devTelegramId,
           username: sanitizedUsername,
@@ -1579,13 +1635,9 @@ async function registerRoutes(app2) {
           passiveIncomeRate: 0,
           isAdmin: false
         });
-        logger_default.info("New dev player created", { playerId: player.id });
         await savePlayerDataToJSON(player);
       } else {
-        logger_default.info("Existing dev player found, updating last login...");
-        await storage.updatePlayer(player.id, {
-          lastLogin: /* @__PURE__ */ new Date()
-        });
+        await storage.updatePlayer(player.id, { lastLogin: /* @__PURE__ */ new Date() });
         await savePlayerDataToJSON(player);
       }
       const sessionToken = generateSecureToken();
@@ -1594,57 +1646,32 @@ async function registerRoutes(app2) {
         token: sessionToken,
         expiresAt: getSessionExpiry()
       });
-      logger_default.info("Dev auth successful", { username: player.username, playerId: player.id });
-      res.json({
-        success: true,
-        player,
-        sessionToken
-      });
+      res.json({ success: true, player, sessionToken });
     } catch (error) {
-      logger_default.error("Dev auth error", { error, stack: error.stack });
+      logger_default.error("Dev auth error", { error: error instanceof Error ? error.message : "Unknown error" });
       res.status(500).json({ error: "Authentication failed", details: error.message });
     }
   });
-  logger_default.info("Setting up Telegram auth...");
+  logger_default.info("\u{1F4E8} Setting up Telegram auth...");
   app2.post("/api/auth/telegram", async (req, res) => {
-    logger_default.info("Telegram auth request received", { body: req.body });
     try {
       const { initData } = req.body;
       const botToken = process.env.TELEGRAM_BOT_TOKEN;
-      logger_default.info("Telegram auth check", {
-        hasBotToken: !!botToken,
-        hasInitData: !!initData,
-        initDataLength: initData?.length || 0
-      });
       if (!botToken) {
-        logger_default.error("Missing TELEGRAM_BOT_TOKEN");
         return res.status(500).json({ error: "Telegram authentication not configured" });
       }
       if (!initData) {
-        logger_default.error("Missing initData in request");
         return res.status(400).json({ error: "Missing initData" });
       }
-      logger_default.info("Parsing initData...");
       const validator = new AuthDataValidator({ botToken });
       const dataMap = new Map(new URLSearchParams(initData).entries());
-      logger_default.info("Parsed data map entries", { entries: Array.from(dataMap.entries()) });
-      logger_default.info("Validating Telegram data...");
       const validationResult = await validator.validate(dataMap);
-      logger_default.info("Validation result", { result: validationResult });
       if (!validationResult || !validationResult.id) {
-        logger_default.error("Invalid validation result or missing ID");
         return res.status(401).json({ error: "Invalid Telegram authentication" });
       }
       const telegramId = validationResult.id.toString();
-      logger_default.info("Telegram auth for user", { telegramId });
-      if (!telegramId) {
-        logger_default.error("Failed to extract Telegram ID");
-        return res.status(400).json({ error: "Missing Telegram user ID" });
-      }
-      logger_default.info("Looking up player by Telegram ID...");
       let player = await storage.getPlayerByTelegramId(telegramId);
       if (!player) {
-        logger_default.info("Creating new player...");
         player = await storage.createPlayer({
           telegramId,
           username: validationResult.username || validationResult.first_name || "TelegramUser",
@@ -1655,33 +1682,24 @@ async function registerRoutes(app2) {
           passiveIncomeRate: 0,
           isAdmin: false
         });
-        logger_default.info("New player created", { playerId: player.id });
         await savePlayerDataToJSON(player);
       } else {
-        logger_default.info("Existing player found, updating last login...");
-        await storage.updatePlayer(player.id, {
-          lastLogin: /* @__PURE__ */ new Date()
-        });
+        await storage.updatePlayer(player.id, { lastLogin: /* @__PURE__ */ new Date() });
         await savePlayerDataToJSON(player);
       }
       const sessionToken = generateSecureToken();
-      const session = await storage.createSession({
+      await storage.createSession({
         playerId: player.id,
         token: sessionToken,
         expiresAt: getSessionExpiry()
       });
-      logger_default.info("Telegram auth successful", { username: player.username, playerId: player.id });
-      res.json({
-        success: true,
-        player,
-        sessionToken
-      });
+      res.json({ success: true, player, sessionToken });
     } catch (error) {
-      logger_default.error("Telegram auth error", { error, stack: error.stack });
+      logger_default.error("Telegram auth error", { error: error instanceof Error ? error.message : "Unknown error" });
       res.status(500).json({ error: "Authentication failed", details: error.message });
     }
   });
-  logger_default.info("Setting up game data routes...");
+  logger_default.info("\u{1F3AE} Setting up game data routes...");
   app2.get("/api/upgrades", requireAuth, async (_req, res) => {
     try {
       const upgrades2 = getUpgradesFromMemory();
@@ -1713,11 +1731,11 @@ async function registerRoutes(app2) {
       const mediaUploads2 = await storage.getMediaUploads(characterId, includeHidden);
       res.json({ media: mediaUploads2 });
     } catch (error) {
-      logger_default.error("Error fetching media uploads", { error });
+      logger_default.error("Media fetch error", { error: error.message });
       res.status(500).json({ error: "Failed to fetch media uploads" });
     }
   });
-  logger_default.info("Setting up player routes...");
+  logger_default.info("\u{1F464} Setting up player routes...");
   app2.get("/api/player/me", requireAuth, async (req, res) => {
     try {
       const player = await storage.getPlayer(req.player.id);
@@ -1726,7 +1744,7 @@ async function registerRoutes(app2) {
       }
       res.json({ player });
     } catch (error) {
-      logger_default.error("Error fetching player", { error });
+      logger_default.error("Player fetch error", { error: error instanceof Error ? error.message : "Unknown" });
       res.status(500).json({ error: "Failed to fetch player data" });
     }
   });
@@ -1764,310 +1782,13 @@ async function registerRoutes(app2) {
         res.json({ player: updatedPlayer });
       }
     } catch (error) {
-      logger_default.error("Error updating player", { error });
+      logger_default.error("Player update error", { error: error instanceof Error ? error.message : "Unknown" });
       res.status(500).json({ error: "Failed to update player" });
     }
   });
-  app2.get("/api/player/upgrades", requireAuth, async (req, res) => {
-    try {
-      const playerUpgrades2 = await storage.getPlayerUpgrades(req.player.id);
-      res.json({ upgrades: playerUpgrades2 });
-    } catch (error) {
-      logger_default.error("Error fetching player upgrades", { error });
-      res.status(500).json({ error: "Failed to fetch player upgrades" });
-    }
-  });
-  app2.post("/api/player/upgrades", requireAuth, async (req, res) => {
-    try {
-      const validation = insertPlayerUpgradeSchema.safeParse({
-        ...req.body,
-        playerId: req.player.id
-      });
-      if (!validation.success) {
-        return res.status(400).json({ error: "Invalid upgrade data", details: validation.error });
-      }
-      const player = await storage.getPlayer(req.player.id);
-      if (!player) {
-        return res.status(404).json({ error: "Player not found" });
-      }
-      const upgrade = getUpgradeFromMemory(validation.data.upgradeId);
-      if (!upgrade) {
-        return res.status(404).json({ success: false, message: "Upgrade not found" });
-      }
-      const currentLevel = player.upgrades?.[validation.data.upgradeId] || 0;
-      const cost = Math.floor(upgrade.baseCost * Math.pow(upgrade.costMultiplier, currentLevel));
-      const playerPoints = typeof player.points === "string" ? parseFloat(player.points) : player.points;
-      if (playerPoints < cost) {
-        return res.status(400).json({ error: "Insufficient points" });
-      }
-      if (validation.data.level !== currentLevel + 1) {
-        return res.status(400).json({ error: "Invalid level increment" });
-      }
-      const playerUpgrade = await storage.setPlayerUpgrade(validation.data);
-      const upgrades2 = player.upgrades || {};
-      upgrades2[validation.data.upgradeId] = validation.data.level;
-      const updatedPlayer = await storage.updatePlayer(req.player.id, {
-        upgrades: upgrades2,
-        points: playerPoints - cost
-      });
-      if (updatedPlayer) {
-        await savePlayerDataToJSON(updatedPlayer);
-      }
-      res.json({ upgrade: playerUpgrade });
-    } catch (error) {
-      logger_default.error("Error setting player upgrade", { error });
-      res.status(500).json({ error: "Failed to set player upgrade" });
-    }
-  });
-  app2.get("/api/player/characters", requireAuth, async (req, res) => {
-    try {
-      const playerCharacters2 = await storage.getPlayerCharacters(req.player.id);
-      res.json({ characters: playerCharacters2 });
-    } catch (error) {
-      logger_default.error("Error fetching player characters", { error });
-      res.status(500).json({ error: "Failed to fetch player characters" });
-    }
-  });
-  app2.post("/api/player/characters/:characterId/unlock", requireAuth, async (req, res) => {
-    try {
-      const { characterId } = req.params;
-      const hasCharacter = await storage.hasCharacter(req.player.id, characterId);
-      if (hasCharacter) {
-        return res.status(400).json({ error: "Character already unlocked" });
-      }
-      const character = getCharacterFromMemory(characterId);
-      if (!character) {
-        return res.status(404).json({ success: false, message: "Character not found" });
-      }
-      const playerCharacter = await storage.unlockCharacter({
-        playerId: req.player.id,
-        characterId
-      });
-      const player = await storage.getPlayer(req.player.id);
-      if (player) {
-        const unlockedCharacters = Array.isArray(player.unlockedCharacters) ? player.unlockedCharacters : [];
-        if (!unlockedCharacters.includes(characterId)) {
-          unlockedCharacters.push(characterId);
-          const updatedPlayer = await storage.updatePlayer(req.player.id, { unlockedCharacters });
-          if (updatedPlayer) {
-            await savePlayerDataToJSON(updatedPlayer);
-          }
-        }
-      }
-      res.json({ character: playerCharacter });
-    } catch (error) {
-      logger_default.error("Error unlocking character", { error });
-      res.status(500).json({ error: "Failed to unlock character" });
-    }
-  });
-  logger_default.info("Setting up admin routes...");
-  app2.post("/api/admin/sync-data", requireAuth, requireAdmin, async (_req, res) => {
-    try {
-      await syncAllGameData();
-      res.json({ success: true, message: "Game data synchronized successfully" });
-    } catch (error) {
-      logger_default.error("Error syncing game data", { error });
-      res.status(500).json({ error: "Failed to sync game data" });
-    }
-  });
-  app2.get("/api/admin/upgrades", requireAuth, requireAdmin, async (req, res) => {
-    try {
-      const includeHidden = req.query.includeHidden === "true";
-      const upgrades2 = getUpgradesFromMemory(includeHidden);
-      res.json({ upgrades: upgrades2 });
-    } catch (error) {
-      logger_default.error("Error fetching upgrades for admin", { error });
-      res.status(500).json({ error: "Failed to fetch upgrades" });
-    }
-  });
-  app2.post("/api/admin/upgrades", requireAuth, requireAdmin, async (req, res) => {
-    try {
-      const validation = insertUpgradeSchema.safeParse(req.body);
-      if (!validation.success) {
-        return res.status(400).json({ error: "Invalid upgrade data", details: validation.error });
-      }
-      const upgrade = await storage.createUpgrade(validation.data);
-      await saveUpgradeToJSON(validation.data);
-      res.json({ upgrade, message: "Upgrade created, saved to JSON and DB" });
-    } catch (error) {
-      logger_default.error("Error creating upgrade", { error });
-      res.status(500).json({ error: "Failed to create upgrade" });
-    }
-  });
-  app2.get("/api/admin/upgrades/:id", requireAuth, requireAdmin, async (req, res) => {
-    try {
-      const { id } = req.params;
-      const upgrade = getUpgradeFromMemory(id);
-      if (!upgrade) {
-        return res.status(404).json({ error: "Upgrade not found" });
-      }
-      res.json({ upgrade });
-    } catch (error) {
-      logger_default.error("Error fetching upgrade", { error });
-      res.status(500).json({ error: "Failed to fetch upgrade" });
-    }
-  });
-  app2.patch("/api/admin/upgrades/:id", requireAuth, requireAdmin, async (req, res) => {
-    try {
-      const { id } = req.params;
-      const updates = req.body;
-      const updatedUpgrade = await storage.updateUpgrade(id, updates);
-      if (!updatedUpgrade) {
-        return res.status(404).json({ error: "Upgrade not found" });
-      }
-      await saveUpgradeToJSON(updatedUpgrade);
-      res.json({ upgrade: updatedUpgrade });
-    } catch (error) {
-      logger_default.error("Error updating upgrade", { error });
-      res.status(500).json({ error: "Failed to update upgrade" });
-    }
-  });
-  app2.delete("/api/admin/upgrades/:id", requireAuth, requireAdmin, async (req, res) => {
-    try {
-      const { id } = req.params;
-      const deleted = await storage.deleteUpgrade(id);
-      if (!deleted) {
-        return res.status(404).json({ error: "Upgrade not found" });
-      }
-      res.json({ success: true, message: "Upgrade deleted" });
-    } catch (error) {
-      logger_default.error("Error deleting upgrade", { error });
-      res.status(500).json({ error: "Failed to delete upgrade" });
-    }
-  });
-  app2.get("/api/admin/characters", requireAuth, requireAdmin, async (req, res) => {
-    try {
-      const includeHidden = req.query.includeHidden === "true";
-      const characters2 = getCharactersFromMemory(includeHidden);
-      res.json({ characters: characters2 });
-    } catch (error) {
-      logger_default.error("Error fetching characters for admin", { error });
-      res.status(500).json({ error: "Failed to fetch characters" });
-    }
-  });
-  app2.post("/api/admin/characters", requireAuth, requireAdmin, async (req, res) => {
-    try {
-      const validation = insertCharacterSchema.safeParse(req.body);
-      if (!validation.success) {
-        return res.status(400).json({ error: "Invalid character data", details: validation.error });
-      }
-      const character = await storage.createCharacter(validation.data);
-      await saveCharacterToJSON(validation.data);
-      res.json({ character, message: "Character created, saved to JSON and DB" });
-    } catch (error) {
-      logger_default.error("Error creating character", { error });
-      res.status(500).json({ error: "Failed to create character" });
-    }
-  });
-  app2.get("/api/admin/characters/:id", requireAuth, requireAdmin, async (req, res) => {
-    try {
-      const { id } = req.params;
-      const character = getCharacterFromMemory(id);
-      if (!character) {
-        return res.status(404).json({ error: "Character not found" });
-      }
-      res.json({ character });
-    } catch (error) {
-      logger_default.error("Error fetching character", { error });
-      res.status(500).json({ error: "Failed to fetch character" });
-    }
-  });
-  app2.patch("/api/admin/characters/:id", requireAuth, requireAdmin, async (req, res) => {
-    try {
-      const { id } = req.params;
-      const updates = req.body;
-      const updatedCharacter = await storage.updateCharacter(id, updates);
-      if (!updatedCharacter) {
-        return res.status(404).json({ error: "Character not found" });
-      }
-      await saveCharacterToJSON(updatedCharacter);
-      res.json({ character: updatedCharacter });
-    } catch (error) {
-      logger_default.error("Error updating character", { error });
-      res.status(500).json({ error: "Failed to update character" });
-    }
-  });
-  app2.delete("/api/admin/characters/:id", requireAuth, requireAdmin, async (req, res) => {
-    try {
-      const { id } = req.params;
-      const deleted = await storage.deleteCharacter(id);
-      if (!deleted) {
-        return res.status(404).json({ error: "Character not found" });
-      }
-      res.json({ success: true, message: "Character deleted" });
-    } catch (error) {
-      logger_default.error("Error deleting character", { error });
-      res.status(500).json({ error: "Failed to delete character" });
-    }
-  });
-  app2.get("/api/admin/levels", requireAuth, requireAdmin, async (_req, res) => {
-    try {
-      const levels2 = getLevelsFromMemory();
-      res.json({ levels: levels2 });
-    } catch (error) {
-      logger_default.error("Error fetching levels for admin", { error });
-      res.status(500).json({ error: "Failed to fetch levels" });
-    }
-  });
-  app2.post("/api/admin/levels", requireAuth, requireAdmin, async (req, res) => {
-    try {
-      const validation = insertLevelSchema.safeParse(req.body);
-      if (!validation.success) {
-        return res.status(400).json({ error: "Invalid level data", details: validation.error });
-      }
-      const level = await storage.createLevel(validation.data);
-      await saveLevelToJSON(validation.data);
-      res.json({ level, message: "Level created, saved to JSON and DB" });
-    } catch (error) {
-      logger_default.error("Error creating level", { error });
-      res.status(500).json({ error: "Failed to create level" });
-    }
-  });
-  app2.get("/api/admin/levels/:level", requireAuth, requireAdmin, async (req, res) => {
-    try {
-      const level = parseInt(req.params.level);
-      const levelData = getLevelFromMemory(level);
-      if (!levelData) {
-        return res.status(404).json({ error: "Level not found" });
-      }
-      res.json({ level: levelData });
-    } catch (error) {
-      logger_default.error("Error fetching level", { error });
-      res.status(500).json({ error: "Failed to fetch level" });
-    }
-  });
-  app2.patch("/api/admin/levels/:level", requireAuth, requireAdmin, async (req, res) => {
-    try {
-      const level = parseInt(req.params.level);
-      const updates = req.body;
-      updates.level = level;
-      const updatedLevel = await storage.updateLevel(level, updates);
-      if (!updatedLevel) {
-        return res.status(404).json({ error: "Level not found" });
-      }
-      await saveLevelToJSON(updatedLevel);
-      res.json({ level: updatedLevel });
-    } catch (error) {
-      logger_default.error("Error updating level", { error });
-      res.status(500).json({ error: "Failed to update level" });
-    }
-  });
-  app2.delete("/api/admin/levels/:level", requireAuth, requireAdmin, async (req, res) => {
-    try {
-      const level = parseInt(req.params.level);
-      const deleted = await storage.deleteLevel(level);
-      if (!deleted) {
-        return res.status(404).json({ error: "Level not found" });
-      }
-      res.json({ success: true, message: "Level deleted" });
-    } catch (error) {
-      logger_default.error("Error deleting level", { error });
-      res.status(500).json({ error: "Failed to delete level" });
-    }
-  });
-  logger_default.info("Creating HTTP server...");
+  logger_default.info("\u{1F680} Creating HTTP server...");
   const httpServer = createServer(app2);
-  logger_default.info("All routes registered successfully");
+  logger_default.info("\u2705 All routes registered successfully");
   return httpServer;
 }
 
@@ -2098,24 +1819,42 @@ var vite_config_default = defineConfig({
       "@": r("client", "src"),
       "@shared": r("shared"),
       "@assets": r("attached_assets"),
-      // New: single source of truth for game data JSONs
+      // Game data aliases
       "@data": r("main-gamedata"),
-      // Optional: direct shortcuts
-      "@master": r("main-gamedata", "master-data")
+      "@master": r("main-gamedata", "master-data"),
+      // 🌙 LUNABUG ALIAS - Use path.resolve for absolute path
+      "@lunabug": path4.resolve(r(), "LunaBug"),
+      // Alternative: direct file alias for init.js
+      "@lunabug/init": path4.resolve(r(), "LunaBug", "init.js")
     }
   },
   root: r("client"),
   build: {
     outDir: r("dist/public"),
-    emptyOutDir: true
+    emptyOutDir: true,
+    // Add rollup options to handle external dependencies
+    rollupOptions: {
+      // Don't bundle LunaBug - let it be external
+      external: (id) => {
+        return false;
+      }
+    }
   },
   server: {
     fs: {
-      strict: true,
-      // Allow serving JSON from main-gamedata via the new aliases
-      allow: [r("main-gamedata")],
-      deny: ["**/.*"]
-    }
+      strict: false,
+      // Allow access to parent directories
+      // Allow serving files from these directories
+      allow: [r(), r("main-gamedata"), r("LunaBug")],
+      deny: ["**/node_modules/**", "**/.git/**"]
+    },
+    // Add more lenient CORS for development
+    cors: true
+  },
+  // Optimize deps to prevent reload issues
+  optimizeDeps: {
+    include: [],
+    exclude: ["@lunabug/init"]
   }
 });
 
