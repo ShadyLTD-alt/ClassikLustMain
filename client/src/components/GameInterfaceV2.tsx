@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import GameLayout from "@/components/GameLayout";
 import { useGame } from "@/contexts/GameContext";
-import CharacterSelector from "@/components/CharacterSelector";
+import CharacterSelectionScrollable from "@/components/CharacterSelectionScrollable";
 import UpgradePanel from "@/components/UpgradePanel";
 import LevelUp from "@/components/LevelUp";
 import ChatModal from "@/components/ChatModal";
@@ -167,8 +167,8 @@ export default function GameInterfaceV2() {
       {/* USE EXISTING AdminFAB */}
       <AdminFAB onOpenDebugger={() => setShowDebugger(true)} />
 
-      {/* Modals - USING WORKING CHARACTER SELECTOR */}
-      {showCharacters && <CharacterSelector isOpen={showCharacters} onClose={() => setShowCharacters(false)} />}
+      {/* Modals - USING SCROLLABLE CHARACTER SELECTOR FOR PROPER GALLERY */}
+      {showCharacters && <CharacterSelectionScrollable isOpen={showCharacters} onClose={() => setShowCharacters(false)} />}
       {showUpgrades && <UpgradePanel isOpen={showUpgrades} onClose={() => setShowUpgrades(false)} />}
       {showLevel && <LevelUp isOpen={showLevel} onClose={() => setShowLevel(false)} />}
       {showChat && <ChatModal isOpen={showChat} onClose={() => setShowChat(false)} />}
