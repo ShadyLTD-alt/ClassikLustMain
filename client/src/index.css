@@ -203,6 +203,8 @@
   --shadow-xl: 0px 20px 25px -5px hsl(0 0% 0% / 0.50), 0px 8px 10px -6px hsl(0 0% 0% / 0.35);
   --shadow-2xl: 0px 25px 50px -12px hsl(0 0% 0% / 0.60);
 
+  /* Automatically computed borders - intensity can be controlled by the user by the --opaque-button-border-intensity setting */
+
   /* Fallback for older browsers */
   --sidebar-primary-border: hsl(var(--sidebar-primary));
   --sidebar-primary-border: hsl(from hsl(var(--sidebar-primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
@@ -312,6 +314,8 @@
   --shadow-lg: 0px 10px 15px -3px hsl(0 0% 0% / 0.45), 0px 4px 6px -4px hsl(0 0% 0% / 0.35);
   --shadow-xl: 0px 20px 25px -5px hsl(0 0% 0% / 0.50), 0px 8px 10px -6px hsl(0 0% 0% / 0.35);
   --shadow-2xl: 0px 25px 50px -12px hsl(0 0% 0% / 0.60);
+
+  /* Automatically computed borders - intensity can be controlled by the user by the --opaque-button-border-intensity setting */
 
   /* Fallback for older browsers */
   --sidebar-primary-border: hsl(var(--sidebar-primary));
@@ -477,5 +481,51 @@
 
   .animate-float-up {
     animation: float-up 2s ease-out forwards;
+  }
+
+  /* LustPoints Branding - Dark Neon Gradient with Glow */
+  .lust-brand {
+    background: linear-gradient(135deg, 
+      #e91e63 0%,   /* Dark Pink */
+      #9c27b0 50%,  /* Purple */
+      #673ab7 100%  /* Deep Purple */
+    );
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-shadow: 
+      0 0 10px rgba(233, 30, 99, 0.3),
+      0 0 20px rgba(156, 39, 176, 0.2),
+      0 0 30px rgba(103, 58, 183, 0.1);
+    filter: drop-shadow(0 0 8px rgba(233, 30, 99, 0.4));
+  }
+
+  /* LustPoints Background Variant */
+  .lust-brand-bg {
+    background: linear-gradient(135deg, 
+      rgba(233, 30, 99, 0.1) 0%,   /* Dark Pink */
+      rgba(156, 39, 176, 0.15) 50%,  /* Purple */
+      rgba(103, 58, 183, 0.1) 100%  /* Deep Purple */
+    );
+    border: 1px solid rgba(233, 30, 99, 0.3);
+    box-shadow: 
+      0 0 20px rgba(233, 30, 99, 0.1),
+      inset 0 0 20px rgba(156, 39, 176, 0.05);
+  }
+
+  /* LunaBug Branding */
+  .luna-brand {
+    background: linear-gradient(135deg, 
+      #7c3aed 0%,   /* Purple */
+      #c084fc 50%,  /* Light Purple */
+      #a855f7 100%  /* Medium Purple */
+    );
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-shadow: 
+      0 0 10px rgba(124, 58, 237, 0.4),
+      0 0 20px rgba(192, 132, 252, 0.3);
+    filter: drop-shadow(0 0 6px rgba(124, 58, 237, 0.5));
   }
 }
