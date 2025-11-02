@@ -6,18 +6,24 @@ import CharacterSelector from "@/components/CharacterSelector";
 import UpgradePanel from "@/components/UpgradePanel";
 import LevelUp from "@/components/LevelUp";
 import ChatModal from "@/components/ChatModal";
+import AdminPanel from "@/components/AdminPanel";
+import { AdminFAB } from "@/components/AdminFAB";
+import ImageUploader from "@/components/ImageUploader";
 import { apiRequest } from "@/lib/queryClient";
-import { User, Crown, Shield } from "lucide-react";
+import { User, Crown } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import AdminMenu from "@/components/AdminMenu";
+import { debouncedSave } from "@/utils/debouncedSave";
 
 export default function GameInterfaceV2() {
-  const { state } = useGame();
+  const { state, tap } = useGame();
   const [showCharacters, setShowCharacters] = useState(false);
   const [showUpgrades, setShowUpgrades] = useState(false);
   const [showLevel, setShowLevel] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
+  const [showImageUploader, setShowImageUploader] = useState(false);
+  const [showDebugger, setShowDebugger] = useState(false);
+  const [tapEffects, setTapEffects] = useState<Array<{id: string, x: number, y: number, value: number}>>([]);
 
   // Fetch current character data
   const { data: currentCharacter } = useQuery({
@@ -29,6 +35,30 @@ export default function GameInterfaceV2() {
     },
     enabled: !!state?.selectedCharacterId,
   });
+
+  const handleTap = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!state || state.energy <= 0) return;
+    
+    // Get tap position for animation
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    
+    // Calculate tap value (base 1, upgrades calculated in context)
+    const tapValue = 1; // This will be enhanced by GameContext tap() logic
+    
+    // Add floating animation
+    const effectId = crypto.randomUUID();
+    setTapEffects(prev => [...prev, { id: effectId, x, y, value: tapValue }]);
+    
+    // Remove animation after it completes
+    setTimeout(() => {
+      setTapEffects(prev => prev.filter(e => e.id !== effectId));
+    }, 2000);
+    
+    // Trigger game tap - this will handle LP/energy updates and use debouncedSave
+    tap();
+  };
 
   const getCharacterImage = () => {
     if (state?.displayImage) return state.displayImage;
@@ -50,9 +80,10 @@ export default function GameInterfaceV2() {
           <div className="text-sm text-gray-400 mb-4">Tap to earn points!</div>
           
           <div className="relative">
-            {/* Character Display Area */}
+            {/* Character Display Area - RESTORED TAP HANDLER */}
             <div
               className="w-80 h-80 mx-auto rounded-2xl bg-gradient-to-br from-purple-800/40 via-black/50 to-pink-800/40 border-2 border-purple-500/40 flex items-center justify-center cursor-pointer hover:border-purple-400/60 transition-all active:scale-[0.98] overflow-hidden relative group"
+              onClick={handleTap}
               style={{
                 boxShadow: '0 8px 32px rgba(168, 85, 247, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.1)'
               }}
@@ -102,34 +133,57 @@ export default function GameInterfaceV2() {
                 </div>
               )}
             </div>
+
+            {/* Floating +points animations */}
+            {tapEffects.map(effect => (
+              <div
+                key={effect.id}
+                className="absolute pointer-events-none text-green-400 font-bold text-xl animate-bounce"
+                style={{
+                  left: `${effect.x}px`,
+                  top: `${effect.y}px`,
+                  transform: 'translate(-50%, -50%)',
+                  animation: 'float-up 2s ease-out forwards'
+                }}
+              >
+                +{effect.value}
+              </div>
+            ))}
           </div>
           
-          {/* Energy line removed */}
+          {/* Energy line removed as requested */}
         </div>
-
-        {/* Admin FAB */}
-        {state?.isAdmin && (
-          <button
-            onClick={() => setShowAdmin(true)}
-            className="fixed bottom-24 right-6 z-50 w-12 h-12 rounded-full bg-gradient-to-br from-yellow-500 to-orange-600 text-white shadow-xl border border-yellow-300/20 hover:scale-105 active:scale-95 transition-transform"
-            title="Admin Tools"
-          >
-            <Shield className="w-6 h-6 mx-auto" />
-          </button>
-        )}
       </div>
 
-      {/* Admin Menu */}
-      {showAdmin && state?.isAdmin && (
-        <AdminMenu isOpen={showAdmin} onClose={() => setShowAdmin(false)} />
-      )}
+      {/* USE YOUR EXISTING AdminFAB */}
+      <AdminFAB onOpenDebugger={() => setShowDebugger(true)} />
 
       {/* Modals */}
       {showCharacters && <CharacterSelector isOpen={showCharacters} onClose={() => setShowCharacters(false)} />}
       {showUpgrades && <UpgradePanel isOpen={showUpgrades} onClose={() => setShowUpgrades(false)} />}
       {showLevel && <LevelUp isOpen={showLevel} onClose={() => setShowLevel(false)} />}
       {showChat && <ChatModal isOpen={showChat} onClose={() => setShowChat(false)} />}
+      {showAdmin && <AdminPanel />}
+      {showImageUploader && <ImageUploader adminMode={true} />}
+      {showDebugger && <div className="fixed inset-0 z-50 bg-black/80 text-white p-4">DEBUG PANEL PLACEHOLDER</div>}
       
+      {/* CSS Animation for floating points */}
+      <style jsx>{`
+        @keyframes float-up {
+          0% {
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1);
+          }
+          50% {
+            opacity: 1;
+            transform: translate(-50%, -120px) scale(1.2);
+          }
+          100% {
+            opacity: 0;
+            transform: translate(-50%, -180px) scale(0.8);
+          }
+        }
+      `}</style>
     </GameLayout>
   );
 }
