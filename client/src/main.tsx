@@ -11,8 +11,8 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
 
-// Import LunaBug bootstrap - USE ABSOLUTE PATH FROM PROJECT ROOT
-import { initLunaBug } from "/LunaBug/init.js";
+// 🌙 Import LunaBug using Vite alias - BULLETPROOF!
+import { initLunaBug } from "@lunabug/init.js";
 
 /**
  * Initialize LunaBug FIRST - before React even starts
@@ -29,26 +29,69 @@ async function bootstrap() {
     console.error('🌙❌ LunaBug failed to initialize:', error);
     console.log('🌙🚨 Creating emergency fallback...');
     
-    // Create minimal emergency fallback so UI doesn't crash
+    // Create comprehensive emergency fallback so UI doesn't crash
     (window as any).LunaBug = {
-      status: () => ({ error: 'Init failed', fallback: true, provider: 'emergency' }),
-      chat: (msg: string) => Promise.resolve({ response: `🌙 LunaBug Emergency Mode: "${msg}" received, but AI is unavailable. Add API keys to Secrets.`, provider: 'emergency' }),
-      emergency: () => console.log('🚨 LunaBug Emergency Fallback Active - Add MISTRAL_API_KEY or PERPLEXITY_API_KEY'),
-      functions: { 
-        list: () => [], 
-        run: (name: string) => `Function ${name} unavailable - LunaBug init failed`,
-        reload: () => 'Cannot reload - LunaBug init failed'
+      // Basic status
+      status: () => ({
+        core: 'emergency',
+        error: 'Init failed',
+        fallback: true,
+        provider: 'emergency',
+        version: '1.0.1-emergency',
+        timestamp: new Date().toISOString()
+      }),
+      
+      // Chat functionality
+      chat: (msg: string) => Promise.resolve({
+        response: `🌙 LunaBug Emergency Mode Active\n\nYour message: "${msg}"\n\nLunaBug failed to initialize properly. This could be due to:\n- Missing LunaBug files\n- Import path issues\n- Build configuration problems\n\nTo fix:\n1. Check that LunaBug directory exists\n2. Verify vite.config.ts has @lunabug alias\n3. Add API keys to Replit Secrets for full functionality`,
+        provider: 'emergency',
+        fallbackCount: 999
+      }),
+      
+      // Emergency mode indicator
+      emergency: () => {
+        console.log('🚨 LunaBug Emergency Fallback Active');
+        console.log('🚨 Possible causes: Missing files, import errors, or build issues');
+        console.log('🚨 Check console for initialization errors above');
+        return 'Emergency mode active - check console';
       },
+      
+      // Function registry
+      functions: {
+        list: () => [{
+          name: 'emergency_mode',
+          description: 'LunaBug emergency fallback',
+          enabled: true,
+          category: 'emergency'
+        }],
+        run: (name: string) => `Emergency: Function ${name} unavailable - LunaBug init failed`,
+        reload: () => 'Cannot reload - LunaBug initialization failed'
+      },
+      
+      // Core system
       core: {
-        logEvent: (type: string, data: any) => console.log(`🌙 [${type}]`, data),
-        getStatus: () => ({ emergency: true, initialized: false }),
-        runCommand: (cmd: string) => console.log(`🌙 Emergency: ${cmd} not available`)
+        logEvent: (type: string, data: any) => console.log(`🌙 [EMERGENCY-${type}]`, data),
+        getStatus: () => ({ emergency: true, initialized: false, error: 'Init failed' }),
+        runCommand: (cmd: string) => {
+          console.log(`🌙 Emergency: Command ${cmd} not available`);
+          return 'Command unavailable in emergency mode';
+        }
       },
-      metrics: () => ({ provider: 'emergency', requestCount: 0, successRate: 0 }),
+      
+      // Metrics
+      metrics: () => ({
+        provider: 'emergency',
+        requestCount: 0,
+        successRate: 0,
+        errors: ['Initialization failed'],
+        uptime: 0,
+        mode: 'emergency_fallback'
+      }),
+      
       version: '1.0.1-emergency'
     };
     
-    console.log('🌙✅ Emergency fallback created - UI will not crash');
+    console.log('🌙✅ Emergency fallback created - UI will not crash on undefined LunaBug');
   }
   
   // Now initialize React with LunaBug watching (or emergency fallback)
@@ -56,7 +99,7 @@ async function bootstrap() {
   const root = createRoot(document.getElementById("root")!);
   root.render(<App />);
   
-  // Log successful React initialization to LunaBug
+  // Log successful React initialization
   if ((window as any).LunaBug?.core) {
     (window as any).LunaBug.core.logEvent('react_initialized', {
       timestamp: new Date().toISOString(),
@@ -74,18 +117,20 @@ bootstrap().catch(error => {
   console.error('🚨 Bootstrap failed catastrophically:', error);
   
   // Last resort emergency fallback - start React without any LunaBug
-  console.log('🚨 LAST RESORT: Starting React in isolation...');
+  console.log('🚨 LAST RESORT: Starting React in complete isolation...');
   
-  // Ensure we don't crash on undefined LunaBug calls
+  // Absolute minimal fallback to prevent crashes
   (window as any).LunaBug = {
-    status: () => ({ catastrophicFailure: true }),
-    chat: () => Promise.resolve({ response: 'LunaBug catastrophic failure - system offline' }),
-    emergency: () => console.error('🚨 LunaBug catastrophic failure mode'),
-    functions: { list: () => [], run: () => 'System offline' }
+    status: () => ({ catastrophicFailure: true, mode: 'isolation' }),
+    chat: () => Promise.resolve({ response: 'LunaBug catastrophic failure - system completely offline' }),
+    emergency: () => console.error('🚨 LunaBug catastrophic failure - system in isolation mode'),
+    functions: { list: () => [], run: () => 'System offline' },
+    core: { logEvent: () => {}, getStatus: () => ({ offline: true }), runCommand: () => 'Offline' },
+    metrics: () => ({ error: 'System offline' })
   };
   
   const root = createRoot(document.getElementById("root")!);
   root.render(<App />);
   
-  console.log('🚨 React started in emergency mode - LunaBug offline');
+  console.log('🚨 React started in isolation mode - LunaBug completely offline');
 });
