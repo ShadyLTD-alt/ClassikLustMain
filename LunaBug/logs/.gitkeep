@@ -1,0 +1,10 @@
+# LunaBug Logs Directory
+# 
+# This directory will contain:
+# - Debug session logs
+# - Error reports 
+# - Performance metrics
+# - Achievement tracking
+# - Emergency dumps
+#
+# All logs are also cached in localStorage for persistence

@@ -1,0 +1,7 @@
+# LunaBug Cache Directory
+#
+# This directory stores:
+# - IndexedDB cache files
+# - localStorage backups
+# - Session data
+# - Temporary analysis results

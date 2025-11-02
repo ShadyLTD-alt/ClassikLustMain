@@ -1,0 +1,53 @@
+{
+  "name": "LunaBug",
+  "version": "1.0.0",
+  "description": "Standalone AI-powered debugging system for ClassikLust",
+  "author": "Steven",
+  "created": "2025-11-02",
+  "config": {
+    "standalone": true,
+    "bootPriority": "maximum",
+    "emergencyMode": true,
+    "maxLogsInMemory": 2000,
+    "maxCriticalLogs": 500,
+    "maxDebugHistory": 100,
+    "autoInitialize": true,
+    "modules": {
+      "database": {
+        "enabled": true,
+        "monitorQueries": true,
+        "detectSchemaIssues": true,
+        "maxQueryLog": 500
+      },
+      "gameplay": {
+        "enabled": true,
+        "monitorTaps": true,
+        "trackPerformance": true,
+        "trackAchievements": true
+      },
+      "ai": {
+        "enabled": true,
+        "endpoint": "/api/lunabug",
+        "fallbackEndpoint": "/api/mistral",
+        "maxChatHistory": 50
+      }
+    },
+    "ui": {
+      "theme": "dark",
+      "branding": {
+        "primary": "#7c3aed",
+        "secondary": "#c084fc",
+        "accent": "#a855f7"
+      },
+      "animations": true,
+      "emergencyOverlay": true
+    },
+    "api": {
+      "mistralEnabled": false,
+      "mistralApiKey": "",
+      "mistralModel": "mistral-large-latest",
+      "timeout": 30000,
+      "retryAttempts": 3
+    }
+  }
+}
