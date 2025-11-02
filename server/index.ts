@@ -81,11 +81,11 @@ app.use((req, res, next) => {
   let lunaRouter: any = null;
   let setLunaInstance: any = null;
   try {
-    const { default: LunaBug } = await import('../LunaBug/luna.js');
+    const { initLunaBug } = await import('../LunaBug/luna.js');
     const lunaApi = await import('./routes/luna.js');
     lunaRouter = lunaApi.router;
     setLunaInstance = lunaApi.setLunaInstance;
-    luna = new LunaBug();
+    luna = initLunaBug(); // Use the convenience function
     setLunaInstance(luna);
     logger.info('✅ Luna Bug initialized');
   } catch (err: any) {
