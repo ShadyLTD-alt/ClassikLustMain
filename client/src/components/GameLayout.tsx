@@ -1,6 +1,8 @@
-import React from "react";
+import React, { useState } from "react";
 import { TopBar } from "@/components/TopBar";
 import BottomNav from "@/components/BottomNav";
+import { AdminFAB } from "@/components/AdminFAB";
+import { MistralDebugger } from "@/components/MistralDebugger";
 import ChatModal from "@/components/ChatModal";
 import ModalPortal from "@/components/ModalPortal";
 import { useGame } from "@/contexts/GameContext";
@@ -21,6 +23,8 @@ export default function GameLayout({
   onOpenLevel: () => void;
 }) {
   const { state } = useGame();
+  const [showLunaBugDebugger, setShowLunaBugDebugger] = useState(false);
+  
   const { data: player } = useQuery({
     queryKey: ['/api/player/me'],
     queryFn: async () => (await (await apiRequest('GET', '/api/player/me')).json()),
@@ -39,6 +43,15 @@ export default function GameLayout({
         onUpgrades={onOpenUpgrades}
         onChat={onOpenChat}
         onLevel={onOpenLevel}
+      />
+      
+      {/* Admin FAB with LunaBug access */}
+      <AdminFAB onOpenDebugger={() => setShowLunaBugDebugger(true)} />
+      
+      {/* LunaBug Debugger Modal */}
+      <MistralDebugger 
+        isOpen={showLunaBugDebugger} 
+        onClose={() => setShowLunaBugDebugger(false)} 
       />
     </div>
   );
