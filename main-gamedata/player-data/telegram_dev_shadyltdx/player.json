@@ -2,9 +2,9 @@
   "id": "8e2e5ac9-d623-4daa-b797-ea332a805d31",
   "telegramId": "dev_shadyltdx",
   "username": "ShadyLTDx",
-  "points": "7948",
-  "energy": 1055,
-  "maxEnergy": 21024,
+  "points": "8089",
+  "energy": 1412,
+  "maxEnergy": 3004,
   "level": 2,
   "experience": 0,
   "passiveIncomeRate": 210,
@@ -23,6 +23,6 @@
     "frost",
     "shadow"
   ],
-  "lastLogin": "2025-11-01T22:55:29.543Z",
+  "lastLogin": "2025-11-02T17:41:15.039Z",
   "lastEnergyUpdate": "2025-11-01T19:28:33.742Z"
 }
