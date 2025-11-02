@@ -110,7 +110,7 @@ export default function LunaBugDebugger({ isOpen, onClose }: LunaBugDebuggerProp
           'Authorization': `Bearer ${apiKey}`
         },
         body: JSON.stringify({
-          model: 'mistral-7b-instruct-v0.1', // or whatever model you prefer
+          model: 'open-mistral-7b', // or whatever model you prefer
           messages: [
             {
               role: 'system',
@@ -194,7 +194,7 @@ export default function LunaBugDebugger({ isOpen, onClose }: LunaBugDebuggerProp
           'Authorization': `Bearer ${apiKey}`
         },
         body: JSON.stringify({
-          model: 'mistral-7b-instruct-v0.1',
+          model: 'open-mistral-7b',
           messages: [
             { 
               role: 'system', 
