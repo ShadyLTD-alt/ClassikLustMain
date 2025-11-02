@@ -16,6 +16,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import ImageUploader from '@/components/ImageUploader';
+import { safeStringify, safeParseJson, debugJSON, prepareFormDataForAPI, validateFormData } from '@/utils/safeJson';
 import type { UpgradeConfig, CharacterConfig, LevelConfig, ThemeConfig } from '@shared/gameConfig';
 
 export default function AdminPanel() {
@@ -43,23 +44,37 @@ export default function AdminPanel() {
     }
   });
 
-  // Mutations for server sync
+  // FIXED: Mutations using safe JSON utilities
   const saveUpgradeMutation = useMutation({
     mutationFn: async (upgrade: UpgradeConfig) => {
       const existing = upgrades.find(u => u.id === upgrade.id);
       const method = existing ? 'PATCH' : 'POST';
       const url = existing ? `/api/admin/upgrades/${upgrade.id}` : '/api/admin/upgrades';
+      
+      // Use safe JSON utilities
+      const cleanedData = prepareFormDataForAPI(upgrade);
+      debugJSON(cleanedData, 'ADMIN UPGRADE SAVE');
+      
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`
       };
       if (adminToken) headers['x-admin-token'] = adminToken;
-      const response = await fetch(url, { method, headers, body: JSON.stringify(upgrade) });
+      
+      const response = await fetch(url, { 
+        method, 
+        headers, 
+        body: safeStringify(cleanedData)  // ✅ SAFE STRINGIFY!
+      });
+      
       if (!response.ok) {
         const errorText = await response.text();
+        console.error('🔥 Upgrade save error response:', errorText);
         throw new Error(`Failed to save upgrade: ${errorText}`);
       }
-      return response.json();
+      
+      const responseText = await response.text();
+      return safeParseJson(responseText);  // ✅ SAFE PARSE!
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['/api/upgrades'] });
@@ -68,6 +83,7 @@ export default function AdminPanel() {
       setEditingUpgrade(null);
     },
     onError: (error) => {
+      console.error('🔥 Upgrade save mutation error:', error);
       toast({ title: 'Error saving upgrade', description: error.message, variant: 'destructive' });
     }
   });
@@ -77,17 +93,31 @@ export default function AdminPanel() {
       const existing = characters.find(c => c.id === character.id);
       const method = existing ? 'PATCH' : 'POST';
       const url = existing ? `/api/admin/characters/${character.id}` : '/api/admin/characters';
+      
+      // Use safe JSON utilities
+      const cleanedData = prepareFormDataForAPI(character);
+      debugJSON(cleanedData, 'ADMIN CHARACTER SAVE');
+      
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`
       };
       if (adminToken) headers['x-admin-token'] = adminToken;
-      const response = await fetch(url, { method, headers, body: JSON.stringify(character) });
+      
+      const response = await fetch(url, { 
+        method, 
+        headers, 
+        body: safeStringify(cleanedData)  // ✅ SAFE STRINGIFY!
+      });
+      
       if (!response.ok) {
         const errorText = await response.text();
+        console.error('🔥 Character save error response:', errorText);
         throw new Error(`Failed to save character: ${errorText}`);
       }
-      return response.json();
+      
+      const responseText = await response.text();
+      return safeParseJson(responseText);  // ✅ SAFE PARSE!
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['/api/characters'] });
@@ -96,6 +126,7 @@ export default function AdminPanel() {
       setEditingCharacter(null);
     },
     onError: (error) => {
+      console.error('🔥 Character save mutation error:', error);
       toast({ title: 'Error saving character', description: error.message, variant: 'destructive' });
     }
   });
@@ -105,17 +136,31 @@ export default function AdminPanel() {
       const existing = levelConfigs.find(l => l.level === level.level);
       const method = existing ? 'PATCH' : 'POST';
       const url = existing ? `/api/admin/levels/${level.level}` : '/api/admin/levels';
+      
+      // Use safe JSON utilities
+      const cleanedData = prepareFormDataForAPI(level);
+      debugJSON(cleanedData, 'ADMIN LEVEL SAVE');
+      
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`
       };
       if (adminToken) headers['x-admin-token'] = adminToken;
-      const response = await fetch(url, { method, headers, body: JSON.stringify(level) });
+      
+      const response = await fetch(url, { 
+        method, 
+        headers, 
+        body: safeStringify(cleanedData)  // ✅ SAFE STRINGIFY!
+      });
+      
       if (!response.ok) {
         const errorText = await response.text();
+        console.error('🔥 Level save error response:', errorText);
         throw new Error(`Failed to save level: ${errorText}`);
       }
-      return response.json();
+      
+      const responseText = await response.text();
+      return safeParseJson(responseText);  // ✅ SAFE PARSE!
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['/api/levels'] });
@@ -124,6 +169,7 @@ export default function AdminPanel() {
       setEditingLevel(null);
     },
     onError: (error) => {
+      console.error('🔥 Level save mutation error:', error);
       toast({ title: 'Error saving level', description: error.message, variant: 'destructive' });
     }
   });
@@ -182,26 +228,41 @@ export default function AdminPanel() {
     }
   });
 
-  // Player admin actions
+  // Player admin actions - FIXED TO USE SAFE JSON
   const updatePlayerMutation = useMutation({
     mutationFn: async ({ playerId, updates }: { playerId: string, updates: any }) => {
+      const cleanedUpdates = prepareFormDataForAPI(updates);
+      debugJSON(cleanedUpdates, 'ADMIN PLAYER UPDATE');
+      
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`
       };
       if (adminToken) headers['x-admin-token'] = adminToken;
+      
       const response = await fetch(`/api/admin/players/${playerId}`, { 
         method: 'PATCH', 
         headers, 
-        body: JSON.stringify(updates) 
+        body: safeStringify(cleanedUpdates)  // ✅ SAFE STRINGIFY!
       });
-      if (!response.ok) throw new Error('Failed to update player');
-      return response.json();
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('🔥 Player update error response:', errorText);
+        throw new Error(`Failed to update player: ${errorText}`);
+      }
+      
+      const responseText = await response.text();
+      return safeParseJson(responseText);  // ✅ SAFE PARSE!
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/players'] });
       toast({ title: 'Player updated', description: 'Player data saved successfully.' });
       setEditingPlayer(null);
+    },
+    onError: (error) => {
+      console.error('🔥 Player update mutation error:', error);
+      toast({ title: 'Error updating player', description: error.message, variant: 'destructive' });
     }
   });
 
@@ -264,7 +325,6 @@ export default function AdminPanel() {
   return (
     <Dialog>
       <DialogTrigger asChild>
-        {/* CHANGED FROM SETTINGS TO SHIELD TO AVOID DUPLICATE WITH ADMINFAB */}
         <Button variant="outline" size="icon" className="bg-purple-600/10 border-purple-500/30 hover:bg-purple-600/20">
           <Shield className="w-4 h-4" />
         </Button>
@@ -794,7 +854,7 @@ export default function AdminPanel() {
               )}
             </TabsContent>
 
-            {/* IMAGES TAB - YOUR EXISTING FULL IMAGEUPLOADER */}
+            {/* IMAGES TAB */}
             <TabsContent value="images" className="flex-1 overflow-hidden">
               <div className="h-full">
                 <ImageUploader adminMode={true} />
@@ -928,16 +988,20 @@ export default function AdminPanel() {
                       
                       <div className="flex gap-2">
                         <Button onClick={() => {
+                          const cleanedUpdates = prepareFormDataForAPI({
+                            username: editingPlayer.username,
+                            level: editingPlayer.level,
+                            lustPoints: editingPlayer.lustPoints,
+                            lustGems: editingPlayer.lustGems,
+                            energy: editingPlayer.energy,
+                            isAdmin: editingPlayer.isAdmin
+                          });
+                          
+                          debugJSON(cleanedUpdates, 'ADMIN PLAYER EDIT SAVE');
+                          
                           updatePlayerMutation.mutate({
                             playerId: editingPlayer.id,
-                            updates: {
-                              username: editingPlayer.username,
-                              level: editingPlayer.level,
-                              lustPoints: editingPlayer.lustPoints,
-                              lustGems: editingPlayer.lustGems,
-                              energy: editingPlayer.energy,
-                              isAdmin: editingPlayer.isAdmin
-                            }
+                            updates: cleanedUpdates
                           });
                           setShowPlayerDetails(false);
                         }} disabled={updatePlayerMutation.isPending}>
