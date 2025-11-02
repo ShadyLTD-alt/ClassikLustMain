@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import GameLayout from "@/components/GameLayout";
 import { useGame } from "@/contexts/GameContext";
-import CharacterSelectionScrollable from "@/components/CharacterSelectionScrollable";
+import CharacterSelector from "@/components/CharacterSelector";
 import UpgradePanel from "@/components/UpgradePanel";
 import LevelUp from "@/components/LevelUp";
 import ChatModal from "@/components/ChatModal";
@@ -39,9 +39,8 @@ export default function GameInterfaceV2() {
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
     
-    // Calculate tap value based on upgrades (this will be enhanced by GameContext)
-    const baseTapValue = 1;
-    const tapValue = baseTapValue; // GameContext tap() will handle upgrade multipliers
+    // Calculate tap value (GameContext will handle boost multipliers)
+    const tapValue = state.lastTapValue || 1;
     
     // Add floating animation
     const effectId = crypto.randomUUID();
@@ -52,7 +51,7 @@ export default function GameInterfaceV2() {
       setTapEffects(prev => prev.filter(e => e.id !== effectId));
     }, 2000);
     
-    // Trigger game tap - this will handle LP/energy updates and use debouncedSave
+    // Trigger game tap - this will handle LP/energy updates, boosts, and debouncedSave
     tap();
   };
 
@@ -84,6 +83,16 @@ export default function GameInterfaceV2() {
                 boxShadow: '0 8px 32px rgba(168, 85, 247, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.1)'
               }}
             >
+              {/* Boost Active Overlay */}
+              {state?.boostActive && (
+                <div className="absolute inset-0 rounded-2xl overflow-hidden pointer-events-none">
+                  <div className="absolute inset-0 bg-gradient-to-r from-orange-400/20 via-yellow-400/20 to-orange-400/20 animate-pulse" />
+                  <div className="absolute top-4 left-4 bg-orange-500/90 text-white text-xs font-bold px-2 py-1 rounded-full border border-orange-300">
+                    {state.boostMultiplier}x BOOST
+                  </div>
+                </div>
+              )}
+              
               {/* Ripple effect overlay */}
               <div className="absolute inset-0 rounded-2xl overflow-hidden pointer-events-none">
                 <div className="absolute inset-0 bg-purple-400/10 opacity-0 group-active:opacity-100 transition-opacity duration-150" />
@@ -116,7 +125,7 @@ export default function GameInterfaceV2() {
                 </div>
               )}
               
-              {/* Character name overlay - FIXED LAYOUT */}
+              {/* Character name overlay */}
               {currentCharacter && (
                 <div className="absolute bottom-4 left-4 right-4 bg-black/60 backdrop-blur-sm rounded-lg px-3 py-2 border border-purple-400/30">
                   <div className="flex items-center justify-between">
@@ -134,11 +143,13 @@ export default function GameInterfaceV2() {
               )}
             </div>
 
-            {/* Floating +points animations */}
+            {/* Floating +points animations - NOW WITH BOOST STYLING */}
             {tapEffects.map(effect => (
               <div
                 key={effect.id}
-                className="absolute pointer-events-none text-green-400 font-bold text-xl z-10"
+                className={`absolute pointer-events-none font-bold text-xl z-10 ${
+                  state?.boostActive ? 'text-orange-400' : 'text-green-400'
+                }`}
                 style={{
                   left: `${effect.x}px`,
                   top: `${effect.y}px`,
@@ -146,20 +157,18 @@ export default function GameInterfaceV2() {
                   animation: 'float-up 2s ease-out forwards'
                 }}
               >
-                +{effect.value}
+                +{effect.value}{state?.boostActive ? ' ⚡' : ''}
               </div>
             ))}
           </div>
-          
-          {/* NO ENERGY LINE - REMOVED COMPLETELY */}
         </div>
       </div>
 
       {/* USE EXISTING AdminFAB */}
       <AdminFAB onOpenDebugger={() => setShowDebugger(true)} />
 
-      {/* Modals - USING SCROLLABLE CHARACTER SELECTOR */}
-      {showCharacters && <CharacterSelectionScrollable isOpen={showCharacters} onClose={() => setShowCharacters(false)} />}
+      {/* Modals - USING WORKING CHARACTER SELECTOR */}
+      {showCharacters && <CharacterSelector isOpen={showCharacters} onClose={() => setShowCharacters(false)} />}
       {showUpgrades && <UpgradePanel isOpen={showUpgrades} onClose={() => setShowUpgrades(false)} />}
       {showLevel && <LevelUp isOpen={showLevel} onClose={() => setShowLevel(false)} />}
       {showChat && <ChatModal isOpen={showChat} onClose={() => setShowChat(false)} />}
@@ -176,7 +185,10 @@ export default function GameInterfaceV2() {
               <pre className="text-xs mt-1 text-gray-300">{JSON.stringify({
                 level: state?.level,
                 lustPoints: state?.lustPoints,
+                lustGems: state?.lustGems,
                 energy: state?.energy,
+                boostActive: state?.boostActive,
+                boostMultiplier: state?.boostMultiplier,
                 selectedCharacterId: state?.selectedCharacterId,
                 isAdmin: state?.isAdmin
               }, null, 2)}</pre>
