@@ -8,10 +8,26 @@ import { Rocket, Gem, Zap, Heart, Clock, Star } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { safeStringify, debugJSON } from '@/utils/safeJson';
 
-export default function BoostPanel() {
+interface BoostPanelProps {
+  isOpen?: boolean;
+  onClose?: () => void;
+}
+
+export default function BoostPanel({ isOpen, onClose }: BoostPanelProps) {
   const { state } = useGame();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+
+  // Use external control if provided, otherwise use internal state
+  const dialogOpen = isOpen !== undefined ? isOpen : internalOpen;
+  const handleOpenChange = (open: boolean) => {
+    if (onClose && isOpen !== undefined) {
+      if (!open) onClose();
+    } else {
+      setInternalOpen(open);
+    }
+  };
 
   const boostOptions = [
     { 
@@ -110,8 +126,105 @@ export default function BoostPanel() {
     }
   };
 
+  const content = (
+    <DialogContent className="max-w-2xl">
+      <DialogHeader>
+        <DialogTitle className="text-2xl font-bold text-orange-400 flex items-center gap-2">
+          🚀 Boost Shop
+        </DialogTitle>
+        <div className="flex items-center gap-2 text-sm text-blue-300">
+          <Gem className="w-4 h-4" />
+          <span>Your LustGems: <strong>{(state.lustGems || 0).toLocaleString()}</strong></span>
+        </div>
+      </DialogHeader>
+      
+      <div className="space-y-3 max-h-[500px] overflow-y-auto">
+        {boostOptions.map((boost) => {
+          const canAfford = (state.lustGems || 0) >= boost.cost;
+          
+          return (
+            <Card key={boost.id} className={`${canAfford ? 'border-orange-500/50' : 'border-gray-600 opacity-60'}`}>
+              <CardHeader className="pb-3">
+                <div className="flex justify-between items-start">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">{boost.icon}</span>
+                    <div>
+                      <CardTitle className="text-lg text-white">{boost.name}</CardTitle>
+                      <p className="text-sm text-gray-400 mt-1">{boost.description}</p>
+                      <div className="flex gap-2 mt-2">
+                        {boost.duration > 0 && (
+                          <Badge variant="outline" className="text-xs flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {boost.duration}min
+                          </Badge>
+                        )}
+                        {boost.effect === 'triple_points' && (
+                          <Badge className="text-xs bg-pink-600">3x Points</Badge>
+                        )}
+                        {boost.effect === 'double_energy_regen' && (
+                          <Badge className="text-xs bg-green-600">2x Energy</Badge>
+                        )}
+                        {boost.effect === 'mega_boost' && (
+                          <Badge className="text-xs bg-purple-600">5x Everything</Badge>
+                        )}
+                        {boost.effect === 'instant_energy_refill' && (
+                          <Badge className="text-xs bg-cyan-600">Instant</Badge>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="text-right">
+                    <Button
+                      onClick={() => purchaseBoost(boost)}
+                      disabled={!canAfford || loading}
+                      className={`${
+                        canAfford 
+                          ? 'bg-blue-600 hover:bg-blue-700 text-white' 
+                          : 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                      }`}
+                      size="sm"
+                    >
+                      <Gem className="w-4 h-4 mr-1" />
+                      {boost.cost}
+                    </Button>
+                    
+                    {!canAfford && (
+                      <div className="text-xs text-red-400 mt-1">
+                        Need {boost.cost - (state.lustGems || 0)} more
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </CardHeader>
+            </Card>
+          );
+        })}
+      </div>
+      
+      <div className="border-t border-gray-700 pt-4 mt-4 text-center">
+        <div className="text-sm text-gray-400">
+          💰 Earn LustGems through achievements, daily bonuses, and special events!
+        </div>
+        <div className="text-xs text-gray-500 mt-1">
+          Boosts stack with existing upgrades for maximum effectiveness
+        </div>
+      </div>
+    </DialogContent>
+  );
+
+  // If used with external control (like from GameInterface modal system)
+  if (isOpen !== undefined && onClose) {
+    return (
+      <Dialog open={dialogOpen} onOpenChange={handleOpenChange}>
+        {content}
+      </Dialog>
+    );
+  }
+
+  // If used as standalone with trigger button
   return (
-    <Dialog>
+    <Dialog open={dialogOpen} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         <Button 
           className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white font-bold shadow-lg transition-all transform hover:scale-105"
@@ -121,91 +234,7 @@ export default function BoostPanel() {
           BOOST
         </Button>
       </DialogTrigger>
-      
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle className="text-2xl font-bold text-orange-400 flex items-center gap-2">
-            🚀 Boost Shop
-          </DialogTitle>
-          <div className="flex items-center gap-2 text-sm text-blue-300">
-            <Gem className="w-4 h-4" />
-            <span>Your LustGems: <strong>{(state.lustGems || 0).toLocaleString()}</strong></span>
-          </div>
-        </DialogHeader>
-        
-        <div className="space-y-3 max-h-[500px] overflow-y-auto">
-          {boostOptions.map((boost) => {
-            const canAfford = (state.lustGems || 0) >= boost.cost;
-            
-            return (
-              <Card key={boost.id} className={`${canAfford ? 'border-orange-500/50' : 'border-gray-600 opacity-60'}`}>
-                <CardHeader className="pb-3">
-                  <div className="flex justify-between items-start">
-                    <div className="flex items-center gap-3">
-                      <span className="text-2xl">{boost.icon}</span>
-                      <div>
-                        <CardTitle className="text-lg text-white">{boost.name}</CardTitle>
-                        <p className="text-sm text-gray-400 mt-1">{boost.description}</p>
-                        <div className="flex gap-2 mt-2">
-                          {boost.duration > 0 && (
-                            <Badge variant="outline" className="text-xs flex items-center gap-1">
-                              <Clock className="w-3 h-3" />
-                              {boost.duration}min
-                            </Badge>
-                          )}
-                          {boost.effect === 'triple_points' && (
-                            <Badge className="text-xs bg-pink-600">3x Points</Badge>
-                          )}
-                          {boost.effect === 'double_energy_regen' && (
-                            <Badge className="text-xs bg-green-600">2x Energy</Badge>
-                          )}
-                          {boost.effect === 'mega_boost' && (
-                            <Badge className="text-xs bg-purple-600">5x Everything</Badge>
-                          )}
-                          {boost.effect === 'instant_energy_refill' && (
-                            <Badge className="text-xs bg-cyan-600">Instant</Badge>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className="text-right">
-                      <Button
-                        onClick={() => purchaseBoost(boost)}
-                        disabled={!canAfford || loading}
-                        className={`${
-                          canAfford 
-                            ? 'bg-blue-600 hover:bg-blue-700 text-white' 
-                            : 'bg-gray-600 text-gray-400 cursor-not-allowed'
-                        }`}
-                        size="sm"
-                      >
-                        <Gem className="w-4 h-4 mr-1" />
-                        {boost.cost}
-                      </Button>
-                      
-                      {!canAfford && (
-                        <div className="text-xs text-red-400 mt-1">
-                          Need {boost.cost - (state.lustGems || 0)} more
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </CardHeader>
-              </Card>
-            );
-          })}
-        </div>
-        
-        <div className="border-t border-gray-700 pt-4 mt-4 text-center">
-          <div className="text-sm text-gray-400">
-            💰 Earn LustGems through achievements, daily bonuses, and special events!
-          </div>
-          <div className="text-xs text-gray-500 mt-1">
-            Boosts stack with existing upgrades for maximum effectiveness
-          </div>
-        </div>
-      </DialogContent>
+      {content}
     </Dialog>
   );
 }
