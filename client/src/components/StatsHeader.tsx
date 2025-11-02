@@ -1,4 +1,4 @@
-import { Zap, Star, Heart, Gem, TrendingUp } from 'lucide-react';
+import { Zap, Star, Heart, Gem, TrendingUp, Rocket } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { useGame } from '@/contexts/GameContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -17,13 +17,13 @@ export default function StatsHeader() {
 
   return (
     <div className="sticky top-0 z-50 bg-card border-b border-card-border">
-      <div className="flex items-center justify-between gap-3 p-4">
+      <div className="flex items-center justify-between gap-2 p-3">
         
         {/* LEFT: Avatar + Username + Level */}
         <div className="flex items-center gap-3 min-w-0">
           <Dialog>
             <DialogTrigger asChild>
-              <div className="w-16 h-16 rounded-lg overflow-hidden border-2 border-primary cursor-pointer hover-elevate flex-shrink-0">
+              <div className="w-12 h-12 rounded-lg overflow-hidden border-2 border-primary cursor-pointer hover-elevate flex-shrink-0">
                 {displayAvatar ? (
                   <img
                     src={displayAvatar}
@@ -32,7 +32,7 @@ export default function StatsHeader() {
                   />
                 ) : (
                   <div className="w-full h-full bg-muted flex items-center justify-center">
-                    <Star className="w-6 h-6 text-muted-foreground" />
+                    <Star className="w-4 h-4 text-muted-foreground" />
                   </div>
                 )}
               </div>
@@ -46,74 +46,70 @@ export default function StatsHeader() {
           </Dialog>
           
           <div className="min-w-0 flex-1">
-            <div className="text-lg font-bold text-white truncate">{selectedCharacter?.name || 'Player'}</div>
-            <div className="text-sm text-muted-foreground flex items-center gap-2">
+            <div className="text-sm font-bold text-white truncate">{selectedCharacter?.name || 'Player'}</div>
+            <div className="text-xs text-muted-foreground flex items-center gap-2">
               <span>Level {state.level}</span>
-              {state.isAdmin && <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400 border border-yellow-400/30">Admin</span>}
+              {state.isAdmin && <span className="text-xs px-1 py-0.5 rounded bg-yellow-500/20 text-yellow-400">Admin</span>}
             </div>
           </div>
         </div>
 
-        {/* CENTER-LEFT: LUSTPOINTS + LUSTGEMS */}
-        <div className="flex-1 min-w-0 text-center" data-testid="stat-lustpoints">
-          <div className="flex items-center justify-center gap-2 mb-1">
-            <Heart className="w-5 h-5 text-pink-500" />
-            <span className="text-sm font-medium uppercase tracking-wide text-pink-300">LustPoints</span>
+        {/* LUSTPOINTS */}
+        <div className="text-center min-w-0" data-testid="stat-lustpoints">
+          <div className="flex items-center justify-center gap-1 mb-1">
+            <Heart className="w-4 h-4 text-pink-500" />
+            <span className="text-xs font-medium uppercase tracking-wide text-pink-300">LUSTPOINTS</span>
           </div>
-          <div className="text-2xl font-bold tabular-nums text-pink-400">
+          <div className="text-xl font-bold tabular-nums text-pink-400">
             {Math.floor(state.lustPoints || state.points || 0).toLocaleString()}
           </div>
-          
-          {/* LUSTGEMS below LustPoints */}
-          <div className="flex items-center justify-center gap-1 mt-2">
-            <Gem className="w-4 h-4 text-blue-400" />
-            <span className="text-xs font-medium uppercase tracking-wide text-blue-300">LustGems</span>
+        </div>
+
+        {/* LUSTGEMS - NEW */}
+        <div className="text-center min-w-0" data-testid="stat-lustgems">
+          <div className="flex items-center justify-center gap-1 mb-1">
+            <Gem className="w-4 h-4 text-blue-500" />
+            <span className="text-xs font-medium uppercase tracking-wide text-blue-300">LUSTGEMS</span>
           </div>
           <div className="text-lg font-bold tabular-nums text-blue-400">
             {Math.floor(state.lustGems || 0).toLocaleString()}
           </div>
         </div>
 
-        {/* CENTER-RIGHT: LP/HR */}
-        <div className="flex-1 min-w-0 text-center" data-testid="stat-points-per-hour">
-          <div className="flex items-center justify-center gap-2 mb-1">
-            <Star className="w-5 h-5 text-purple-500" />
-            <span className="text-sm font-medium uppercase tracking-wide text-purple-300">LP/HR</span>
+        {/* LP/HR */}
+        <div className="text-center min-w-0" data-testid="stat-points-per-hour">
+          <div className="flex items-center justify-center gap-1 mb-1">
+            <Star className="w-4 h-4 text-purple-500" />
+            <span className="text-xs font-medium uppercase tracking-wide text-purple-300">LP/HR</span>
           </div>
-          <div className="text-2xl font-bold tabular-nums text-purple-400">
+          <div className="text-lg font-bold tabular-nums text-purple-400">
             {(state.passiveIncomeRate || 0).toLocaleString()}
           </div>
-          <span className="text-xs text-muted-foreground">
-            Passive Income
-          </span>
         </div>
 
-        {/* RIGHT: ENERGY + BOOST+ */}
-        <div className="flex-1 min-w-0" data-testid="stat-energy">
-          <div className="flex items-center gap-2 mb-1">
-            <Zap className="w-5 h-5 text-green-500" />
-            <span className="text-sm font-medium uppercase tracking-wide text-green-300">Energy</span>
+        {/* ENERGY + BOOST */}
+        <div className="min-w-0" data-testid="stat-energy">
+          <div className="flex items-center gap-1 mb-1">
+            <Zap className="w-4 h-4 text-green-500" />
+            <span className="text-xs font-medium uppercase tracking-wide text-green-300">ENERGY</span>
           </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-bold tabular-nums text-green-400">
+          <div className="flex items-baseline gap-1">
+            <span className="text-xl font-bold tabular-nums text-green-400">
               {Math.floor(state.energy)}
             </span>
-            <span className="text-sm text-muted-foreground">
-              / {state.maxEnergy}
+            <span className="text-xs text-muted-foreground">
+              /{state.maxEnergy}
             </span>
           </div>
-          <Progress value={energyPercent} className="h-2 mt-1" />
-          <span className="text-xs text-muted-foreground">
-            +{state.energyRegenRate}/s
-          </span>
+          <Progress value={energyPercent} className="h-1 mt-1" />
           
-          {/* BOOST+ below Energy */}
-          <div className="flex items-center gap-1 mt-2">
-            <TrendingUp className="w-4 h-4 text-orange-400" />
-            <span className="text-xs font-medium uppercase tracking-wide text-orange-300">Boost+</span>
-          </div>
-          <div className="text-lg font-bold tabular-nums text-orange-400">
-            {state.boostMultiplier ? `${state.boostMultiplier}x` : '1x'}
+          {/* BOOST+ - NEW */}
+          <div className="flex items-center gap-1 mt-1">
+            <Rocket className="w-3 h-3 text-orange-400" />
+            <span className="text-xs font-bold tabular-nums text-orange-400">
+              {state.boostEnergy || 1024}
+            </span>
+            <span className="text-xs text-orange-300">/1024</span>
           </div>
         </div>
       </div>
