@@ -1,4 +1,4 @@
-import { Zap, Star } from 'lucide-react';
+import { Zap, Star, Heart } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { useGame } from '@/contexts/GameContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -15,14 +15,15 @@ export default function StatsHeader() {
     : null;
   const displayAvatar = avatarImage?.url || selectedCharacter?.avatarImage || selectedCharacter?.defaultImage;
 
-
   return (
     <div className="sticky top-0 z-50 bg-card border-b border-card-border">
       <div className="flex items-center justify-between gap-4 p-4">
-        <div className="flex flex-col items-center gap-1">
+        
+        {/* LEFT: Avatar + Username + Level */}
+        <div className="flex items-center gap-3 min-w-0">
           <Dialog>
             <DialogTrigger asChild>
-              <div className="w-16 h-16 rounded-lg overflow-hidden border-2 border-primary cursor-pointer hover-elevate">
+              <div className="w-16 h-16 rounded-lg overflow-hidden border-2 border-primary cursor-pointer hover-elevate flex-shrink-0">
                 {displayAvatar ? (
                   <img
                     src={displayAvatar}
@@ -43,46 +44,49 @@ export default function StatsHeader() {
               <ImageUploader adminMode={false} />
             </DialogContent>
           </Dialog>
-          <div className="text-xs text-muted-foreground" data-testid="stat-level">
-            Lv.{state.level}
+          
+          <div className="min-w-0 flex-1">
+            <div className="text-lg font-bold text-white truncate">{selectedCharacter?.name || 'Player'}</div>
+            <div className="text-sm text-muted-foreground flex items-center gap-2">
+              <span>Level {state.level}</span>
+              {state.isAdmin && <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400 border border-yellow-400/30">Admin</span>}
+            </div>
           </div>
         </div>
 
-        <div className="flex-1 min-w-0" data-testid="stat-points">
-          <div className="flex items-center gap-2 mb-1">
-            <Star className="w-5 h-5 text-primary" />
-            <span className="text-sm font-medium uppercase tracking-wide">Points</span>
+        {/* CENTER-LEFT: LUSTPOINTS */}
+        <div className="flex-1 min-w-0 text-center" data-testid="stat-lustpoints">
+          <div className="flex items-center justify-center gap-2 mb-1">
+            <Heart className="w-5 h-5 text-pink-500" />
+            <span className="text-sm font-medium uppercase tracking-wide text-pink-300">LustPoints</span>
           </div>
-          <div className="text-2xl font-bold tabular-nums">
-            {Math.floor(state.points).toLocaleString()}
+          <div className="text-2xl font-bold tabular-nums text-pink-400">
+            {Math.floor(state.lustPoints || state.points || 0).toLocaleString()}
           </div>
-          {state.passiveIncomeRate > 0 && (
-            <span className="text-xs text-muted-foreground">
-              +{state.passiveIncomeRate}/hr
-            </span>
-          )}
         </div>
 
-        <div className="flex-1 min-w-0" data-testid="stat-points-per-hour">
-          <div className="flex items-center gap-2 mb-1">
-            <Star className="w-5 h-5 text-primary" />
-            <span className="text-sm font-medium uppercase tracking-wide">Points/Hr</span>
+        {/* CENTER-RIGHT: LP/HR */}
+        <div className="flex-1 min-w-0 text-center" data-testid="stat-points-per-hour">
+          <div className="flex items-center justify-center gap-2 mb-1">
+            <Star className="w-5 h-5 text-purple-500" />
+            <span className="text-sm font-medium uppercase tracking-wide text-purple-300">LP/HR</span>
           </div>
-          <div className="text-2xl font-bold tabular-nums">
-            {state.passiveIncomeRate.toLocaleString()}
+          <div className="text-2xl font-bold tabular-nums text-purple-400">
+            {(state.passiveIncomeRate || 0).toLocaleString()}
           </div>
           <span className="text-xs text-muted-foreground">
             Passive Income
           </span>
         </div>
 
+        {/* RIGHT: ENERGY */}
         <div className="flex-1 min-w-0" data-testid="stat-energy">
           <div className="flex items-center gap-2 mb-1">
-            <Zap className="w-5 h-5 text-primary" />
-            <span className="text-sm font-medium uppercase tracking-wide">Energy</span>
+            <Zap className="w-5 h-5 text-green-500" />
+            <span className="text-sm font-medium uppercase tracking-wide text-green-300">Energy</span>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-bold tabular-nums">
+            <span className="text-2xl font-bold tabular-nums text-green-400">
               {Math.floor(state.energy)}
             </span>
             <span className="text-sm text-muted-foreground">
