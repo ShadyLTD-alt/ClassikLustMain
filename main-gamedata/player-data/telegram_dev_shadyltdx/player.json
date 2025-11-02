@@ -2,23 +2,27 @@
   "id": "8e2e5ac9-d623-4daa-b797-ea332a805d31",
   "telegramId": "dev_shadyltdx",
   "username": "ShadyLTDx",
-  "points": "3734",
-  "energy": 1000,
+  "points": "7027",
+  "energy": 869,
   "maxEnergy": 1000,
   "level": 2,
   "experience": 0,
-  "passiveIncomeRate": 45,
+  "passiveIncomeRate": 120,
   "isAdmin": true,
   "selectedCharacterId": "aria",
-  "displayImage": null,
+  "displayImage": "/uploads/characters/Aria/character/1761957849613-446154351.png",
   "upgrades": {
-    "perTap": 24,
-    "perHour": 3,
-    "energyMax": 2,
-    "criticalChance": 4,
-    "incomeMultiplier": 1
+    "perTap": 30,
+    "perHour": 9,
+    "energyMax": 9,
+    "energyRegen": 4,
+    "criticalChance": 12,
+    "incomeMultiplier": 4
   },
-  "unlockedCharacters": [],
+  "unlockedCharacters": [
+    "frost",
+    "shadow"
+  ],
   "lastLogin": "2025-11-01T22:55:29.543Z",
   "lastEnergyUpdate": "2025-11-01T19:28:33.742Z"
 }
