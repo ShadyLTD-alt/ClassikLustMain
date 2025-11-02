@@ -120,32 +120,6 @@ export function AdminFAB({ onOpenDebugger }: AdminFABProps) {
             isOpen ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
           }`}>
             
-            {/* Image Uploader */}
-            <Button
-              onClick={() => {
-                setShowImageUploader(true);
-                setIsOpen(false);
-              }}
-              size="sm"
-              className="bg-green-600/90 hover:bg-green-700 text-white shadow-lg backdrop-blur border border-green-400/30"
-            >
-              <Upload className="w-4 h-4 mr-2" />
-              Images
-            </Button>
-
-            {/* Admin Panel */}
-            <Button
-              onClick={() => {
-                setShowAdminPanel(true);
-                setIsOpen(false);
-              }}
-              size="sm"
-              className="bg-blue-600/90 hover:bg-blue-700 text-white shadow-lg backdrop-blur border border-blue-400/30"
-            >
-              <Settings className="w-4 h-4 mr-2" />
-              Admin
-            </Button>
-            
             {/* LunaBug Debugger */}
             <Button
               onClick={() => {
@@ -247,22 +221,17 @@ export function AdminFAB({ onOpenDebugger }: AdminFABProps) {
         </div>
       )}
 
-      {/* Admin Panel Modal */}
-      {showAdminPanel && (
-        <Dialog open={showAdminPanel} onOpenChange={setShowAdminPanel}>
-          <DialogContent className="max-w-5xl max-h-[85vh]">
-            <DialogHeader><DialogTitle>Admin Panel</DialogTitle></DialogHeader>
-            <AdminPanel />
-          </DialogContent>
-        </Dialog>
-      )}
+      {/* Admin Panel Modal - This opens on "Admin" button from AdminPanel's Images tab */}
+      <AdminPanel />
 
-      {/* Image Uploader Modal */}
+      {/* Direct Image Uploader Modal - NOT FROM FAB MINI-MENU */}
       {showImageUploader && (
         <Dialog open={showImageUploader} onOpenChange={setShowImageUploader}>
-          <DialogContent className="max-w-4xl max-h-[80vh]">
-            <DialogHeader><DialogTitle>Image Uploader</DialogTitle></DialogHeader>
-            <ImageUploader adminMode={true} />
+          <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+            <DialogHeader><DialogTitle>Image Uploader - Admin Mode</DialogTitle></DialogHeader>
+            <div className="p-4">
+              <ImageUploader adminMode={true} />
+            </div>
           </DialogContent>
         </Dialog>
       )}
