@@ -1,11 +1,24 @@
 const express = require('express');
 const { supabase } = require('../database');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
+const { safeStringify, safeParseJson, safeParseRequestBody, debugJSON, validateAndCleanFormData } = require('../utils/safeJson');
 const router = express.Router();
 
 // All admin routes require authentication AND admin privileges
 router.use(requireAuth);
 router.use(requireAdmin);
+
+// Middleware to safely parse request bodies
+router.use((req, res, next) => {
+  try {
+    req.body = safeParseRequestBody(req);
+    debugJSON(req.body, `${req.method} ${req.path} REQUEST BODY`);
+    next();
+  } catch (error) {
+    console.error('🔥 Request body parsing middleware error:', error);
+    res.status(400).json({ error: 'Invalid request data' });
+  }
+});
 
 // GET /api/admin/players - List all players
 router.get('/players', async (req, res) => {
@@ -31,7 +44,9 @@ router.get('/players', async (req, res) => {
 router.patch('/players/:playerId', async (req, res) => {
   try {
     const { playerId } = req.params;
-    const updates = req.body;
+    const updates = validateAndCleanFormData(req.body);
+    
+    debugJSON(updates, 'PLAYER UPDATES');
     
     // Validate player exists
     const { data: existingPlayer } = await supabase
@@ -64,14 +79,14 @@ router.patch('/players/:playerId', async (req, res) => {
     res.json({ player: updatedPlayer });
   } catch (err) {
     console.error('Error updating player:', err);
-    res.status(500).json({ error: 'Server error' });
+    res.status(500).json({ error: 'Server error: ' + err.message });
   }
 });
 
 // POST /api/admin/add-currency - Add LP or LG to current user (for testing)
 router.post('/add-currency', async (req, res) => {
   try {
-    const { type, amount } = req.body;
+    const { type, amount } = validateAndCleanFormData(req.body);
     const userId = req.user.id;
     
     if (!['points', 'gems'].includes(type) || typeof amount !== 'number') {
@@ -117,63 +132,42 @@ router.post('/add-currency', async (req, res) => {
     });
   } catch (err) {
     console.error('Error adding currency:', err);
-    res.status(500).json({ error: 'Server error' });
+    res.status(500).json({ error: 'Server error: ' + err.message });
   }
 });
 
-// POST /api/admin/boost - Enable/disable boost for current user
-router.post('/boost', async (req, res) => {
-  try {
-    const { action, multiplier, durationMinutes } = req.body;
-    const userId = req.user.id;
-    
-    let updates = {
-      "updatedAt": new Date().toISOString()
-    };
-    
-    if (action === 'enable') {
-      updates["boostActive"] = true;
-      updates["boostMultiplier"] = multiplier || 2.0;
-      updates["boostExpiresAt"] = new Date(Date.now() + (durationMinutes || 10) * 60 * 1000).toISOString();
-    } else {
-      updates["boostActive"] = false;
-      updates["boostMultiplier"] = 1.0;
-      updates["boostExpiresAt"] = null;
-    }
-
-    const { data: updatedPlayer, error } = await supabase
-      .from('players')
-      .update(updates)
-      .eq('id', userId)
-      .select('"boostActive", "boostMultiplier", "boostExpiresAt"')
-      .single();
-
-    if (error) {
-      console.error('Failed to update boost:', error);
-      return res.status(500).json({ error: 'Failed to update boost' });
-    }
-
-    console.log(`✅ ${action === 'enable' ? 'Enabled' : 'Disabled'} boost for player ${userId}`);
-    res.json({
-      boostActive: updatedPlayer.boostActive,
-      boostMultiplier: parseFloat(updatedPlayer.boostMultiplier),
-      boostExpiresAt: updatedPlayer.boostExpiresAt
-    });
-  } catch (err) {
-    console.error('Error updating boost:', err);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// LEVELS - FIX JSON HANDLING
+// LEVELS - ENHANCED WITH SAFE JSON HANDLING
 // POST /api/admin/levels - Create new level
 router.post('/levels', async (req, res) => {
   try {
-    const levelData = req.body;
+    const levelData = validateAndCleanFormData(req.body);
+    debugJSON(levelData, 'CREATE LEVEL DATA');
     
     // Validate required fields
-    if (!levelData.level || !levelData.cost) {
+    if (!levelData.level || levelData.cost === undefined) {
       return res.status(400).json({ error: 'Level and cost are required' });
+    }
+    
+    // Safely handle requirements and unlocks arrays
+    let requirements = [];
+    let unlocks = [];
+    
+    if (levelData.requirements) {
+      if (Array.isArray(levelData.requirements)) {
+        requirements = levelData.requirements;
+      } else if (typeof levelData.requirements === 'string') {
+        const parsed = safeParseJson(levelData.requirements);
+        requirements = Array.isArray(parsed) ? parsed : [];
+      }
+    }
+    
+    if (levelData.unlocks) {
+      if (Array.isArray(levelData.unlocks)) {
+        unlocks = levelData.unlocks;
+      } else if (typeof levelData.unlocks === 'string') {
+        const parsed = safeParseJson(levelData.unlocks);
+        unlocks = Array.isArray(parsed) ? parsed : [];
+      }
     }
     
     const { data: newLevel, error } = await supabase
@@ -181,8 +175,8 @@ router.post('/levels', async (req, res) => {
       .insert({
         "level": parseInt(levelData.level),
         "cost": parseInt(levelData.cost),
-        "requirements": levelData.requirements || [],
-        "unlocks": levelData.unlocks || [],
+        "requirements": requirements,
+        "unlocks": unlocks,
         "createdAt": new Date().toISOString(),
         "updatedAt": new Date().toISOString()
       })
@@ -206,14 +200,37 @@ router.post('/levels', async (req, res) => {
 router.patch('/levels/:levelNum', async (req, res) => {
   try {
     const { levelNum } = req.params;
-    const levelData = req.body;
+    const levelData = validateAndCleanFormData(req.body);
+    debugJSON(levelData, 'UPDATE LEVEL DATA');
+    
+    // Safely handle arrays
+    let requirements = [];
+    let unlocks = [];
+    
+    if (levelData.requirements) {
+      if (Array.isArray(levelData.requirements)) {
+        requirements = levelData.requirements;
+      } else if (typeof levelData.requirements === 'string') {
+        const parsed = safeParseJson(levelData.requirements);
+        requirements = Array.isArray(parsed) ? parsed : [];
+      }
+    }
+    
+    if (levelData.unlocks) {
+      if (Array.isArray(levelData.unlocks)) {
+        unlocks = levelData.unlocks;
+      } else if (typeof levelData.unlocks === 'string') {
+        const parsed = safeParseJson(levelData.unlocks);
+        unlocks = Array.isArray(parsed) ? parsed : [];
+      }
+    }
     
     const { data: updatedLevel, error } = await supabase
       .from('levels')
       .update({
         "cost": parseInt(levelData.cost) || 0,
-        "requirements": levelData.requirements || [],
-        "unlocks": levelData.unlocks || [],
+        "requirements": requirements,
+        "unlocks": unlocks,
         "updatedAt": new Date().toISOString()
       })
       .eq('level', parseInt(levelNum))
@@ -256,11 +273,12 @@ router.delete('/levels/:levelNum', async (req, res) => {
   }
 });
 
-// UPGRADES - FIX JSON HANDLING
+// UPGRADES - ENHANCED WITH SAFE JSON HANDLING
 // POST /api/admin/upgrades - Create new upgrade
 router.post('/upgrades', async (req, res) => {
   try {
-    const upgradeData = req.body;
+    const upgradeData = validateAndCleanFormData(req.body);
+    debugJSON(upgradeData, 'CREATE UPGRADE DATA');
     
     // Validate required fields
     if (!upgradeData.id || !upgradeData.name) {
@@ -304,7 +322,8 @@ router.post('/upgrades', async (req, res) => {
 router.patch('/upgrades/:upgradeId', async (req, res) => {
   try {
     const { upgradeId } = req.params;
-    const upgradeData = req.body;
+    const upgradeData = validateAndCleanFormData(req.body);
+    debugJSON(upgradeData, 'UPDATE UPGRADE DATA');
     
     const { data: updatedUpgrade, error } = await supabase
       .from('upgrades')
@@ -361,11 +380,12 @@ router.delete('/upgrades/:upgradeId', async (req, res) => {
   }
 });
 
-// CHARACTERS - FIX JSON HANDLING
+// CHARACTERS - ENHANCED WITH SAFE JSON HANDLING
 // POST /api/admin/characters - Create new character
 router.post('/characters', async (req, res) => {
   try {
-    const characterData = req.body;
+    const characterData = validateAndCleanFormData(req.body);
+    debugJSON(characterData, 'CREATE CHARACTER DATA');
     
     // Validate required fields
     if (!characterData.id || !characterData.name) {
@@ -407,7 +427,8 @@ router.post('/characters', async (req, res) => {
 router.patch('/characters/:characterId', async (req, res) => {
   try {
     const { characterId } = req.params;
-    const characterData = req.body;
+    const characterData = validateAndCleanFormData(req.body);
+    debugJSON(characterData, 'UPDATE CHARACTER DATA');
     
     const { data: updatedCharacter, error } = await supabase
       .from('characters')
@@ -459,6 +480,50 @@ router.delete('/characters/:characterId', async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.error('Error deleting character:', err);
+    res.status(500).json({ error: 'Server error: ' + err.message });
+  }
+});
+
+// POST /api/admin/boost - Enable/disable boost for current user
+router.post('/boost', async (req, res) => {
+  try {
+    const { action, multiplier, durationMinutes } = validateAndCleanFormData(req.body);
+    const userId = req.user.id;
+    
+    let updates = {
+      "updatedAt": new Date().toISOString()
+    };
+    
+    if (action === 'enable') {
+      updates["boostActive"] = true;
+      updates["boostMultiplier"] = multiplier || 2.0;
+      updates["boostExpiresAt"] = new Date(Date.now() + (durationMinutes || 10) * 60 * 1000).toISOString();
+    } else {
+      updates["boostActive"] = false;
+      updates["boostMultiplier"] = 1.0;
+      updates["boostExpiresAt"] = null;
+    }
+
+    const { data: updatedPlayer, error } = await supabase
+      .from('players')
+      .update(updates)
+      .eq('id', userId)
+      .select('"boostActive", "boostMultiplier", "boostExpiresAt"')
+      .single();
+
+    if (error) {
+      console.error('Failed to update boost:', error);
+      return res.status(500).json({ error: 'Failed to update boost' });
+    }
+
+    console.log(`✅ ${action === 'enable' ? 'Enabled' : 'Disabled'} boost for player ${userId}`);
+    res.json({
+      boostActive: updatedPlayer.boostActive,
+      boostMultiplier: parseFloat(updatedPlayer.boostMultiplier),
+      boostExpiresAt: updatedPlayer.boostExpiresAt
+    });
+  } catch (err) {
+    console.error('Error updating boost:', err);
     res.status(500).json({ error: 'Server error: ' + err.message });
   }
 });
