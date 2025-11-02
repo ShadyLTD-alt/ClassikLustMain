@@ -2,10 +2,9 @@ import { useState, useEffect } from 'react';
 import { useGame } from '@/contexts/GameContext';
 import { Badge } from '@/components/ui/badge';
 import { motion, AnimatePresence } from 'framer-motion';
-import { calculateUpgradeValue } from '@shared/gameConfig';
 
 export default function CharacterDisplay() {
-  const { state, characters, images, tap, upgrades } = useGame();
+  const { state, characters, images, tap, calculateTapValue } = useGame();
   const [tapEffects, setTapEffects] = useState<Array<{ id: number; x: number; y: number; value: number }>>([]);
   const [nextId, setNextId] = useState(0);
 
@@ -17,18 +16,6 @@ export default function CharacterDisplay() {
   // Prioritize displayImage from state, then selected image, then character default
   const displayImage = state.displayImage || selectedImage?.url || selectedCharacter?.defaultImage;
 
-  const calculateTapValue = () => {
-    const tapPowerUpgrades = upgrades.filter(u => u.type === 'perTap');
-    let tapValue = 1; // Base tap value
-
-    tapPowerUpgrades.forEach(upgrade => {
-      const level = state.upgrades[upgrade.id] || 0;
-      tapValue += calculateUpgradeValue(upgrade, level);
-    });
-
-    return tapValue;
-  };
-
   const handleTap = (e: React.MouseEvent<HTMLDivElement>) => {
     if (state.energy < 1) return;
     
@@ -38,11 +25,21 @@ export default function CharacterDisplay() {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     
-    // Calculate actual tap value from upgrades
-    const actualTapValue = calculateTapValue();
+    // Use ACTUAL tap value from GameContext (synced after tap())
+    const actualTapValue = state.lastTapValue || calculateTapValue();
     
     setTapEffects(prev => [...prev, { id: nextId, x, y, value: actualTapValue }]);
     setNextId(prev => prev + 1);
+
+    // Log tap to LunaBug if available
+    if ((window as any).LunaBug?.core) {
+      (window as any).LunaBug.core.logEvent('character_tap', {
+        characterId: state.selectedCharacterId,
+        tapValue: actualTapValue,
+        energyAfter: state.energy - 1,
+        position: { x, y }
+      });
+    }
   };
 
   useEffect(() => {
@@ -94,7 +91,7 @@ export default function CharacterDisplay() {
           )}
         </motion.div>
 
-        {/* Floating Tap Effects */}
+        {/* Floating Tap Effects - NOW SHOWS REAL VALUES */}
         <AnimatePresence>
           {tapEffects.map(effect => (
             <motion.div
@@ -123,10 +120,11 @@ export default function CharacterDisplay() {
         </motion.p>
       )}
 
-      {/* Tap Value Info for Debug */}
+      {/* Tap Value Info for Admin Debug */}
       {state.isAdmin && (
-        <div className="mt-4 text-xs text-gray-400 text-center">
-          Tap Value: +{calculateTapValue()} | Energy: {state.energy}/{state.maxEnergy}
+        <div className="mt-4 text-xs text-gray-400 text-center space-y-1">
+          <div>Tap Value: +{state.lastTapValue || calculateTapValue()} | Energy: {state.energy}/{state.maxEnergy}</div>
+          <div className="text-purple-400">🌙 LunaBug: {(window as any).LunaBug ? 'Online' : 'Offline'}</div>
         </div>
       )}
     </div>
