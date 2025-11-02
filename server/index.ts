@@ -7,10 +7,6 @@ import { fileURLToPath } from "url";
 import fs from "fs";
 import logger from "./logger";
 
-// 🌙 LUNA BUG INTEGRATION
-const LunaBug = require('../LunaBug/luna');
-const { router: lunaRouter, setLunaInstance } = require('./routes/luna');
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -80,16 +76,20 @@ app.use((req, res, next) => {
 (async () => {
   logger.info('🚀 Starting server initialization...');
 
-  // 🌙 INITIALIZE LUNA BUG FIRST
-  logger.info('🌙 Initializing Luna Bug...');
+  // 🌙 Initialize Luna Bug (ESM-safe dynamic imports)
   let luna: any = null;
+  let lunaRouter: any = null;
+  let setLunaInstance: any = null;
   try {
+    const { default: LunaBug } = await import('../LunaBug/luna.js');
+    const lunaApi = await import('./routes/luna.js');
+    lunaRouter = lunaApi.router;
+    setLunaInstance = lunaApi.setLunaInstance;
     luna = new LunaBug();
     setLunaInstance(luna);
-    logger.info('✅ Luna Bug initialized successfully');
-  } catch (err) {
-    logger.error('❌ Failed to initialize Luna Bug:', err);
-    logger.warn('⚠️ Continuing without Luna Bug...');
+    logger.info('✅ Luna Bug initialized');
+  } catch (err: any) {
+    logger.warn('⚠️ Luna init skipped:', err?.message || err);
   }
 
   // Sync game data from JSON files FIRST (blocking)
@@ -100,14 +100,13 @@ app.use((req, res, next) => {
   } catch (err) {
     logger.error("❌ CRITICAL: Failed to sync game data on startup:", err);
     logger.warn("⚠️ Server may not work correctly without game data");
-    // Still continue startup but log the issue
   }
 
   logger.info('📝 Registering routes...');
   const server = await registerRoutes(app);
-  
-  // 🌙 ADD LUNA API ROUTES
-  if (luna) {
+
+  // Add Luna API routes if available
+  if (luna && lunaRouter) {
     app.use('/api/luna', lunaRouter);
     logger.info('✅ Luna API routes registered');
   }
@@ -152,8 +151,8 @@ app.use((req, res, next) => {
   }, () => {
     logger.info(`✅ Server listening on port ${port}`);
     logger.info(`✅ Server is ready and accepting connections on http://0.0.0.0:${port}`);
-    
-    // 🌙 START LUNA MONITORING AFTER SERVER IS READY
+
+    // Start Luna monitoring if initialized
     if (luna) {
       setTimeout(async () => {
         try {
@@ -162,7 +161,7 @@ app.use((req, res, next) => {
         } catch (err) {
           logger.error('❌ Failed to start Luna Bug:', err);
         }
-      }, 2000); // Wait 2 seconds for server to fully stabilize
+      }, 2000);
     }
   });
 })();
