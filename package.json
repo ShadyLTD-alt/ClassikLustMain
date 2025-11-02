@@ -47,6 +47,7 @@
     "@tanstack/react-query": "^5.60.5",
     "@telegraf/types": "^9.2.1",
     "@telegram-auth/server": "^1.0.4",
+    "@modelcontext/mistral-ai-api": "^0.0.9",
     "@types/cors": "^2.8.19",
     "@types/multer": "^2.0.0",
     "@types/node-telegram-bot-api": "^0.64.12",
