@@ -26,21 +26,38 @@ export default defineConfig({
       // Game data aliases
       "@data": r("main-gamedata"),
       "@master": r("main-gamedata", "master-data"),
-      // 🌙 LUNABUG ALIAS - Bulletproof import path!
-      "@lunabug": r("LunaBug"),
+      // 🌙 LUNABUG ALIAS - Use path.resolve for absolute path
+      "@lunabug": path.resolve(r(), "LunaBug"),
+      // Alternative: direct file alias for init.js
+      "@lunabug/init": path.resolve(r(), "LunaBug", "init.js"),
     },
   },
   root: r("client"),
   build: {
     outDir: r("dist/public"),
     emptyOutDir: true,
+    // Add rollup options to handle external dependencies
+    rollupOptions: {
+      // Don't bundle LunaBug - let it be external
+      external: (id) => {
+        // Only externalize in SSR mode, not client build
+        return false;
+      }
+    }
   },
   server: {
     fs: {
-      strict: true,
+      strict: false, // Allow access to parent directories
       // Allow serving files from these directories
-      allow: [r("main-gamedata"), r("LunaBug")],
-      deny: ["**/.*"],
+      allow: [r(), r("main-gamedata"), r("LunaBug")],
+      deny: ["**/node_modules/**", "**/.git/**"],
     },
+    // Add more lenient CORS for development
+    cors: true,
   },
+  // Optimize deps to prevent reload issues
+  optimizeDeps: {
+    include: [],
+    exclude: ['@lunabug/init']
+  }
 });
