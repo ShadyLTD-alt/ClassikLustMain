@@ -1,10 +1,11 @@
 import React, { useState } from "react";
-import { Settings, Plus, Upload, Eye, Bug, Gem, Zap, X } from "lucide-react";
+import { Settings, Plus, Upload, Eye, Bug, Gem, Zap, X, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useGame } from "@/contexts/GameContext";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import AdminPanel from "@/components/AdminPanel";
+import LunaBugDebugger from "@/components/LunaBugDebugger";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface AdminFABProps {
@@ -16,7 +17,7 @@ export function AdminFAB({ onOpenDebugger }: AdminFABProps) {
   const { toast } = useToast();
   const [isOpen, setIsOpen] = useState(false);
   const [showDevHUD, setShowDevHUD] = useState(false);
-  const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [showLunaBug, setShowLunaBug] = useState(false);
 
   // Only show for admins
   if (!state?.isAdmin) return null;
@@ -200,17 +201,17 @@ export function AdminFAB({ onOpenDebugger }: AdminFABProps) {
               +100 LG
             </Button>
             
-            {/* LunaBug Debugger */}
+            {/* LunaBug Debugger - FIXED TO USE NEW COMPONENT */}
             <Button
               onClick={() => {
-                onOpenDebugger();
+                setShowLunaBug(true);
                 setIsOpen(false);
               }}
               size="sm"
               className="bg-purple-600/90 hover:bg-purple-700 text-white shadow-lg backdrop-blur border border-purple-400/30"
             >
-              <span className="text-sm mr-2">🌙</span>
-              LunaBug
+              <Moon className="w-4 h-4 mr-2" />
+              🌙 LunaBug
             </Button>
 
             {/* Add LustPoints */}
@@ -298,8 +299,14 @@ export function AdminFAB({ onOpenDebugger }: AdminFABProps) {
         </div>
       )}
 
-      {/* Admin Panel Modal - This opens the full AdminPanel */}
+      {/* Admin Panel Modal */}
       <AdminPanel />
+      
+      {/* LunaBug Debugger Modal - NEW */}
+      <LunaBugDebugger 
+        isOpen={showLunaBug} 
+        onClose={() => setShowLunaBug(false)} 
+      />
     </>
   );
 }
