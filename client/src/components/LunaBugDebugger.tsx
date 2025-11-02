@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Code, Bug, Sparkles, Copy, RefreshCw, AlertTriangle, MessageSquare, Send, Bot, User, Zap, Moon } from 'lucide-react';
+import { Code, Bug, Sparkles, Copy, RefreshCw, AlertTriangle, MessageSquare, Send, Bot, User, Zap, Moon, Key } from 'lucide-react';
 
 interface LunaBugDebuggerProps {
   isOpen: boolean;
@@ -42,11 +42,13 @@ export default function LunaBugDebugger({ isOpen, onClose }: LunaBugDebuggerProp
   const [language, setLanguage] = useState('typescript');
   const [debugType, setDebugType] = useState('error');
   const [assistance, setAssistance] = useState<DebugResponse | null>(null);
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem('mistral_api_key') || '');
+  const [apiKeySet, setApiKeySet] = useState(() => !!localStorage.getItem('mistral_api_key'));
 
   // Chat state
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
-      text: "🌙 Welcome! I'm Luna, your AI debugging assistant. I'm connected to Mistral 7B and ready to help with your ClassikLust game development!",
+      text: "🌙 Welcome! I'm Luna, your AI debugging assistant powered by Mistral AI. Please set your Mistral API key first to get started with debugging assistance!",
       sender: 'bot',
       timestamp: new Date().toISOString(),
       type: 'chat'
@@ -62,93 +64,92 @@ export default function LunaBugDebugger({ isOpen, onClose }: LunaBugDebuggerProp
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // FIXED API CALL FOR MISTRAL 7B
+  // Save API key to localStorage
+  const handleSaveApiKey = () => {
+    if (!apiKey.trim()) {
+      toast({
+        title: 'API Key Required',
+        description: 'Please enter your Mistral AI API key',
+        variant: 'destructive'
+      });
+      return;
+    }
+    
+    localStorage.setItem('mistral_api_key', apiKey);
+    setApiKeySet(true);
+    toast({
+      title: '🌙 LunaBug Connected!',
+      description: 'Mistral AI API key saved successfully'
+    });
+    
+    // Update welcome message
+    setMessages([{
+      text: "🌙 Perfect! I'm now connected to Mistral AI and ready to help debug your ClassikLust game. Ask me anything about your code!",
+      sender: 'bot',
+      timestamp: new Date().toISOString(),
+      type: 'chat'
+    }]);
+  };
+
+  // FIXED API CALL FOR OFFICIAL MISTRAL AI API
   const debugMutation = useMutation({
     mutationFn: async (data: { code: string; error: string; context?: string; language: string; debugType: string }) => {
+      if (!apiKeySet || !apiKey) {
+        throw new Error('Please set your Mistral AI API key first');
+      }
+
       const prompt = createDebugPrompt(data);
       
-      console.log('🌙 LunaBug connecting to Mistral 7B...');
+      console.log('🌙 LunaBug connecting to Mistral AI API...');
       
-      // TRY MULTIPLE ENDPOINTS FOR MISTRAL 7B
-      const endpoints = [
-        'http://localhost:1234/v1/chat/completions',
-        'http://127.0.0.1:1234/v1/chat/completions',
-        'http://localhost:11434/api/chat',
-        'http://127.0.0.1:11434/api/chat'
-      ];
-      
-      let lastError = null;
-      
-      for (const endpoint of endpoints) {
-        try {
-          console.log(`🔌 Trying endpoint: ${endpoint}`);
-          
-          // Different formats for different APIs
-          const isOllama = endpoint.includes('11434');
-          const payload = isOllama ? {
-            model: 'mistral:7b',
-            messages: [
-              {
-                role: 'system',
-                content: 'You are Luna, an expert debugging assistant. Provide precise, actionable debugging advice with clear explanations and solutions.'
-              },
-              {
-                role: 'user',
-                content: prompt
-              }
-            ],
-            stream: false
-          } : {
-            model: 'mistral-7b-instruct-v0.1',
-            messages: [
-              {
-                role: 'system',
-                content: 'You are Luna, an expert debugging assistant. Provide precise, actionable debugging advice with clear explanations and solutions.'
-              },
-              {
-                role: 'user', 
-                content: prompt
-              }
-            ],
-            temperature: 0.3,
-            max_tokens: 1000,
-            stop: null
-          };
-          
-          const response = await fetch(endpoint, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(isOllama ? {} : { 'Authorization': `Bearer dummy-token` })
+      // OFFICIAL MISTRAL AI API ENDPOINT
+      const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: 'mistral-7b-instruct-v0.1', // or whatever model you prefer
+          messages: [
+            {
+              role: 'system',
+              content: 'You are Luna, an expert debugging assistant for the ClassikLust TypeScript/React game. Provide precise, actionable debugging advice with clear explanations and solutions.'
             },
-            body: JSON.stringify(payload),
-            signal: AbortSignal.timeout(15000) // 15 second timeout
-          });
-          
-          if (!response.ok) {
-            throw new Error(`API returned ${response.status}: ${response.statusText}`);
-          }
-          
-          const result = await response.json();
-          console.log('✅ LunaBug response received:', result);
-          
-          const content = result.choices?.[0]?.message?.content || result.message?.content || result.response || 'No response received';
-          return parseDebugResponse(content);
-          
-        } catch (error: any) {
-          console.warn(`❌ Endpoint ${endpoint} failed:`, error.message);
-          lastError = error;
-          continue;
+            {
+              role: 'user',
+              content: prompt
+            }
+          ],
+          temperature: 0.3,
+          max_tokens: 1500,
+          top_p: 0.9
+        }),
+        signal: AbortSignal.timeout(30000) // 30 second timeout for API
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        if (response.status === 401) {
+          throw new Error('Invalid API key. Please check your Mistral AI API key.');
+        } else if (response.status === 429) {
+          throw new Error('Rate limit exceeded. Please wait a moment and try again.');
+        } else if (response.status === 402) {
+          throw new Error('Insufficient credits. Please check your Mistral AI account balance.');
         }
+        throw new Error(`Mistral AI API error (${response.status}): ${errorData.message || response.statusText}`);
       }
       
-      // All endpoints failed
-      throw new Error(`LunaBug connection failed. Last error: ${lastError?.message || 'Unknown error'}. Make sure Mistral 7B is running on localhost:1234 or localhost:11434`);
+      const result = await response.json();
+      console.log('✅ LunaBug response received from Mistral AI');
+      
+      const content = result.choices?.[0]?.message?.content || 'No response received';
+      return parseDebugResponse(content);
     },
     onSuccess: (data) => {
       setAssistance(data);
       const debugMessage: ChatMessage = {
-        text: `🌙 Debug Analysis Complete!\n\n${data.analysis}\n\nSolutions:\n${data.solutions.map((s, i) => `${i + 1}. ${s}`).join('\n')}`,
+        text: `🌙 Debug Analysis Complete!\\n\\n${data.analysis}\\n\\nSolutions:\\n${data.solutions.map((s, i) => `${i + 1}. ${s}`).join('\\n')}`,
         sender: 'bot',
         timestamp: new Date().toISOString(),
         type: 'debug'
@@ -162,7 +163,7 @@ export default function LunaBugDebugger({ isOpen, onClose }: LunaBugDebuggerProp
     onError: (error: any) => {
       console.error('🌙 LunaBug debug error:', error);
       const errorMessage: ChatMessage = {
-        text: `❌ Connection failed: ${error.message}\n\n🔧 Troubleshooting:\n1. Make sure Mistral 7B is running\n2. Check localhost:1234 or localhost:11434\n3. Verify model is loaded\n4. Check firewall settings`,
+        text: `❌ Error: ${error.message}\\n\\n🔧 Troubleshooting:\\n1. Check your Mistral AI API key\\n2. Verify account has sufficient credits\\n3. Check internet connection\\n4. Try again in a few moments`,
         sender: 'bot',
         timestamp: new Date().toISOString(),
         type: 'chat'
@@ -178,60 +179,49 @@ export default function LunaBugDebugger({ isOpen, onClose }: LunaBugDebuggerProp
 
   const chatMutation = useMutation({
     mutationFn: async (message: string) => {
+      if (!apiKeySet || !apiKey) {
+        throw new Error('Please set your Mistral AI API key first');
+      }
+
       const chatPrompt = createChatPrompt(message, messages);
       
-      console.log('💬 LunaBug chat request...');
+      console.log('💬 LunaBug chat request to Mistral AI...');
       
-      const endpoints = [
-        'http://localhost:1234/v1/chat/completions',
-        'http://127.0.0.1:1234/v1/chat/completions', 
-        'http://localhost:11434/api/chat',
-        'http://127.0.0.1:11434/api/chat'
-      ];
-      
-      for (const endpoint of endpoints) {
-        try {
-          const isOllama = endpoint.includes('11434');
-          const payload = isOllama ? {
-            model: 'mistral:7b',
-            messages: [
-              { role: 'system', content: 'You are Luna, a helpful and friendly debugging assistant for the ClassikLust game. Be conversational and provide practical coding advice.' },
-              { role: 'user', content: chatPrompt }
-            ],
-            stream: false
-          } : {
-            model: 'mistral-7b-instruct-v0.1',
-            messages: [
-              { role: 'system', content: 'You are Luna, a helpful and friendly debugging assistant for the ClassikLust game. Be conversational and provide practical coding advice.' },
-              { role: 'user', content: chatPrompt }
-            ],
-            temperature: 0.7,
-            max_tokens: 500
-          };
-          
-          const response = await fetch(endpoint, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(isOllama ? {} : { 'Authorization': 'Bearer dummy-token' })
+      const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: 'mistral-7b-instruct-v0.1',
+          messages: [
+            { 
+              role: 'system', 
+              content: 'You are Luna, a helpful and friendly debugging assistant for the ClassikLust TypeScript/React game. Be conversational and provide practical coding advice. Keep responses concise but helpful.' 
             },
-            body: JSON.stringify(payload),
-            signal: AbortSignal.timeout(10000)
-          });
-          
-          if (!response.ok) throw new Error(`${response.status}: ${response.statusText}`);
-          
-          const result = await response.json();
-          const content = result.choices?.[0]?.message?.content || result.message?.content || result.response || 'No response received';
-          return content;
-          
-        } catch (error: any) {
-          console.warn(`Chat endpoint ${endpoint} failed:`, error.message);
-          continue;
+            { role: 'user', content: chatPrompt }
+          ],
+          temperature: 0.7,
+          max_tokens: 800,
+          top_p: 0.9
+        }),
+        signal: AbortSignal.timeout(20000)
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        if (response.status === 401) {
+          throw new Error('Invalid API key');
+        } else if (response.status === 429) {
+          throw new Error('Rate limit exceeded. Please wait a moment.');
         }
+        throw new Error(`API error (${response.status}): ${errorData.message || response.statusText}`);
       }
       
-      throw new Error('All Mistral endpoints failed. Check localhost:1234 or localhost:11434');
+      const result = await response.json();
+      const content = result.choices?.[0]?.message?.content || 'No response received';
+      return content;
     },
     onSuccess: (response) => {
       const botMessage: ChatMessage = {
@@ -246,7 +236,7 @@ export default function LunaBugDebugger({ isOpen, onClose }: LunaBugDebuggerProp
     onError: (error: any) => {
       console.error('🌙 LunaBug chat error:', error);
       const errorMessage: ChatMessage = {
-        text: `❌ ${error.message}\n\nTry: Check if Mistral 7B is running and accessible.`,
+        text: `❌ ${error.message}\\n\\nTip: Make sure your Mistral AI API key is valid and has sufficient credits.`,
         sender: 'bot',
         timestamp: new Date().toISOString(),
         type: 'chat'
@@ -258,38 +248,47 @@ export default function LunaBugDebugger({ isOpen, onClose }: LunaBugDebuggerProp
 
   const createDebugPrompt = (data: { code: string; error: string; context?: string; language: string; debugType: string }) => {
     const { code, error, context, language, debugType } = data;
-    return `Please analyze this ${language} code issue and provide debugging help.\n\nDebug Type: ${debugType}\nProgramming Language: ${language}\n\nCode:\n\`\`\`${language}\n${code}\n\`\`\`\n\nError/Issue: ${error}\n${context ? `\nAdditional Context: ${context}` : ''}\n\nPlease provide:\n1. Analysis of what's wrong\n2. Possible causes  \n3. Step-by-step solutions\n4. Code fixes if applicable\n\nBe concise but thorough.`;
+    return `Please analyze this ${language} code issue and provide debugging help.\\n\\nDebug Type: ${debugType}\\nProgramming Language: ${language}\\n\\nCode:\\n\\`\\`\\`${language}\\n${code}\\n\\`\\`\\`\\n\\nError/Issue: ${error}\\n${context ? `\\nAdditional Context: ${context}` : ''}\\n\\nPlease provide:\\n1. Analysis of what's wrong\\n2. Possible causes\\n3. Step-by-step solutions\\n4. Code fixes if applicable\\n\\nBe concise but thorough.`;
   };
 
   const createChatPrompt = (message: string, chatHistory: ChatMessage[]) => {
-    const recentHistory = chatHistory.slice(-6).map(msg => `${msg.sender === 'user' ? 'User:' : 'Luna:'} ${msg.text}`).join('\n');
-    return `You are Luna, a helpful coding and debugging assistant for ClassikLust game development.\n\nRecent conversation:\n${recentHistory}\n\nUser: ${message}\n\nPlease provide a helpful, conversational response about coding, debugging, or technical issues.`;
+    const recentHistory = chatHistory.slice(-6).map(msg => `${msg.sender === 'user' ? 'User:' : 'Luna:'} ${msg.text}`).join('\\n');
+    return `You are Luna, a helpful coding and debugging assistant for ClassikLust game development.\\n\\nRecent conversation:\\n${recentHistory}\\n\\nUser: ${message}\\n\\nPlease provide a helpful, conversational response about coding, debugging, or technical issues.`;
   };
 
   const parseDebugResponse = (response: string): DebugResponse => {
     // Try to extract structured information from response
-    const analysisMatch = response.match(/Analysis[:\s]*([^\n]+)/i);
-    const causesSection = response.match(/(?:causes?|reasons?)[:\s]*([\s\S]*?)(?:solutions?|fixes?|steps?)/i);
-    const solutionsSection = response.match(/(?:solutions?|fixes?)[:\s]*([\s\S]*?)(?:code|example|steps|$)/i);
-    const codeMatch = response.match(/```[\s\S]*?```/);
+    const analysisMatch = response.match(/Analysis[:\\s]*([^\\n]+)/i);
+    const causesSection = response.match(/(?:causes?|reasons?)[:\\s]*([\\s\\S]*?)(?:solutions?|fixes?|steps?)/i);
+    const solutionsSection = response.match(/(?:solutions?|fixes?)[:\\s]*([\\s\\S]*?)(?:code|example|steps|$)/i);
+    const codeMatch = response.match(/```[\\s\\S]*?```/);
     
     return {
       analysis: analysisMatch?.[1]?.trim() || response.substring(0, 200) + '...',
       possibleCauses: extractListItems(causesSection?.[1]),
       solutions: extractListItems(solutionsSection?.[1]),
-      codeExample: codeMatch?.[0]?.replace(/```[a-z]*\n?|```/g, '')?.trim(),
-      confidence: 80,
+      codeExample: codeMatch?.[0]?.replace(/```[a-z]*\\n?|```/g, '')?.trim(),
+      confidence: 85,
       debugSteps: ['Review the analysis', 'Check possible causes', 'Apply suggested solutions']
     };
   };
 
   const extractListItems = (text?: string): string[] => {
     if (!text) return [];
-    const items = text.split(/\d+\.|[-•*]/).filter(item => item.trim()).map(item => item.trim().replace(/^\s*[\d.]*\s*/, ''));
+    const items = text.split(/\\d+\\.|[-•*]/).filter(item => item.trim()).map(item => item.trim().replace(/^\\s*[\\d.]*\\s*/, ''));
     return items.length > 0 ? items.slice(0, 5) : [text.trim()];
   };
 
   const handleDebug = () => {
+    if (!apiKeySet) {
+      toast({
+        title: 'API Key Required',
+        description: 'Please set your Mistral AI API key first',
+        variant: 'destructive'
+      });
+      return;
+    }
+
     if (!code.trim() && !error.trim()) {
       toast({
         title: 'Missing information',
@@ -300,7 +299,7 @@ export default function LunaBugDebugger({ isOpen, onClose }: LunaBugDebuggerProp
     }
 
     const debugRequestMessage: ChatMessage = {
-      text: `🔍 Debug Request: ${language} (${debugType})\n${error.substring(0, 100)}...`,
+      text: `🔍 Debug Request: ${language} (${debugType})\\n${error.substring(0, 100)}...`,
       sender: 'user',
       timestamp: new Date().toISOString(),
       type: 'debug'
@@ -311,6 +310,15 @@ export default function LunaBugDebugger({ isOpen, onClose }: LunaBugDebuggerProp
 
   const handleChatSend = async () => {
     if (!chatInput.trim() || isChatLoading) return;
+
+    if (!apiKeySet) {
+      toast({
+        title: 'API Key Required',
+        description: 'Please set your Mistral AI API key first',
+        variant: 'destructive'
+      });
+      return;
+    }
 
     const userMessage: ChatMessage = {
       text: chatInput,
@@ -357,9 +365,39 @@ export default function LunaBugDebugger({ isOpen, onClose }: LunaBugDebuggerProp
             🌙 LunaBug AI Debug Assistant
           </DialogTitle>
           <DialogDescription className="text-slate-300">
-            Powered by Mistral 7B • Advanced debugging analysis and interactive AI chat for ClassikLust development
+            Powered by Mistral AI • Advanced debugging analysis and interactive AI chat for ClassikLust development
           </DialogDescription>
         </DialogHeader>
+
+        {/* API KEY SETUP - Show if not configured */}
+        {!apiKeySet && (
+          <Card className="bg-yellow-900/40 border-yellow-500/50 mb-4">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <Key className="w-5 h-5 text-yellow-400" />
+                <div className="flex-1">
+                  <h4 className="font-semibold text-yellow-300 mb-2">Mistral AI API Key Required</h4>
+                  <p className="text-sm text-yellow-200 mb-3">
+                    Enter your Mistral AI API key to enable debugging assistance. 
+                    Get your key from: <span className="font-mono">https://console.mistral.ai/</span>
+                  </p>
+                  <div className="flex gap-2">
+                    <Input
+                      type="password"
+                      value={apiKey}
+                      onChange={(e) => setApiKey(e.target.value)}
+                      placeholder="Enter your Mistral AI API key..."
+                      className="bg-slate-800 border-slate-600 text-white"
+                    />
+                    <Button onClick={handleSaveApiKey} className="bg-yellow-600 hover:bg-yellow-700">
+                      Save Key
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <Tabs defaultValue="debug" className="flex-grow flex flex-col overflow-hidden">
           <TabsList className="grid w-full grid-cols-2 bg-slate-700/50 mb-4">
@@ -452,7 +490,7 @@ export default function LunaBugDebugger({ isOpen, onClose }: LunaBugDebuggerProp
                     <div className="flex gap-2">
                       <Button
                         onClick={handleDebug}
-                        disabled={debugMutation.isPending || (!code.trim() && !error.trim())}
+                        disabled={debugMutation.isPending || (!code.trim() && !error.trim()) || !apiKeySet}
                         className="bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 flex-1"
                       >
                         <Bug className="w-4 h-4 mr-2" />
@@ -462,6 +500,25 @@ export default function LunaBugDebugger({ isOpen, onClose }: LunaBugDebuggerProp
                         Clear
                       </Button>
                     </div>
+                    
+                    {/* API Key Settings */}
+                    {apiKeySet && (
+                      <div className="pt-3 border-t border-slate-600">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setApiKeySet(false);
+                            setApiKey('');
+                            localStorage.removeItem('mistral_api_key');
+                          }}
+                          className="text-xs border-slate-600"
+                        >
+                          <Key className="w-3 h-3 mr-2" />
+                          Change API Key
+                        </Button>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               </div>
@@ -495,7 +552,7 @@ export default function LunaBugDebugger({ isOpen, onClose }: LunaBugDebuggerProp
                         <div className="text-center">
                           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-400 mx-auto mb-4"></div>
                           <span className="text-slate-300">🌙 Luna is analyzing your code...</span>
-                          <p className="text-xs text-slate-400 mt-2">Connecting to Mistral 7B API</p>
+                          <p className="text-xs text-slate-400 mt-2">Connecting to Mistral AI API</p>
                         </div>
                       </div>
                     ) : assistance ? (
@@ -574,8 +631,11 @@ export default function LunaBugDebugger({ isOpen, onClose }: LunaBugDebuggerProp
                           <Moon className="w-12 h-12 mx-auto mb-4 opacity-50" />
                           <p>🌙 Enter your code and error details to get Luna's AI debugging assistance</p>
                           <p className="text-xs mt-2 text-slate-500">
-                            Supports TypeScript, React, Node.js and many other languages
+                            Powered by Mistral AI • Supports TypeScript, React, Node.js and more
                           </p>
+                          {!apiKeySet && (
+                            <p className="text-yellow-400 text-xs mt-1">⚠️ API key required</p>
+                          )}
                         </div>
                       </div>
                     )}
@@ -674,16 +734,22 @@ export default function LunaBugDebugger({ isOpen, onClose }: LunaBugDebuggerProp
                     placeholder="Ask Luna about your code, debugging, or any programming questions..."
                     onKeyPress={(e) => e.key === 'Enter' && handleChatSend()}
                     className="flex-1 bg-slate-700 border-slate-600 text-white"
-                    disabled={isChatLoading || chatMutation.isPending}
+                    disabled={isChatLoading || chatMutation.isPending || !apiKeySet}
                   />
                   <Button
                     onClick={handleChatSend}
                     className="bg-purple-600 hover:bg-purple-700"
-                    disabled={isChatLoading || chatMutation.isPending || !chatInput.trim()}
+                    disabled={isChatLoading || chatMutation.isPending || !chatInput.trim() || !apiKeySet}
                   >
                     <Send className="w-4 h-4" />
                   </Button>
                 </div>
+                
+                {!apiKeySet && (
+                  <p className="text-yellow-400 text-xs text-center mt-2">
+                    ⚠️ Set your Mistral AI API key above to enable chat
+                  </p>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
