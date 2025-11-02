@@ -1,4 +1,4 @@
-import { Zap, Star, Heart } from 'lucide-react';
+import { Zap, Star, Heart, Gem, TrendingUp } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { useGame } from '@/contexts/GameContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -17,7 +17,7 @@ export default function StatsHeader() {
 
   return (
     <div className="sticky top-0 z-50 bg-card border-b border-card-border">
-      <div className="flex items-center justify-between gap-4 p-4">
+      <div className="flex items-center justify-between gap-3 p-4">
         
         {/* LEFT: Avatar + Username + Level */}
         <div className="flex items-center gap-3 min-w-0">
@@ -54,7 +54,7 @@ export default function StatsHeader() {
           </div>
         </div>
 
-        {/* CENTER-LEFT: LUSTPOINTS */}
+        {/* CENTER-LEFT: LUSTPOINTS + LUSTGEMS */}
         <div className="flex-1 min-w-0 text-center" data-testid="stat-lustpoints">
           <div className="flex items-center justify-center gap-2 mb-1">
             <Heart className="w-5 h-5 text-pink-500" />
@@ -62,6 +62,15 @@ export default function StatsHeader() {
           </div>
           <div className="text-2xl font-bold tabular-nums text-pink-400">
             {Math.floor(state.lustPoints || state.points || 0).toLocaleString()}
+          </div>
+          
+          {/* LUSTGEMS below LustPoints */}
+          <div className="flex items-center justify-center gap-1 mt-2">
+            <Gem className="w-4 h-4 text-blue-400" />
+            <span className="text-xs font-medium uppercase tracking-wide text-blue-300">LustGems</span>
+          </div>
+          <div className="text-lg font-bold tabular-nums text-blue-400">
+            {Math.floor(state.lustGems || 0).toLocaleString()}
           </div>
         </div>
 
@@ -79,7 +88,7 @@ export default function StatsHeader() {
           </span>
         </div>
 
-        {/* RIGHT: ENERGY */}
+        {/* RIGHT: ENERGY + BOOST+ */}
         <div className="flex-1 min-w-0" data-testid="stat-energy">
           <div className="flex items-center gap-2 mb-1">
             <Zap className="w-5 h-5 text-green-500" />
@@ -97,6 +106,15 @@ export default function StatsHeader() {
           <span className="text-xs text-muted-foreground">
             +{state.energyRegenRate}/s
           </span>
+          
+          {/* BOOST+ below Energy */}
+          <div className="flex items-center gap-1 mt-2">
+            <TrendingUp className="w-4 h-4 text-orange-400" />
+            <span className="text-xs font-medium uppercase tracking-wide text-orange-300">Boost+</span>
+          </div>
+          <div className="text-lg font-bold tabular-nums text-orange-400">
+            {state.boostMultiplier ? `${state.boostMultiplier}x` : '1x'}
+          </div>
         </div>
       </div>
     </div>
