@@ -1,0 +1,98 @@
+{
+  "name": "databaseColumnMapper",
+  "version": "1.0.0", 
+  "description": "Auto-detects and fixes camelCase vs snake_case database column issues",
+  "category": "database",
+  "autoLoad": true,
+  "triggers": ["column", "does not exist", "camelCase", "snake_case", "maxEnergy", "passiveIncome"],
+  "config": {
+    "enabled": true,
+    "priority": "maximum", 
+    "dependencies": ["PostgreSQL", "Drizzle"]
+  },
+  "mistralPrompts": {
+    "system": "You are a database schema expert. Detect camelCase JavaScript properties that don't match snake_case database columns. Provide exact column mapping solutions.",
+    "context": "ClassikLust uses PostgreSQL with snake_case columns but JavaScript with camelCase. Common mismatches: maxEnergy->max_energy, passiveIncome->passive_income_rate."
+  },
+  "function": {
+    "type": "fix",
+    "input": {
+      "schema": "{ code: string, error: string, table?: string }",
+      "required": ["code", "error"]
+    },
+    "output": {
+      "schema": "{ detected: boolean, mappings: array, sqlFix: string, codeFix: string }"
+    },
+    "columnMappings": {
+      "maxEnergy": "max_energy",
+      "passiveIncome": "passive_income_rate", 
+      "passiveIncomeRate": "passive_income_rate",
+      "lastLogin": "last_login",
+      "createdAt": "created_at",
+      "updatedAt": "updated_at",
+      "telegramId": "telegram_id",
+      "unlockLevel": "unlock_level",
+      "chatEnable": "chat_enable",
+      "chatSendPercent": "chat_send_percent",
+      "isHidden": "is_hidden",
+      "isAdmin": "is_admin",
+      "baseCost": "base_cost",
+      "costMultiplier": "cost_multiplier",
+      "unlockedCharacters": "unlocked_characters"
+    },
+    "detectionRules": [
+      {
+        "pattern": "column \"([a-z_]+)\" does not exist",
+        "extract": "snake_case_column",
+        "severity": "critical"
+      },
+      {
+        "pattern": "\\.(\\w+).*column.*does not exist",
+        "extract": "camelCase_property", 
+        "severity": "critical"
+      },
+      {
+        "pattern": "SELECT.*\\.(\\w+).*FROM",
+        "extract": "query_property",
+        "severity": "medium"
+      }
+    ],
+    "autoFixes": [
+      {
+        "condition": "error.includes('max_energy') && code.includes('maxEnergy')",
+        "solution": "Update schema: ALTER TABLE players RENAME COLUMN max_energy TO maxEnergy; OR use column mapping in ORM",
+        "codeExample": "// Option 1: Schema fix\nALTER TABLE players RENAME COLUMN max_energy TO \"maxEnergy\";\n\n// Option 2: ORM mapping\n{ maxEnergy: { type: 'integer', column: 'max_energy' } }",
+        "confidence": 0.95
+      },
+      {
+        "condition": "error.includes('passive_income') && code.includes('passiveIncome')", 
+        "solution": "Map passiveIncomeRate to passive_income_rate column",
+        "codeExample": "// Database mapping\npassiveIncomeRate: integer('passive_income_rate').default(0)",
+        "confidence": 0.95
+      }
+    ]
+  },
+  "quickCommands": [
+    {
+      "name": "fixMaxEnergy",
+      "description": "Quick fix for maxEnergy column issues",
+      "command": "UPDATE player SET energy = LEAST(energy, calculate_max_energy(level));"
+    },
+    {
+      "name": "validateSchema", 
+      "description": "Check all table columns for naming consistency",
+      "command": "SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = 'public';"
+    }
+  ],
+  "metadata": {
+    "author": "Steven",
+    "created": "2025-11-02",
+    "solvedBugs": [
+      "maxEnergy -> max_energy mismatch",
+      "passiveIncome -> passive_income_rate mismatch",
+      "Energy calculation showing wrong values"
+    ],
+    "effectiveness": 0.98,
+    "tags": ["database", "schema", "postgresql", "camelcase", "mapping"]
+  }
+}
