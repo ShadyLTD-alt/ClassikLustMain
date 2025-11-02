@@ -29,16 +29,7 @@ export default function GameLayout({
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 text-white">
-      <TopBar 
-        username={player?.username}
-        level={state.level}
-        points={state.points}
-        passivePerHour={state.passiveIncomeRate}
-        energy={state.energy}
-        maxEnergy={state.maxEnergy}
-        energyRegen={state.energyRegenRate}
-        isAdmin={state.isAdmin}
-      />
+      <TopBar onOpenCharacterGallery={onOpenCharacters} />
 
       <main className="mx-auto max-w-5xl px-4 pb-24 pt-4">
         {children}
@@ -46,7 +37,6 @@ export default function GameLayout({
 
       <BottomNav 
         onUpgrades={onOpenUpgrades}
-        onCharacters={onOpenCharacters}
         onChat={onOpenChat}
         onLevel={onOpenLevel}
       />
