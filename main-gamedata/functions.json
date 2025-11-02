@@ -1,0 +1,334 @@
+{
+  "functions": {
+    "core": {
+      "calculateLevelUpCost": {
+        "name": "calculateLevelUpCost",
+        "description": "Calculate the LP cost to level up from current level",
+        "category": "progression",
+        "params": ["currentLevel"],
+        "returns": "number",
+        "formula": "Math.floor(100 * Math.pow(1.5, currentLevel - 1))",
+        "enabled": true
+      },
+      "calculateUpgradeCost": {
+        "name": "calculateUpgradeCost",
+        "description": "Calculate cost for next upgrade level",
+        "category": "upgrades",
+        "params": ["baseCost", "currentLevel", "multiplier"],
+        "returns": "number",
+        "formula": "Math.floor(baseCost * Math.pow(multiplier, currentLevel))",
+        "enabled": true
+      },
+      "calculateEnergyRegenRate": {
+        "name": "calculateEnergyRegenRate",
+        "description": "Calculate energy regeneration per second",
+        "category": "energy",
+        "params": ["baseRate", "upgrades", "characterBonus"],
+        "returns": "number",
+        "formula": "baseRate * (1 + upgrades.energyRegen * 0.1) * characterBonus",
+        "enabled": true
+      },
+      "calculatePassiveIncome": {
+        "name": "calculatePassiveIncome",
+        "description": "Calculate LP per second from passive income",
+        "category": "income",
+        "params": ["baseRate", "upgrades", "multipliers"],
+        "returns": "number",
+        "formula": "baseRate * upgrades.passiveMultiplier * multipliers.total",
+        "enabled": true
+      }
+    },
+    "gameplay": {
+      "tapReward": {
+        "name": "tapReward",
+        "description": "Calculate LP reward for single tap",
+        "category": "tapping",
+        "params": ["baseTap", "level", "upgrades", "characterBonus"],
+        "returns": "number",
+        "formula": "Math.floor((baseTap + level) * upgrades.tapMultiplier * characterBonus)",
+        "enabled": true
+      },
+      "criticalHitChance": {
+        "name": "criticalHitChance",
+        "description": "Calculate chance for critical hit bonus",
+        "category": "tapping",
+        "params": ["baseCrit", "luckStat", "upgrades"],
+        "returns": "number", 
+        "formula": "Math.min(0.75, baseCrit + (luckStat * 0.01) + (upgrades.critChance * 0.05))",
+        "enabled": true
+      },
+      "comboMultiplier": {
+        "name": "comboMultiplier",
+        "description": "Calculate combo multiplier for consecutive taps",
+        "category": "tapping",
+        "params": ["comboCount", "maxMultiplier"],
+        "returns": "number",
+        "formula": "Math.min(maxMultiplier, 1 + (comboCount * 0.1))",
+        "enabled": true
+      },
+      "energyCost": {
+        "name": "energyCost",
+        "description": "Calculate energy cost per tap",
+        "category": "energy",
+        "params": ["baseCost", "efficiency", "characterBonus"],
+        "returns": "number",
+        "formula": "Math.max(1, Math.floor(baseCost * (1 - efficiency) * (1 - characterBonus)))",
+        "enabled": true
+      }
+    },
+    "character": {
+      "getCharacterBonus": {
+        "name": "getCharacterBonus",
+        "description": "Get total bonus from selected character",
+        "category": "characters",
+        "params": ["characterId", "characterLevel"],
+        "returns": "object",
+        "formula": "CHARACTER_DATA[characterId].baseStats * (1 + characterLevel * 0.1)",
+        "enabled": true
+      },
+      "checkUnlockRequirements": {
+        "name": "checkUnlockRequirements",
+        "description": "Check if player meets character unlock requirements",
+        "category": "characters",
+        "params": ["characterId", "playerLevel", "playerLP"],
+        "returns": "boolean",
+        "formula": "playerLevel >= unlockLevel && playerLP >= unlockCost",
+        "enabled": true
+      },
+      "getCharacterSpecialAbility": {
+        "name": "getCharacterSpecialAbility",
+        "description": "Get random special ability effect for character",
+        "category": "characters", 
+        "params": ["characterId", "abilityType"],
+        "returns": "object",
+        "formula": "CHARACTER_DATA[characterId].specialAbilities[random]",
+        "enabled": true
+      }
+    },
+    "achievements": {
+      "checkAchievementProgress": {
+        "name": "checkAchievementProgress",
+        "description": "Check progress towards achievement completion",
+        "category": "achievements",
+        "params": ["achievementId", "playerStats"],
+        "returns": "object",
+        "formula": "(playerStats.value / achievement.target) * 100",
+        "enabled": true
+      },
+      "calculateAchievementReward": {
+        "name": "calculateAchievementReward", 
+        "description": "Calculate reward for completing achievement",
+        "category": "achievements",
+        "params": ["achievementId", "difficulty"],
+        "returns": "object",
+        "formula": "baseReward * difficulty.multiplier",
+        "enabled": true
+      }
+    },
+    "utilities": {
+      "formatNumber": {
+        "name": "formatNumber",
+        "description": "Format large numbers with suffixes (K, M, B, T)",
+        "category": "ui",
+        "params": ["value"],
+        "returns": "string",
+        "formula": "value >= 1e12 ? (value/1e12).toFixed(1)+'T' : value >= 1e9 ? (value/1e9).toFixed(1)+'B' : ...",
+        "enabled": true
+      },
+      "generateId": {
+        "name": "generateId",
+        "description": "Generate unique ID for game objects",
+        "category": "utils",
+        "params": ["prefix"],
+        "returns": "string",
+        "formula": "prefix + '_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9)",
+        "enabled": true
+      },
+      "timeUntilNextHour": {
+        "name": "timeUntilNextHour",
+        "description": "Calculate milliseconds until next hour for hourly bonuses",
+        "category": "time",
+        "params": [],
+        "returns": "number",
+        "formula": "3600000 - (Date.now() % 3600000)",
+        "enabled": true
+      },
+      "isNightTime": {
+        "name": "isNightTime",
+        "description": "Check if it's nighttime (for Luna bonuses)",
+        "category": "time",
+        "params": ["timezone"],
+        "returns": "boolean",
+        "formula": "new Date().getHours() >= 20 || new Date().getHours() <= 6",
+        "enabled": true
+      },
+      "calculateOfflineIncome": {
+        "name": "calculateOfflineIncome",
+        "description": "Calculate LP earned while offline (max 3 hours)",
+        "category": "offline",
+        "params": ["timeAway", "passiveRate", "maxHours"],
+        "returns": "number",
+        "formula": "Math.min(timeAway, maxHours * 3600000) * passiveRate / 1000",
+        "enabled": true
+      }
+    },
+    "validation": {
+      "validatePlayerStats": {
+        "name": "validatePlayerStats",
+        "description": "Validate player stats are within acceptable ranges",
+        "category": "security",
+        "params": ["stats"],
+        "returns": "object",
+        "formula": "stats.level <= 1000 && stats.energy <= stats.maxEnergy && stats.points >= 0",
+        "enabled": true
+      },
+      "sanitizeInput": {
+        "name": "sanitizeInput",
+        "description": "Sanitize user input for security",
+        "category": "security",
+        "params": ["input", "maxLength"],
+        "returns": "string",
+        "formula": "input.replace(/[^a-zA-Z0-9_-]/g, '').substring(0, maxLength)",
+        "enabled": true
+      },
+      "validateUpgradePurchase": {
+        "name": "validateUpgradePurchase",
+        "description": "Validate upgrade purchase is legitimate",
+        "category": "security",
+        "params": ["upgradeId", "currentLevel", "playerPoints", "cost"],
+        "returns": "boolean",
+        "formula": "currentLevel >= 0 && playerPoints >= cost && cost > 0",
+        "enabled": true
+      }
+    },
+    "effects": {
+      "applyCharacterEffect": {
+        "name": "applyCharacterEffect",
+        "description": "Apply character-specific effects and bonuses",
+        "category": "effects",
+        "params": ["characterId", "effectType", "duration"],
+        "returns": "object",
+        "formula": "CHARACTER_EFFECTS[characterId][effectType] * duration",
+        "enabled": true
+      },
+      "calculateElementalBonus": {
+        "name": "calculateElementalBonus",
+        "description": "Calculate elemental bonus based on character element",
+        "category": "effects",
+        "params": ["element", "currentTime"],
+        "returns": "number",
+        "formula": "ELEMENTAL_BONUSES[element].formula(currentTime)",
+        "enabled": true
+      },
+      "triggerSpecialEvent": {
+        "name": "triggerSpecialEvent",
+        "description": "Trigger special character event with probability",
+        "category": "events",
+        "params": ["characterId", "eventType", "probability"],
+        "returns": "boolean",
+        "formula": "Math.random() < probability * CHARACTER_DATA[characterId].eventChance",
+        "enabled": true
+      }
+    },
+    "admin": {
+      "debugPlayerState": {
+        "name": "debugPlayerState", 
+        "description": "Debug and validate current player state",
+        "category": "debug",
+        "params": ["playerId"],
+        "returns": "object",
+        "formula": "comprehensive player data validation and debug info",
+        "enabled": true,
+        "adminOnly": true
+      },
+      "resetPlayerProgress": {
+        "name": "resetPlayerProgress",
+        "description": "Reset player progress (admin only)",
+        "category": "admin",
+        "params": ["playerId", "confirmToken"],
+        "returns": "boolean",
+        "formula": "secure player data reset with confirmation",
+        "enabled": true,
+        "adminOnly": true
+      },
+      "grantItems": {
+        "name": "grantItems",
+        "description": "Grant items/currency to player (admin only)",
+        "category": "admin",
+        "params": ["playerId", "itemType", "amount"],
+        "returns": "boolean", 
+        "formula": "secure item/currency granting with audit log",
+        "enabled": true,
+        "adminOnly": true
+      }
+    }
+  },
+  "constants": {
+    "MAX_ENERGY": 1000,
+    "BASE_ENERGY_REGEN": 1,
+    "MAX_LEVEL": 1000,
+    "BASE_TAP_REWARD": 1,
+    "MAX_OFFLINE_HOURS": 3,
+    "CRITICAL_HIT_BASE_CHANCE": 0.05,
+    "MAX_COMBO_MULTIPLIER": 5.0,
+    "ENERGY_COST_PER_TAP": 1,
+    "LEVEL_UP_BASE_COST": 100,
+    "LEVEL_UP_MULTIPLIER": 1.5,
+    "PASSIVE_INCOME_BASE_RATE": 0.1,
+    "ACHIEVEMENT_UNLOCK_MULTIPLIER": 1.2,
+    "CHARACTER_BONUS_PER_LEVEL": 0.1,
+    "VIP_CONTENT_MIN_LEVEL": 15,
+    "MAX_DAILY_BONUSES": 5
+  },
+  "formulas": {
+    "levelUpCost": "Math.floor(100 * Math.pow(1.5, level - 1))",
+    "upgradeCost": "Math.floor(baseCost * Math.pow(multiplier, currentLevel))",
+    "tapReward": "Math.floor((baseTap + level) * tapMultiplier * characterBonus)",
+    "criticalHit": "Math.min(0.75, baseCrit + (luck * 0.01) + (upgrades.critChance * 0.05))",
+    "energyRegen": "baseRate * (1 + upgrades.energyRegen * 0.1) * characterBonus",
+    "passiveIncome": "baseRate * upgrades.passiveMultiplier * globalMultiplier",
+    "offlineIncome": "Math.min(timeAway, maxHours * 3600000) * passiveRate / 1000",
+    "comboMultiplier": "Math.min(maxMultiplier, 1 + (comboCount * 0.1))"
+  },
+  "triggers": {
+    "levelUp": {
+      "event": "player_level_up",
+      "description": "Triggered when player levels up",
+      "effects": ["energy_refill", "unlock_check", "achievement_check"],
+      "enabled": true
+    },
+    "characterUnlock": {
+      "event": "character_unlocked",
+      "description": "Triggered when new character is unlocked", 
+      "effects": ["bonus_calculation", "ability_unlock", "gallery_update"],
+      "enabled": true
+    },
+    "upgradeComplete": {
+      "event": "upgrade_purchased",
+      "description": "Triggered when upgrade is completed",
+      "effects": ["stats_recalculation", "bonus_update"],
+      "enabled": true
+    },
+    "achievementUnlocked": {
+      "event": "achievement_completed",
+      "description": "Triggered when achievement is completed",
+      "effects": ["reward_grant", "bonus_unlock", "progress_save"],
+      "enabled": true
+    },
+    "specialEvent": {
+      "event": "character_special_triggered", 
+      "description": "Triggered when character special ability activates",
+      "effects": ["temporary_bonus", "visual_effect", "sound_effect"],
+      "enabled": true
+    }
+  },
+  "metadata": {
+    "version": "1.0.0",
+    "lastUpdated": "2025-11-02T08:52:00Z",
+    "totalFunctions": 17,
+    "categories": ["progression", "upgrades", "energy", "income", "tapping", "characters", "achievements", "effects", "admin", "debug", "security", "ui", "utils", "time", "offline", "events"],
+    "compatibility": "ClassikLust v1.0+",
+    "author": "LunaBug Function Generator",
+    "description": "Comprehensive game function library for ClassikLust anime tap game"
+  }
+}
