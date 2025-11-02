@@ -20,9 +20,11 @@ import CharacterSelector from "./CharacterSelector";
 import type { Player } from "@shared/schema";
 
 export default function GameInterface() {
-  console.log('🎮 [v3.0] GameInterface component rendering');
-  const { state, tap, isLoading } = useGame();
-  console.log('🎮 [v3.0] GameInterface isLoading:', isLoading);
+  console.log('🎮 [v3.1] GameInterface component rendering');
+  
+  // Remove isLoading - it doesn't exist in GameContext!
+  const { state, tap } = useGame();
+  console.log('🎮 [v3.1] GameInterface state:', state);
 
   const [showUpgrades, setShowUpgrades] = useState(false);
   const [showLevelUp, setShowLevelUp] = useState(false);
@@ -56,20 +58,24 @@ export default function GameInterface() {
     }
   }, [showUpgrades, showLevelUp, showCharacterSelector, refetchPlayer]);
 
-  // Handle tap
-  const handleTap = async () => {
-    if (!player) return;
-    try {
-      const response = await apiRequest('POST', '/api/player/tap');
-      if (response.ok) {
-        refetchPlayer();
-      }
-    } catch (error) {
-      console.error('Tap failed:', error);
-    }
+  // Handle tap using GameContext tap function
+  const handleTap = () => {
+    console.log('💯 [v3.1] Tap triggered via GameContext');
+    tap(); // Use the tap function from GameContext
   };
 
-  if (!player) {
+  // Use state from GameContext instead of separate query
+  // The GameContext already loads and manages all the player data
+  const gamePlayer = {
+    ...state,
+    username: player?.username || 'Player', // Get username from query if needed
+    isAdmin: state.isAdmin || false
+  };
+
+  console.log('🎮 [v3.1] Using game player data:', gamePlayer);
+
+  if (!state || state.points === undefined) {
+    console.log('⏳ [v3.1] GameInterface waiting for GameContext to initialize...');
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <div className="text-white text-center">
@@ -80,7 +86,7 @@ export default function GameInterface() {
     );
   }
 
-  const energyPercentage = (player.energy / player.maxEnergy) * 100;
+  const energyPercentage = (gamePlayer.energy / gamePlayer.maxEnergy) * 100;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 text-white">
@@ -115,14 +121,14 @@ export default function GameInterface() {
               </Button>
             </div>
             <div>
-              <div className="text-xs text-gray-400">@{player.username || 'Unknown'}</div>
+              <div className="text-xs text-gray-400">@{gamePlayer.username || 'Unknown'}</div>
               <div className="font-semibold">
                 {currentCharacter ? currentCharacter.name : 'Select Character'}
               </div>
             </div>
           </div>
           {/* Admin Toggle */}
-          {player.isAdmin && (
+          {gamePlayer.isAdmin && (
             <div className="flex items-center gap-2 text-xs">
               <span className="text-green-400">Admin: ON</span>
               <Settings className="w-4 h-4" />
@@ -139,8 +145,8 @@ export default function GameInterface() {
                 <TrendingUp className="w-5 h-5 text-purple-400 mr-2" />
                 <span className="text-purple-400 font-semibold">POINTS</span>
               </div>
-              <div className="text-2xl font-bold">{Math.floor(player.points)}</div>
-              <div className="text-xs text-gray-400">+{Math.floor(player.passiveIncomeRate)}/hr</div>
+              <div className="text-2xl font-bold">{Math.floor(gamePlayer.points)}</div>
+              <div className="text-xs text-gray-400">+{Math.floor(gamePlayer.passiveIncomeRate)}/hr</div>
               <div className="text-xs text-purple-400">Passive Income</div>
             </CardContent>
           </Card>
@@ -150,7 +156,7 @@ export default function GameInterface() {
                 <TrendingDown className="w-5 h-5 text-purple-400 mr-2" />
                 <span className="text-purple-400 font-semibold">POINTS/HR</span>
               </div>
-              <div className="text-2xl font-bold">{Math.floor(player.passiveIncomeRate)}</div>
+              <div className="text-2xl font-bold">{Math.floor(gamePlayer.passiveIncomeRate)}</div>
               <div className="text-xs text-purple-400">Passive Income</div>
             </CardContent>
           </Card>
@@ -160,7 +166,7 @@ export default function GameInterface() {
                 <Zap className="w-5 h-5 text-yellow-400 mr-2" />
                 <span className="text-yellow-400 font-semibold">ENERGY</span>
               </div>
-              <div className="text-2xl font-bold">{player.energy} / {player.maxEnergy}</div>
+              <div className="text-2xl font-bold">{gamePlayer.energy} / {gamePlayer.maxEnergy}</div>
               <Progress value={energyPercentage} className="mt-2 h-2 bg-gray-700" />
               <div className="text-xs text-yellow-400 mt-1">+1/s</div>
             </CardContent>
@@ -177,9 +183,9 @@ export default function GameInterface() {
                 className="w-64 h-64 mx-auto mb-4 rounded-lg bg-gray-800/50 backdrop-blur-sm border-2 border-purple-500/30 flex items-center justify-center cursor-pointer hover:border-purple-400/50 transition-all active:scale-95"
                 onClick={handleTap}
               >
-                {player.displayImage ? (
+                {gamePlayer.displayImage ? (
                   <img
-                    src={player.displayImage}
+                    src={gamePlayer.displayImage}
                     alt={currentCharacter.name}
                     className="w-full h-full object-cover rounded-lg"
                     onError={(e) => {
@@ -233,7 +239,7 @@ export default function GameInterface() {
           <Button variant="ghost" size="sm" className="flex flex-col items-center gap-1 text-xs" onClick={() => setShowLevelUp(true)}>
             <TrendingDown className="w-5 h-5" />
             <span>Level Up</span>
-            <span className="text-xs text-gray-400">Lv.{player.level}</span>
+            <span className="text-xs text-gray-400">Lv.{gamePlayer.level}</span>
           </Button>
         </div>
       </div>
