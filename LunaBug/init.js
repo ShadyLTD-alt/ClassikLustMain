@@ -14,6 +14,7 @@ import DebuggerCore from './core/DebuggerCore.js';
 import DatabaseModule from './modules/DatabaseModule.js';
 import GameplayModule from './modules/GameplayModule.js';
 import AIModule from './modules/AIModule.js';
+import FunctionLoader from './modules/FunctionLoader.js';
 
 // Global LunaBug instance
 let lunaBugInstance = null;
@@ -37,7 +38,8 @@ export async function initLunaBug() {
     // Register all modules in dependency order
     core.register(new DatabaseModule());
     core.register(new GameplayModule());
-    core.register(new AIModule()); // NEW: AI Module for Mistral integration
+    core.register(new FunctionLoader()); // AUTO-DISCOVERY: Load JSON functions
+    core.register(new AIModule());       // AI Module for Mistral integration
     
     // Initialize all modules
     await core.initAll();
@@ -52,6 +54,7 @@ export async function initLunaBug() {
       emergency: () => activateEmergencyMode(core),
       clear: () => core.logEvent('manual_clear', 'Logs cleared by user'),
       status: () => getSystemStatus(core),
+      
       // AI-specific methods
       chat: (message, options) => core.context.ai?.chat(message, options),
       debug: (code, error, options) => core.context.ai?.debug(code, error, options),
@@ -62,6 +65,33 @@ export async function initLunaBug() {
         remove: (index) => core.context.ai?.module.removeInstruction(index)
       },
       metrics: () => core.context.ai?.getMetrics(),
+      
+      // FUNCTION DISCOVERY SYSTEM
+      functions: {
+        list: () => core.context.functions?.list(),
+        run: (name, data) => core.context.functions?.run(name, data),
+        get: (name) => core.context.functions?.get(name),
+        reload: () => core.context.functions?.reload(),
+        add: (func) => core.context.functions?.add(func)
+      },
+      
+      // Quick access methods
+      detectIssue: async (code, error) => {
+        const functions = core.context.functions?.list() || [];
+        const results = [];
+        
+        for (const func of functions) {
+          if (func.enabled && this.matchesTriggers(func, code, error)) {
+            const result = await core.context.functions?.run(func.name, { code, error });
+            if (result?.result?.detected) {
+              results.push(result);
+            }
+          }
+        }
+        
+        return results;
+      },
+      
       version: '1.0.1'
     };
     
@@ -70,6 +100,13 @@ export async function initLunaBug() {
     console.log('🌙✅ LunaBug initialized successfully!');
     console.log('🌙🎯 Emergency access: window.LunaBug');
     console.log('🤖🌙 AI integration: window.LunaBug.chat("hello")');
+    console.log('📋🌙 Function system: window.LunaBug.functions.list()');
+    
+    // Test function system
+    const functionCount = core.context.functions?.list()?.length || 0;
+    if (functionCount > 0) {
+      console.log(`📋✅ ${functionCount} functions auto-loaded`);
+    }
     
     // Test AI connection if available
     if (core.context.ai) {
@@ -98,6 +135,10 @@ export async function initLunaBug() {
       emergency: () => console.log('🚨 LunaBug Emergency Mode - Init Failed'),
       status: () => ({ status: 'failed', error: error.message }),
       chat: () => console.log('🤖❌ AI unavailable - init failed'),
+      functions: {
+        list: () => [],
+        run: () => console.log('Functions unavailable - init failed')
+      },
       instructions: {
         get: () => [],
         set: () => console.log('Instructions unavailable - init failed')
@@ -125,6 +166,25 @@ function setupEmergencyHandlers(core) {
     // If it's a React error, suggest emergency mode
     if (event.message.includes('React') || event.message.includes('Component')) {
       console.warn('🚨 LunaBug detected React error - Emergency mode available: window.LunaBug.emergency()');
+    }
+    
+    // Auto-run detection functions
+    if (core.context.functions) {
+      core.context.functions.list().forEach(func => {
+        if (func.enabled && func.triggers.some(trigger => 
+          event.message.includes(trigger) || event.filename?.includes(trigger)
+        )) {
+          core.context.functions.run(func.name, {
+            code: event.filename || '',
+            error: event.message,
+            context: { type: 'global_error', stack: event.error?.stack }
+          }).then(result => {
+            if (result?.result?.detected) {
+              console.log(`🌙🔍 Auto-detection: ${func.name} found issues:`, result);
+            }
+          });
+        }
+      });
     }
   });
 
@@ -164,6 +224,7 @@ function activateEmergencyMode(core) {
   core.logEvent('emergency_mode_activated', 'User triggered emergency mode');
   
   const aiMetrics = core.context.ai?.getMetrics() || { requestCount: 0, successRate: 0 };
+  const functionCount = core.context.functions?.list()?.length || 0;
   
   // Create emergency overlay
   const emergency = document.createElement('div');
@@ -198,6 +259,7 @@ function activateEmergencyMode(core) {
           <div style="background: #1a1a1a; padding: 15px; border-radius: 8px; border-left: 4px solid #9333ea;">
             <div>Uptime: ${Math.round((Date.now() - core.context.startTime) / 1000)}s</div>
             <div>Modules: ${core.modules.length}</div>
+            <div>Functions: ${functionCount}</div>
             <div>Logs: ${core.logs.length}</div>
             <div>Status: EMERGENCY</div>
           </div>
@@ -234,13 +296,13 @@ function activateEmergencyMode(core) {
             style="background: #059669; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer;">
             Status Check
           </button>
-          <button onclick="window.LunaBug.core.runCommand('clearCache')" 
-            style="background: #dc2626; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer;">
-            Clear Cache
-          </button>
-          <button onclick="console.log(window.LunaBug.logs())" 
+          <button onclick="console.log(window.LunaBug.functions.list())" 
             style="background: #7c3aed; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer;">
-            Dump Logs
+            List Functions
+          </button>
+          <button onclick="window.LunaBug.functions.reload()" 
+            style="background: #dc2626; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer;">
+            Reload Functions
           </button>
           <button onclick="window.LunaBug.chat('Emergency test - are you online?').then(r => console.log('AI Response:', r))" 
             style="background: #0ea5e9; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer;">
@@ -266,9 +328,17 @@ function getSystemStatus(core) {
       uptime: Date.now() - core.context.startTime,
       modules: core.modules.length,
       logs: core.logs.length,
+      functions: core.context.functions?.list()?.length || 0,
       initialized: core.isInitialized
     },
     ai: core.context.ai?.getMetrics() || { disabled: true },
+    functions: {
+      loaded: core.context.functions?.list()?.length || 0,
+      categories: core.context.functions?.list()?.reduce((acc, func) => {
+        acc[func.category] = (acc[func.category] || 0) + 1;
+        return acc;
+      }, {}) || {}
+    },
     browser: {
       userAgent: navigator.userAgent,
       language: navigator.language,
@@ -283,6 +353,12 @@ function getSystemStatus(core) {
       } : null
     }
   };
+}
+
+// Helper for trigger matching
+function matchesTriggers(func, code, error) {
+  const searchText = `${code} ${error}`.toLowerCase();
+  return func.triggers?.some(trigger => searchText.includes(trigger.toLowerCase()));
 }
 
 // Auto-initialize LunaBug as soon as this script loads
