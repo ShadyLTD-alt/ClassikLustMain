@@ -1,0 +1,374 @@
+{
+  "characters": [
+    {
+      "id": "shadow",
+      "name": "Shadow",
+      "displayName": "Shadow",
+      "rarity": "common",
+      "unlockLevel": 1,
+      "unlockCost": 0,
+      "unlockCurrency": "level",
+      "description": "A mysterious character shrouded in darkness. Perfect for beginners starting their ClassikLust journey.",
+      "personality": "mysterious",
+      "element": "dark",
+      "baseStats": {
+        "charm": 10,
+        "energy": 15,
+        "luck": 8,
+        "experience": 12
+      },
+      "specialAbilities": [
+        "Shadow Strike - Extra energy regeneration during idle time",
+        "Dark Charm - Increased LP gain from tapping"
+      ],
+      "categories": ["starter", "common"],
+      "poses": ["idle", "happy", "wink", "shy"],
+      "isVip": false,
+      "isHidden": false,
+      "isDefault": true,
+      "chatEnabled": true,
+      "chatSendPercent": 15,
+      "images": {
+        "avatar": "/images/characters/shadow/avatar/default.jpg",
+        "gallery": [
+          "/images/characters/shadow/character/pose1.jpg",
+          "/images/characters/shadow/character/pose2.jpg"
+        ]
+      }
+    },
+    {
+      "id": "frost",
+      "name": "Frost",
+      "displayName": "Frost",
+      "rarity": "common",
+      "unlockLevel": 2,
+      "unlockCost": 500,
+      "unlockCurrency": "lp",
+      "description": "An ice-cold beauty with piercing blue eyes and a cool, elegant demeanor that melts hearts.",
+      "personality": "elegant",
+      "element": "ice",
+      "baseStats": {
+        "charm": 12,
+        "energy": 18,
+        "luck": 10,
+        "experience": 15
+      },
+      "specialAbilities": [
+        "Frost Shield - Reduced energy consumption for 10 minutes",
+        "Ice Queen - Double LP gain for 30 seconds"
+      ],
+      "categories": ["common", "elemental"],
+      "poses": ["idle", "confident", "smile", "elegant"],
+      "isVip": false,
+      "isHidden": false,
+      "isDefault": false,
+      "chatEnabled": true,
+      "chatSendPercent": 20,
+      "images": {
+        "avatar": "/images/characters/frost/avatar/default.jpg",
+        "gallery": [
+          "/images/characters/frost/character/pose1.jpg",
+          "/images/characters/frost/character/pose2.jpg",
+          "/images/characters/frost/character/pose3.jpg"
+        ]
+      }
+    },
+    {
+      "id": "blaze",
+      "name": "Blaze",
+      "displayName": "Blaze",
+      "rarity": "rare",
+      "unlockLevel": 5,
+      "unlockCost": 2500,
+      "unlockCurrency": "lp",
+      "description": "A fiery temptress with unmatched passion and burning desire that ignites the soul.",
+      "personality": "passionate",
+      "element": "fire",
+      "baseStats": {
+        "charm": 16,
+        "energy": 22,
+        "luck": 14,
+        "experience": 20
+      },
+      "specialAbilities": [
+        "Flame Burst - Instant energy refill once per hour",
+        "Burning Passion - Triple LP gain for 45 seconds",
+        "Heat Wave - All characters gain 10% bonus for 5 minutes"
+      ],
+      "categories": ["rare", "elemental", "passionate"],
+      "poses": ["idle", "flirty", "confident", "passionate", "wink"],
+      "isVip": false,
+      "isHidden": false,
+      "isDefault": false,
+      "chatEnabled": true,
+      "chatSendPercent": 25,
+      "images": {
+        "avatar": "/images/characters/blaze/avatar/default.jpg",
+        "gallery": [
+          "/images/characters/blaze/character/pose1.jpg",
+          "/images/characters/blaze/character/pose2.jpg",
+          "/images/characters/blaze/character/pose3.jpg",
+          "/images/characters/blaze/character/special1.jpg"
+        ]
+      }
+    },
+    {
+      "id": "luna",
+      "name": "Luna",
+      "displayName": "Luna",
+      "rarity": "epic",
+      "unlockLevel": 10,
+      "unlockCost": 5000,
+      "unlockCurrency": "lp",
+      "description": "Moonlight goddess with ethereal beauty and mysterious lunar powers that enchant all who gaze upon her.",
+      "personality": "mystical",
+      "element": "moon",
+      "baseStats": {
+        "charm": 20,
+        "energy": 28,
+        "luck": 18,
+        "experience": 25
+      },
+      "specialAbilities": [
+        "Lunar Blessing - All gains increased by 25% during nighttime",
+        "Moonbeam - Passive LP generation increased by 50%",
+        "Celestial Dance - Random mega-bonuses every hour",
+        "Night Vision - Unlock hidden content and achievements"
+      ],
+      "categories": ["epic", "celestial", "mystical"],
+      "poses": ["idle", "mystical", "dance", "blessing", "ethereal", "moonlight"],
+      "isVip": false,
+      "isHidden": false,
+      "isDefault": false,
+      "chatEnabled": true,
+      "chatSendPercent": 30,
+      "images": {
+        "avatar": "/images/characters/luna/avatar/default.jpg",
+        "gallery": [
+          "/images/characters/luna/character/pose1.jpg",
+          "/images/characters/luna/character/pose2.jpg",
+          "/images/characters/luna/character/mystical.jpg",
+          "/images/characters/luna/character/moonlight.jpg",
+          "/images/characters/luna/character/dance.jpg"
+        ]
+      }
+    },
+    {
+      "id": "seraphina",
+      "name": "Seraphina",
+      "displayName": "Seraphina",
+      "rarity": "legendary",
+      "unlockLevel": 15,
+      "unlockCost": 12000,
+      "unlockCurrency": "lp",
+      "description": "An angelic being of pure desire and divine power. Her presence alone elevates the experience to heavenly heights.",
+      "personality": "divine",
+      "element": "light",
+      "baseStats": {
+        "charm": 25,
+        "energy": 35,
+        "luck": 22,
+        "experience": 30
+      },
+      "specialAbilities": [
+        "Divine Grace - All upgrades cost 20% less",
+        "Angel's Kiss - Instant full energy restoration",
+        "Heavenly Aura - Double all gains for 2 minutes",
+        "Miracle - Rare chance for 100x LP multiplier",
+        "Sacred Bond - Unlock exclusive VIP content"
+      ],
+      "categories": ["legendary", "divine", "vip"],
+      "poses": ["idle", "divine", "blessing", "angelic", "graceful", "radiant", "miracle"],
+      "isVip": true,
+      "isHidden": false,
+      "isDefault": false,
+      "chatEnabled": true,
+      "chatSendPercent": 40,
+      "images": {
+        "avatar": "/images/characters/seraphina/avatar/default.jpg",
+        "gallery": [
+          "/images/characters/seraphina/character/divine.jpg",
+          "/images/characters/seraphina/character/blessing.jpg",
+          "/images/characters/seraphina/character/angelic.jpg",
+          "/images/characters/seraphina/character/radiant.jpg",
+          "/images/characters/seraphina/vip/exclusive1.jpg",
+          "/images/characters/seraphina/vip/exclusive2.jpg"
+        ]
+      }
+    },
+    {
+      "id": "velvet",
+      "name": "Velvet",
+      "displayName": "Velvet",
+      "rarity": "vip",
+      "unlockLevel": 20,
+      "unlockCost": 25000,
+      "unlockCurrency": "lp",
+      "description": "Ultra-exclusive VIP character with premium content, special animations, and members-only features.",
+      "personality": "seductive",
+      "element": "luxury",
+      "baseStats": {
+        "charm": 30,
+        "energy": 40,
+        "luck": 25,
+        "experience": 35
+      },
+      "specialAbilities": [
+        "VIP Status - Access to exclusive areas and content",
+        "Luxury Boost - All income sources increased by 50%",
+        "Premium Experience - Unique animations and interactions",
+        "Member Privileges - Special achievements and rewards",
+        "Elite Connection - Direct chat with enhanced AI responses"
+      ],
+      "categories": ["vip", "luxury", "exclusive"],
+      "poses": ["idle", "seductive", "luxury", "exclusive", "premium", "elite", "sophisticated"],
+      "isVip": true,
+      "isHidden": false,
+      "isDefault": false,
+      "chatEnabled": true,
+      "chatSendPercent": 50,
+      "images": {
+        "avatar": "/images/characters/velvet/avatar/vip.jpg",
+        "gallery": [
+          "/images/characters/velvet/vip/exclusive1.jpg",
+          "/images/characters/velvet/vip/exclusive2.jpg",
+          "/images/characters/velvet/vip/luxury.jpg",
+          "/images/characters/velvet/vip/premium.jpg",
+          "/images/characters/velvet/vip/elite.jpg"
+        ]
+      }
+    },
+    {
+      "id": "phoenix",
+      "name": "Phoenix",
+      "displayName": "Phoenix", 
+      "rarity": "legendary",
+      "unlockLevel": 25,
+      "unlockCost": 50000,
+      "unlockCurrency": "lp",
+      "description": "Reborn from eternal flames, this legendary character offers the ultimate ClassikLust experience with unmatched power.",
+      "personality": "legendary",
+      "element": "rebirth",
+      "baseStats": {
+        "charm": 35,
+        "energy": 50,
+        "luck": 30,
+        "experience": 40
+      },
+      "specialAbilities": [
+        "Phoenix Rebirth - Reset all cooldowns instantly",
+        "Eternal Flame - Permanent 25% boost to all activities",
+        "Legendary Presence - Unlock ultimate achievements",
+        "Immortal Bond - Exclusive endgame content access",
+        "Phoenix Rising - Weekly mega-bonuses and special events"
+      ],
+      "categories": ["legendary", "ultimate", "endgame"],
+      "poses": ["idle", "majestic", "flames", "rebirth", "legendary", "ultimate", "immortal"],
+      "isVip": true,
+      "isHidden": false,
+      "isDefault": false,
+      "chatEnabled": true,
+      "chatSendPercent": 60,
+      "images": {
+        "avatar": "/images/characters/phoenix/avatar/legendary.jpg",
+        "gallery": [
+          "/images/characters/phoenix/character/majestic.jpg",
+          "/images/characters/phoenix/character/flames.jpg",
+          "/images/characters/phoenix/character/rebirth.jpg",
+          "/images/characters/phoenix/vip/legendary1.jpg",
+          "/images/characters/phoenix/vip/legendary2.jpg",
+          "/images/characters/phoenix/vip/ultimate.jpg"
+        ]
+      }
+    },
+    {
+      "id": "crystal",
+      "name": "Crystal",
+      "displayName": "Crystal",
+      "rarity": "epic",
+      "unlockLevel": 8,
+      "unlockCost": 3500,
+      "unlockCurrency": "lp",
+      "description": "Crystalline beauty with gem-like perfection and dazzling charm that sparkles with every movement.",
+      "personality": "elegant",
+      "element": "crystal",
+      "baseStats": {
+        "charm": 18,
+        "energy": 25,
+        "luck": 20,
+        "experience": 22
+      },
+      "specialAbilities": [
+        "Crystal Clarity - See all upgrade costs and effects",
+        "Gem Affinity - Rare item drop rate increased by 300%",
+        "Prismatic Power - Random elemental bonuses",
+        "Diamond Heart - Permanent charm bonus"
+      ],
+      "categories": ["epic", "elegant", "crystal"],
+      "poses": ["idle", "elegant", "sparkling", "graceful", "crystalline"],
+      "isVip": false,
+      "isHidden": false,
+      "isDefault": false,
+      "chatEnabled": true,
+      "chatSendPercent": 28,
+      "images": {
+        "avatar": "/images/characters/crystal/avatar/default.jpg",
+        "gallery": [
+          "/images/characters/crystal/character/elegant.jpg",
+          "/images/characters/crystal/character/sparkling.jpg",
+          "/images/characters/crystal/character/crystalline.jpg",
+          "/images/characters/crystal/character/graceful.jpg"
+        ]
+      }
+    },
+    {
+      "id": "nova",
+      "name": "Nova",
+      "displayName": "Nova",
+      "rarity": "rare",
+      "unlockLevel": 12,
+      "unlockCost": 7500,
+      "unlockCurrency": "lp",
+      "description": "A stellar beauty whose radiance rivals that of newborn stars. Her cosmic energy empowers all around her.",
+      "personality": "cosmic",
+      "element": "star",
+      "baseStats": {
+        "charm": 22,
+        "energy": 30,
+        "luck": 16,
+        "experience": 26
+      },
+      "specialAbilities": [
+        "Stellar Burst - Massive LP bonus every 2 hours",
+        "Cosmic Energy - Energy regeneration rate doubled",
+        "Star Power - Unlock cosmic achievements"
+      ],
+      "categories": ["rare", "cosmic", "stellar"],
+      "poses": ["idle", "stellar", "cosmic", "radiant", "burst"],
+      "isVip": false,
+      "isHidden": false,
+      "isDefault": false,
+      "chatEnabled": true,
+      "chatSendPercent": 32,
+      "images": {
+        "avatar": "/images/characters/nova/avatar/default.jpg",
+        "gallery": [
+          "/images/characters/nova/character/stellar.jpg",
+          "/images/characters/nova/character/cosmic.jpg",
+          "/images/characters/nova/character/radiant.jpg",
+          "/images/characters/nova/character/burst.jpg"
+        ]
+      }
+    }
+  ],
+  "version": "1.0.0",
+  "lastUpdated": "2025-11-02T08:51:00Z",
+  "totalCharacters": 7,
+  "rarityDistribution": {
+    "common": 2,
+    "rare": 2, 
+    "epic": 2,
+    "legendary": 2,
+    "vip": 1
+  }
+}
