@@ -601,7 +601,7 @@ export default function AdminPanel() {
               </ScrollArea>
             </TabsContent>
 
-            {/* LEVELS TAB */}
+            {/* LEVELS TAB - FIXED TO HANDLE UNDEFINED COST */}
             <TabsContent value="levels" className="flex-1 overflow-hidden">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-semibold">Level Management</h3>
@@ -618,10 +618,12 @@ export default function AdminPanel() {
                         <div className="flex justify-between items-center">
                           <div>
                             <CardTitle className="text-lg">Level {levelConfig.level}</CardTitle>
-                            <p className="text-sm text-gray-400">Cost: {levelConfig.cost.toLocaleString()} LP</p>
+                            <p className="text-sm text-gray-400">
+                              Cost: {(levelConfig.cost || 0).toLocaleString()} LP
+                            </p>
                             <div className="flex gap-2 mt-1">
-                              <Badge variant="secondary" className="text-xs">{levelConfig.requirements.length} requirements</Badge>
-                              <Badge variant="secondary" className="text-xs">{levelConfig.unlocks.length} unlocks</Badge>
+                              <Badge variant="secondary" className="text-xs">{(levelConfig.requirements || []).length} requirements</Badge>
+                              <Badge variant="secondary" className="text-xs">{(levelConfig.unlocks || []).length} unlocks</Badge>
                             </div>
                           </div>
                           <div className="flex gap-2">
@@ -643,7 +645,7 @@ export default function AdminPanel() {
                 </div>
               </ScrollArea>
               
-              {/* LEVEL EDITING MODAL */}
+              {/* LEVEL EDITING MODAL - FIXED TO HANDLE UNDEFINED VALUES */}
               {editingLevel && (
                 <Dialog open={!!editingLevel} onOpenChange={(open) => !open && setEditingLevel(null)}>
                   <DialogContent className="max-w-3xl max-h-[80vh]">
@@ -666,7 +668,7 @@ export default function AdminPanel() {
                             <Label>Cost (LustPoints Required)</Label>
                             <Input 
                               type="number" 
-                              value={editingLevel.cost} 
+                              value={editingLevel.cost || 0} 
                               onChange={(e) => setEditingLevel({ ...editingLevel, cost: parseInt(e.target.value) || 0 })} 
                             />
                           </div>
@@ -675,10 +677,10 @@ export default function AdminPanel() {
                         <div>
                           <Label>Requirements (Upgrades needed)</Label>
                           <div className="space-y-2">
-                            {editingLevel.requirements.map((req, idx) => (
+                            {(editingLevel.requirements || []).map((req, idx) => (
                               <div key={idx} className="flex gap-2">
                                 <Select value={req.upgradeId} onValueChange={(value) => {
-                                  const reqs = [...editingLevel.requirements];
+                                  const reqs = [...(editingLevel.requirements || [])];
                                   reqs[idx] = { ...req, upgradeId: value };
                                   setEditingLevel({ ...editingLevel, requirements: reqs });
                                 }}>
@@ -697,7 +699,7 @@ export default function AdminPanel() {
                                   className="w-24"
                                   value={req.minLevel} 
                                   onChange={(e) => {
-                                    const reqs = [...editingLevel.requirements];
+                                    const reqs = [...(editingLevel.requirements || [])];
                                     reqs[idx] = { ...req, minLevel: parseInt(e.target.value) || 1 };
                                     setEditingLevel({ ...editingLevel, requirements: reqs });
                                   }} 
@@ -705,7 +707,7 @@ export default function AdminPanel() {
                                 <Button variant="destructive" size="icon" onClick={() => {
                                   setEditingLevel({ 
                                     ...editingLevel, 
-                                    requirements: editingLevel.requirements.filter((_, i) => i !== idx) 
+                                    requirements: (editingLevel.requirements || []).filter((_, i) => i !== idx) 
                                   });
                                 }}>
                                   <X className="w-4 h-4" />
@@ -720,7 +722,7 @@ export default function AdminPanel() {
                                 if (firstUpgrade) {
                                   setEditingLevel({ 
                                     ...editingLevel, 
-                                    requirements: [...editingLevel.requirements, { upgradeId: firstUpgrade.id, minLevel: 1 }] 
+                                    requirements: [...(editingLevel.requirements || []), { upgradeId: firstUpgrade.id, minLevel: 1 }] 
                                   });
                                 }
                               }}
@@ -733,12 +735,12 @@ export default function AdminPanel() {
                         <div>
                           <Label>Unlocks (What this level provides)</Label>
                           <div className="space-y-2">
-                            {editingLevel.unlocks.map((unlock, idx) => (
+                            {(editingLevel.unlocks || []).map((unlock, idx) => (
                               <div key={idx} className="flex gap-2">
                                 <Input 
                                   value={unlock} 
                                   onChange={(e) => {
-                                    const unlocks = [...editingLevel.unlocks];
+                                    const unlocks = [...(editingLevel.unlocks || [])];
                                     unlocks[idx] = e.target.value;
                                     setEditingLevel({ ...editingLevel, unlocks });
                                   }} 
@@ -748,7 +750,7 @@ export default function AdminPanel() {
                                 <Button variant="destructive" size="icon" onClick={() => {
                                   setEditingLevel({ 
                                     ...editingLevel, 
-                                    unlocks: editingLevel.unlocks.filter((_, i) => i !== idx) 
+                                    unlocks: (editingLevel.unlocks || []).filter((_, i) => i !== idx) 
                                   });
                                 }}>
                                   <X className="w-4 h-4" />
@@ -760,7 +762,7 @@ export default function AdminPanel() {
                               size="sm" 
                               onClick={() => setEditingLevel({ 
                                 ...editingLevel, 
-                                unlocks: [...editingLevel.unlocks, 'New unlock'] 
+                                unlocks: [...(editingLevel.unlocks || []), 'New unlock'] 
                               })}
                             >
                               <Plus className="w-4 h-4 mr-2" />Add Unlock
