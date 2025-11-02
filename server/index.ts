@@ -5,7 +5,11 @@ import { syncAllGameData } from "./utils/dataLoader";
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
-import logger from "./logger"
+import logger from "./logger";
+
+// 🌙 LUNA BUG INTEGRATION
+const LunaBug = require('../LunaBug/luna');
+const { router: lunaRouter, setLunaInstance } = require('./routes/luna');
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -18,7 +22,6 @@ if (!fs.existsSync(logsDir)) {
 
 const app = express();
 
-
 // Error handlers at the very top
 process.on('unhandledRejection', (reason, promise) => {
   logger.error('💥 Unhandled Rejection at:', { promise, reason });
@@ -27,7 +30,6 @@ process.on('unhandledRejection', (reason, promise) => {
 process.on('uncaughtException', (error) => {
   logger.error('💥 Uncaught Exception:', error);
   process.exit(1);
-
 });
 
 declare module 'http' {
@@ -78,6 +80,18 @@ app.use((req, res, next) => {
 (async () => {
   logger.info('🚀 Starting server initialization...');
 
+  // 🌙 INITIALIZE LUNA BUG FIRST
+  logger.info('🌙 Initializing Luna Bug...');
+  let luna: any = null;
+  try {
+    luna = new LunaBug();
+    setLunaInstance(luna);
+    logger.info('✅ Luna Bug initialized successfully');
+  } catch (err) {
+    logger.error('❌ Failed to initialize Luna Bug:', err);
+    logger.warn('⚠️ Continuing without Luna Bug...');
+  }
+
   // Sync game data from JSON files FIRST (blocking)
   logger.info('🔄 Starting game data sync...');
   try {
@@ -91,20 +105,22 @@ app.use((req, res, next) => {
 
   logger.info('📝 Registering routes...');
   const server = await registerRoutes(app);
+  
+  // 🌙 ADD LUNA API ROUTES
+  if (luna) {
+    app.use('/api/luna', lunaRouter);
+    logger.info('✅ Luna API routes registered');
+  }
+  
   logger.info('✅ Routes registered successfully');
 
   logger.info('📁 Setting up static file serving...');
   app.use("/uploads", express.static(path.join(__dirname, "..", "uploads")));
   logger.info('✅ Static files configured');
 
-  
-  // Sync game data from JSON files FIRST (blocking)
-
-
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
-
 
     logger.error('💥 ERROR:', {
       status,
@@ -113,15 +129,10 @@ app.use((req, res, next) => {
       ...err,
     });
 
-    logger.error('ERROR handler', { status, message, stack: err.stack, ...err });
-
-
     res.status(status).json({ message, error: err.message });
   });
 
   if (app.get("env") === "development") {
-
-    
     logger.info('Setting up Vite dev server...');
     await setupVite(app, server);
     logger.info('Vite dev server ready');
@@ -133,8 +144,7 @@ app.use((req, res, next) => {
 
   const port = parseInt(process.env.PORT || '5000', 10);
 
-
-  logger.info(`🌐 Starting server on port ${port}...`);
+  logger.info(`🌍 Starting server on port ${port}...`);
   server.listen({
     port,
     host: "0.0.0.0",
@@ -142,7 +152,17 @@ app.use((req, res, next) => {
   }, () => {
     logger.info(`✅ Server listening on port ${port}`);
     logger.info(`✅ Server is ready and accepting connections on http://0.0.0.0:${port}`);
-  
-
+    
+    // 🌙 START LUNA MONITORING AFTER SERVER IS READY
+    if (luna) {
+      setTimeout(async () => {
+        try {
+          await luna.start();
+          logger.info('🌙 Luna Bug monitoring started');
+        } catch (err) {
+          logger.error('❌ Failed to start Luna Bug:', err);
+        }
+      }, 2000); // Wait 2 seconds for server to fully stabilize
+    }
   });
 })();
