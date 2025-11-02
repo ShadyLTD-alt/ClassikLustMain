@@ -439,4 +439,5 @@ export function MistralDebugger({ isOpen, onClose }: MistralDebuggerProps) {
   );
 }
 
-export { MistralDebugger, LunaBugCore };
+// FIXED: Only export LunaBugCore, not MistralDebugger again
+export { LunaBugCore };
