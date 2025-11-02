@@ -76,6 +76,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
+  // 🌙 REGISTER LUNABUG ROUTES FIRST (High Priority)
+  logger.info('🌙 Setting up LunaBug routes...');
+  try {
+    const lunaBugRoutes = await import('./routes/lunabug.js');
+    app.use('/api/lunabug', lunaBugRoutes.default);
+    logger.info('✅ LunaBug routes registered at /api/lunabug');
+  } catch (error) {
+    logger.error('❌ Failed to register LunaBug routes:', error);
+    logger.warn('🌙 LunaBug will use fallback endpoints');
+  }
+
   logger.info('Setting up /api/upload route...');
   app.post("/api/upload", requireAuth, upload.single("image"), async (req, res) => {
     logger.info('Upload request received', { hasFile: !!req.file });
