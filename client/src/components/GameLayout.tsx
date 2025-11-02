@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { TopBar } from "@/components/TopBar";
 import BottomNav from "@/components/BottomNav";
 import { AdminFAB } from "@/components/AdminFAB";
-import { MistralDebugger } from "@/components/MistralDebugger";
+import { MistralDebugger } from "../../LunaBug/interface/MistralDebugger";
 import { AchievementSystem } from "@/components/AchievementSystem";
 import ChatModal from "@/components/ChatModal";
 import ModalPortal from "@/components/ModalPortal";
@@ -46,10 +46,10 @@ export default function GameLayout({
         onLevel={onOpenLevel}
       />
       
-      {/* Admin FAB with LunaBug access */}
+      {/* Admin FAB with LunaBug access - NOW POSITIONED HIGHER */}
       <AdminFAB onOpenDebugger={() => setShowLunaBugDebugger(true)} />
       
-      {/* LunaBug Debugger Modal */}
+      {/* LunaBug Debugger Modal - FROM STANDALONE DIRECTORY */}
       <MistralDebugger 
         isOpen={showLunaBugDebugger} 
         onClose={() => setShowLunaBugDebugger(false)} 
