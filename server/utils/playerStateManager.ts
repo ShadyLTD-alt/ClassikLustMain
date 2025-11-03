@@ -4,6 +4,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import crypto from 'crypto';
 import { storage } from '../storage';
+import { EventEmitter } from 'events';
 
 interface PlayerState {
   id: string;
@@ -39,13 +40,21 @@ interface PlayerState {
   updatedAt: Date;
 }
 
-class PlayerStateManager {
+// 🔧 FIX: Increase EventEmitter max listeners for JSON-first system
+EventEmitter.defaultMaxListeners = 20;
+
+class PlayerStateManager extends EventEmitter {
   private states = new Map<string, PlayerState>();
   private locks = new Map<string, AsyncLock>();
   private pendingSyncs = new Set<string>();
+  private syncTimeouts = new Map<string, NodeJS.Timeout>();
   private readonly snapshotsDir: string;
 
   constructor() {
+    super();
+    // 🔧 FIX: Set higher max listeners for this instance
+    this.setMaxListeners(50);
+    
     this.snapshotsDir = path.join(process.cwd(), 'uploads', 'snapshots', 'players');
     this.ensureSnapshotsDirectory();
   }
@@ -142,7 +151,7 @@ class PlayerStateManager {
       // Update in-memory cache
       this.states.set(playerId, newState);
       
-      // ASYNC: Queue DB sync (non-blocking)
+      // 🔧 FIX: Debounced DB sync (prevent too many concurrent syncs)
       this.queueDatabaseSync(playerId, newState);
       
       console.log(`✅ Player ${playerId} state updated`);
@@ -160,12 +169,12 @@ class PlayerStateManager {
       // Ensure player directory exists
       await fs.mkdir(playerDir, { recursive: true });
 
-      // Acquire file lock
+      // 🔧 FIX: Shorter timeout and retry for file locking
       const release = await lockfile.lock(filePath, {
         lockfilePath: lockPath,
-        retries: 5,
-        minTimeout: 100,
-        maxTimeout: 1000,
+        retries: 3,
+        minTimeout: 50,
+        maxTimeout: 500,
         realpath: false
       });
 
@@ -273,27 +282,38 @@ class PlayerStateManager {
     }
   }
 
-  // Queue DB sync (debounced, hash-based change detection)
+  // 🔧 FIX: Improved debounced DB sync with proper cleanup
   private queueDatabaseSync(playerId: string, state: PlayerState) {
+    // Clear existing timeout for this player
+    const existingTimeout = this.syncTimeouts.get(playerId);
+    if (existingTimeout) {
+      clearTimeout(existingTimeout);
+      this.syncTimeouts.delete(playerId);
+    }
+    
+    // Skip if already pending
     if (this.pendingSyncs.has(playerId)) {
-      console.log(`⏳ Player ${playerId} already queued for sync, skipping...`);
-      return;
+      console.log(`⏳ Player ${playerId} already queued for sync, updating timeout...`);
     }
     
     this.pendingSyncs.add(playerId);
-    console.log(`🕐 Queuing DB sync for player ${playerId}...`);
+    console.log(`🔄 Queuing DB sync for player ${playerId}...`);
     
-    // Debounced sync (wait 2 seconds for more updates)
-    setTimeout(async () => {
+    // 🔧 FIX: Use setTimeout with proper cleanup
+    const timeout = setTimeout(async () => {
       try {
         await this.syncToDatabase(playerId, state);
       } catch (error) {
         console.error(`🔴 DB sync failed for player ${playerId}:`, error);
-        // JSON still has truth, can retry later or leave as backup
+        // Emit error event for monitoring
+        this.emit('syncError', { playerId, error });
       } finally {
         this.pendingSyncs.delete(playerId);
+        this.syncTimeouts.delete(playerId);
       }
-    }, 2000);
+    }, 3000); // 🔧 FIX: Increased to 3 seconds to reduce API spam
+    
+    this.syncTimeouts.set(playerId, timeout);
   }
 
   // Sync to database (only if changed)
@@ -351,6 +371,7 @@ class PlayerStateManager {
       };
 
       console.log(`✅ Player ${playerId} synced to database successfully`);
+      this.emit('syncSuccess', { playerId, timestamp: Date.now() });
     } catch (error) {
       console.error(`🔴 Database sync failed for player ${playerId}:`, error);
       throw error;
@@ -390,10 +411,18 @@ class PlayerStateManager {
     return this.states.get(playerId) || null;
   }
 
-  // Clear cache (for memory management)
+  // 🔧 FIX: Improved cache clearing with timeout cleanup
   clearCache(playerId: string): void {
+    // Clear any pending timeouts
+    const timeout = this.syncTimeouts.get(playerId);
+    if (timeout) {
+      clearTimeout(timeout);
+      this.syncTimeouts.delete(playerId);
+    }
+    
     this.states.delete(playerId);
     this.locks.delete(playerId);
+    this.pendingSyncs.delete(playerId);
   }
 
   // Force immediate DB sync
@@ -406,22 +435,58 @@ class PlayerStateManager {
     await this.syncToDatabase(playerId, state);
   }
 
-  // Health check
-  async healthCheck(): Promise<{ jsonFiles: number; cachedPlayers: number; pendingSyncs: number }> {
+  // 🔧 FIX: Enhanced health check with timeout info
+  async healthCheck(): Promise<{ jsonFiles: number; cachedPlayers: number; pendingSyncs: number; pendingTimeouts: number }> {
     try {
       const playerDirs = await fs.readdir(this.snapshotsDir);
       return {
         jsonFiles: playerDirs.length,
         cachedPlayers: this.states.size,
-        pendingSyncs: this.pendingSyncs.size
+        pendingSyncs: this.pendingSyncs.size,
+        pendingTimeouts: this.syncTimeouts.size
       };
     } catch {
       return {
         jsonFiles: 0,
         cachedPlayers: this.states.size,
-        pendingSyncs: this.pendingSyncs.size
+        pendingSyncs: this.pendingSyncs.size,
+        pendingTimeouts: this.syncTimeouts.size
       };
     }
+  }
+
+  // 🔧 FIX: Cleanup method for graceful shutdown
+  async cleanup(): Promise<void> {
+    console.log('🧹 Cleaning up PlayerStateManager...');
+    
+    // Clear all timeouts
+    for (const [playerId, timeout] of this.syncTimeouts.entries()) {
+      clearTimeout(timeout);
+      console.log(`⏹️ Cleared pending sync timeout for player ${playerId}`);
+    }
+    this.syncTimeouts.clear();
+    
+    // Wait for pending syncs with timeout
+    if (this.pendingSyncs.size > 0) {
+      console.log(`⏳ Waiting for ${this.pendingSyncs.size} pending syncs...`);
+      
+      let attempts = 0;
+      while (this.pendingSyncs.size > 0 && attempts < 30) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        attempts++;
+      }
+      
+      if (this.pendingSyncs.size > 0) {
+        console.warn(`⚠️ ${this.pendingSyncs.size} syncs still pending after cleanup timeout`);
+      } else {
+        console.log('✅ All pending syncs completed');
+      }
+    }
+    
+    // Clear all listeners
+    this.removeAllListeners();
+    
+    console.log('✅ PlayerStateManager cleanup complete');
   }
 }
 
