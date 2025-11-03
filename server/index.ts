@@ -3,6 +3,7 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic } from "./vite";
 import { syncAllGameData } from "./utils/dataLoader";
 import { playerStateManager } from "./utils/playerStateManager";
+import { setupGracefulShutdown } from "./middleware/playerStateShutdown";
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
@@ -51,6 +52,9 @@ app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads'), {
   const health = await playerStateManager.healthCheck();
   logger.info('🎯 Player State Health:', health);
   
+  // 🛡️ Setup graceful shutdown for JSON safety
+  setupGracefulShutdown();
+  
   // Register all routes
   const server = await registerRoutes(app);
   
@@ -66,5 +70,6 @@ app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads'), {
     logger.info(`✅ Server running on port ${port}`);
     logger.info('🎯 JSON-FIRST system active: Immediate JSON writes + async DB sync');
     logger.info('💾 Player snapshots: uploads/snapshots/players/{id}/player.json');
+    logger.info('🛡️ Graceful shutdown enabled - player data safety guaranteed');
   });
 })();
