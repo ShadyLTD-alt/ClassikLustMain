@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Crown, Star, Lock, Unlock, Sparkles, Gem } from 'lucide-react';
+import { X, Crown, Star, Lock, Unlock, Sparkles } from 'lucide-react';
 import { useGame } from '../contexts/GameContext';
 import { ScrollContainer } from '@/components/layout/ScrollContainer';
 
@@ -27,128 +27,68 @@ const CharacterSelectionScrollable: React.FC<CharacterSelectionScrollableProps> 
   onSelect 
 }) => {
   const { state, characters, images, selectCharacter } = useGame();
-  const [selectedCharacter, setSelectedCharacter] = useState<Character | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [highlighted, setHighlighted] = useState<Character | null>(null);
   const [activeTab, setActiveTab] = useState<'all' | 'unlocked' | 'locked' | 'vip'>('all');
+  const [showGallery, setShowGallery] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (isOpen && characters.length > 0) {
-      // Set current character from state
-      const currentId = state?.selectedCharacterId || 'aria';
-      const current = characters.find(char => {
-        const isUnlocked = state?.unlockedCharacters?.includes(char.id) || char.unlockLevel <= (state?.level || 1);
-        return char.id === currentId && isUnlocked;
-      });
-      
-      if (current) {
-        setSelectedCharacter(current as Character);
-      } else {
-        // Fallback to first unlocked character
-        const firstUnlocked = characters.find(char => {
-          return state?.unlockedCharacters?.includes(char.id) || char.unlockLevel <= (state?.level || 1);
-        });
-        if (firstUnlocked) {
-          setSelectedCharacter(firstUnlocked as Character);
-        }
-      }
-    }
-  }, [isOpen, characters, state?.selectedCharacterId, state?.unlockedCharacters, state?.level]);
+    if (!isOpen) return;
+    // Initialize highlighted with current selected character
+    const current = characters.find(c => c.id === state?.selectedCharacterId);
+    if (current) setHighlighted(current as Character);
+    else if (characters.length) setHighlighted(characters[0] as Character);
+  }, [isOpen, state?.selectedCharacterId, characters]);
 
-  const handleCharacterSelect = (character: Character) => {
-    const isUnlocked = state?.unlockedCharacters?.includes(character.id) || character.unlockLevel <= (state?.level || 1);
-    
-    if (!isUnlocked) {
-      // Show unlock requirements
-      console.log(`Character ${character.name} is locked. Requirements:`, {
-        level: character.unlockLevel,
-        playerLevel: state?.level || 1
+  const persistSelection = async (characterId: string) => {
+    setSaving(true);
+    try {
+      // Persist selected character; reset display image so default is used until user picks one
+      await fetch('/api/player/me', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('sessionToken')}` },
+        body: JSON.stringify({ selectedCharacterId: characterId, selectedImageId: null, displayImage: null })
       });
-      return;
+      // Update local state via context
+      selectCharacter(characterId);
+      onSelect && highlighted && onSelect(highlighted);
+      onClose();
+    } catch (e) {
+      console.error('Failed to save selection', e);
+    } finally {
+      setSaving(false);
     }
-    
-    setSelectedCharacter(character);
-    selectCharacter(character.id);
-    
-    if (onSelect) {
-      onSelect(character);
-    }
-    
-    console.log(`🌙 Character selected: ${character.name}`);
   };
 
   const getRarityConfig = (rarity: string) => {
     switch (rarity) {
-      case 'common': return { 
-        border: 'border-gray-400 ring-gray-400/30', 
-        bg: 'bg-gray-900/20',
-        gradient: 'from-gray-600 to-gray-800',
-        icon: null,
-        glow: 'shadow-gray-400/20'
-      };
-      case 'rare': return { 
-        border: 'border-blue-400 ring-blue-400/30', 
-        bg: 'bg-blue-900/20',
-        gradient: 'from-blue-600 to-blue-800',
-        icon: <Star className="w-3 h-3" />,
-        glow: 'shadow-blue-400/30'
-      };
-      case 'epic': return { 
-        border: 'border-purple-400 ring-purple-400/30', 
-        bg: 'bg-purple-900/20',
-        gradient: 'from-purple-600 to-purple-800',
-        icon: <Sparkles className="w-3 h-3" />,
-        glow: 'shadow-purple-400/40'
-      };
-      case 'legendary': return { 
-        border: 'border-orange-400 ring-orange-400/30', 
-        bg: 'bg-orange-900/20',
-        gradient: 'from-orange-500 to-red-600',
-        icon: <Crown className="w-3 h-3" />,
-        glow: 'shadow-orange-400/50'
-      };
-      default: return { 
-        border: 'border-gray-400', 
-        bg: 'bg-gray-900/20',
-        gradient: 'from-gray-600 to-gray-800',
-        icon: null,
-        glow: ''
-      };
+      case 'common': return { border: 'border-gray-400 ring-gray-400/30', bg: 'bg-gray-900/20', gradient: 'from-gray-600 to-gray-800' };
+      case 'rare': return { border: 'border-blue-400 ring-blue-400/30', bg: 'bg-blue-900/20', gradient: 'from-blue-600 to-blue-800' };
+      case 'epic': return { border: 'border-purple-400 ring-purple-400/30', bg: 'bg-purple-900/20', gradient: 'from-purple-600 to-purple-800' };
+      case 'legendary': return { border: 'border-orange-400 ring-orange-400/30', bg: 'bg-orange-900/20', gradient: 'from-orange-500 to-red-600' };
+      default: return { border: 'border-gray-400', bg: 'bg-gray-900/20', gradient: 'from-gray-600 to-gray-800' };
     }
   };
 
   const filterCharacters = () => {
     const filtered = characters.filter(char => {
-      const isUnlocked = state?.unlockedCharacters?.includes(char.id) || char.unlockLevel <= (state?.level || 1);
-      
+      const unlocked = state?.unlockedCharacters?.includes(char.id) || char.unlockLevel <= (state?.level || 1);
       switch (activeTab) {
-        case 'unlocked': return isUnlocked;
-        case 'locked': return !isUnlocked;
+        case 'unlocked': return unlocked;
+        case 'locked': return !unlocked;
         case 'vip': return char.vip;
         default: return true;
       }
     });
-    
-    // Sort by rarity and unlock status
-    return filtered.sort((a, b) => {
-      const aIsUnlocked = state?.unlockedCharacters?.includes(a.id) || a.unlockLevel <= (state?.level || 1);
-      const bIsUnlocked = state?.unlockedCharacters?.includes(b.id) || b.unlockLevel <= (state?.level || 1);
-      
-      if (aIsUnlocked !== bIsUnlocked) {
-        return aIsUnlocked ? -1 : 1; // Unlocked first
-      }
-      
-      const rarityOrder = { 'legendary': 4, 'epic': 3, 'rare': 2, 'common': 1 };
-      return (rarityOrder[b.rarity] || 0) - (rarityOrder[a.rarity] || 0);
-    });
-  };
-
-  const getCharacterImageCount = (characterId: string) => {
-    return images.filter(img => img.characterId === characterId).length;
+    const rarityOrder: Record<string, number> = { legendary: 4, epic: 3, rare: 2, common: 1 };
+    return filtered.sort((a,b) => (rarityOrder[b.rarity]||0) - (rarityOrder[a.rarity]||0));
   };
 
   if (!isOpen) return null;
+  const filtered = filterCharacters();
 
-  const filteredCharacters = filterCharacters();
+  const getImageCount = (id: string) => images.filter(i => i.characterId === id && !i.isHidden).length;
+  const isHighlightedUnlocked = highlighted && (state?.unlockedCharacters?.includes(highlighted.id) || highlighted.unlockLevel <= (state?.level || 1));
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -156,216 +96,91 @@ const CharacterSelectionScrollable: React.FC<CharacterSelectionScrollableProps> 
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-700">
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-3">
-              <div className="bg-purple-600 p-2 rounded-lg">
-                <Crown className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h2 className="text-xl font-bold text-white">Character Selection</h2>
-                <div className="text-sm text-gray-400">
-                  @{state?.selectedCharacterId || 'Player'} • Level {state?.level || 1} • {Math.floor(state?.lustPoints || state?.points || 0).toLocaleString()} LP
-                </div>
-              </div>
+            <div className="bg-purple-600 p-2 rounded-lg"><Crown className="w-5 h-5 text-white" /></div>
+            <div>
+              <h2 className="text-xl font-bold text-white">Character Selection</h2>
+              <div className="text-sm text-gray-400">@{state?.selectedCharacterId || 'Player'} • Level {state?.level || 1}</div>
             </div>
-            
-            {/* Tabs */}
             <div className="flex bg-gray-800 rounded-lg p-1 ml-6">
-              {[
-                { id: 'all', label: 'All', count: characters.length },
-                { id: 'unlocked', label: 'Unlocked', count: characters.filter(c => state?.unlockedCharacters?.includes(c.id) || c.unlockLevel <= (state?.level || 1)).length },
-                { id: 'locked', label: 'Locked', count: characters.filter(c => !(state?.unlockedCharacters?.includes(c.id) || c.unlockLevel <= (state?.level || 1))).length },
-                { id: 'vip', label: 'VIP', count: characters.filter(c => c.vip).length }
-              ].map(tab => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id as any)}
-                  className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${
-                    activeTab === tab.id
-                      ? 'bg-purple-600 text-white shadow-lg'
-                      : 'text-gray-400 hover:text-white hover:bg-gray-700'
-                  }`}
-                >
-                  {tab.label} ({tab.count})
-                </button>
+              {['all','unlocked','locked','vip'].map(tab => (
+                <button key={tab} onClick={() => setActiveTab(tab as any)} className={`px-3 py-1 rounded-md text-xs font-semibold ${activeTab===tab?'bg-purple-600 text-white':'text-gray-400 hover:text-white hover:bg-gray-700'}`}>{tab[0].toUpperCase()+tab.slice(1)}</button>
               ))}
             </div>
           </div>
-          
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-white p-2 transition-colors rounded-lg hover:bg-gray-800/50"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <button onClick={onClose} className="text-gray-400 hover:text-white p-2 rounded-lg hover:bg-gray-800/50"><X className="w-5 h-5"/></button>
         </div>
-        
-        {/* Character Grid - FIXED: ScrollContainer for guaranteed scrolling */}
+
+        {/* Grid */}
         <div className="flex-1 min-h-0">
-          {loading ? (
-            <div className="flex items-center justify-center h-96">
-              <div className="text-center">
-                <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-purple-400 mx-auto mb-4"></div>
-                <p className="text-gray-400 text-lg">Loading characters...</p>
-                <p className="text-gray-500 text-sm mt-2">Preparing your collection</p>
+          <ScrollContainer height="h-full">
+            <div className="p-6">
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-3 pb-4">
+                {filtered.map(c => {
+                  const unlocked = state?.unlockedCharacters?.includes(c.id) || c.unlockLevel <= (state?.level || 1);
+                  const rare = getRarityConfig(c.rarity);
+                  const selected = highlighted?.id === c.id;
+                  return (
+                    <div key={c.id} onClick={() => setHighlighted(c as Character)} className={`relative bg-gray-800/50 border-2 rounded-xl p-2 cursor-pointer transition-all ${selected? `${rare.border} ring-2 ring-purple-400/50 bg-purple-900/30` : unlocked? `${rare.border}` : 'border-gray-600 opacity-60'}`}>
+                      <div className="aspect-[2/3] bg-gradient-to-br from-gray-700 to-gray-800 rounded-lg mb-2 flex items-center justify-center overflow-hidden">
+                        {!unlocked ? (
+                          <div className="text-center"><Lock className="w-6 h-6 text-gray-500 mb-1"/><div className="text-xs text-gray-400 font-semibold">Lv{c.unlockLevel}</div></div>
+                        ) : c.defaultImage ? (
+                          <img src={c.defaultImage} alt={c.name} className="w-full h-full object-cover" onError={(e)=>{(e.target as HTMLImageElement).src='/uploads/placeholder-character.jpg';}}/>
+                        ) : (
+                          <div className={`w-full h-full bg-gradient-to-br ${rare.gradient} flex items-center justify-center`}>
+                            <Crown className="w-8 h-8 text-white/60"/>
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-center">
+                        <h3 className="text-white font-bold mb-1 text-xs">{c.name}</h3>
+                        <div className="text-gray-500 text-xs">{getImageCount(c.id)} imgs</div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
-          ) : (
-            <ScrollContainer height="h-full">
-              <div className="p-6">
-                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-3 pb-4">
-                  {filteredCharacters.map(character => {
-                    const rarityConfig = getRarityConfig(character.rarity);
-                    const isSelected = selectedCharacter?.id === character.id;
-                    const isUnlocked = state?.unlockedCharacters?.includes(character.id) || character.unlockLevel <= (state?.level || 1);
-                    const imageCount = getCharacterImageCount(character.id);
-                    
-                    return (
-                      <div 
-                        key={character.id}
-                        onClick={() => handleCharacterSelect(character)}
-                        className={`relative bg-gray-800/50 border-2 rounded-xl p-2 cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-xl ${
-                          isSelected
-                            ? `${rarityConfig.border} ring-2 ring-purple-400/50 bg-purple-900/30 shadow-lg ${rarityConfig.glow}`
-                            : !isUnlocked
-                              ? 'border-gray-600 opacity-60 hover:opacity-80 hover:border-gray-500'
-                              : `${rarityConfig.border} hover:ring-1 ${rarityConfig.bg} ${rarityConfig.glow}`
-                        }`}
-                      >
-                        {/* Rarity Glow Effect */}
-                        {isUnlocked && (
-                          <div className={`absolute inset-0 rounded-xl bg-gradient-to-r ${rarityConfig.gradient} opacity-10 pointer-events-none`} />
-                        )}
-                        
-                        {/* Character Image - SMALLER: aspect-[2/3] instead of [3/4] */}
-                        <div className="aspect-[2/3] bg-gradient-to-br from-gray-700 to-gray-800 rounded-lg mb-2 flex items-center justify-center relative overflow-hidden">
-                          {!isUnlocked ? (
-                            <div className="text-center">
-                              <Lock className="w-6 h-6 text-gray-500 mb-1" />
-                              <div className="text-xs text-gray-400 font-semibold">Lv{character.unlockLevel}</div>
-                            </div>
-                          ) : character.defaultImage ? (
-                            <img 
-                              src={character.defaultImage} 
-                              alt={character.name} 
-                              className="w-full h-full object-cover rounded-lg"
-                              onError={(e) => {
-                                (e.target as HTMLImageElement).src = '/uploads/placeholder-character.jpg';
-                              }}
-                            />
-                          ) : (
-                            <div className={`w-full h-full bg-gradient-to-br ${rarityConfig.gradient} flex items-center justify-center relative`}>
-                              <div className="text-white/60 text-center">
-                                <Crown className="w-8 h-8 mb-1 mx-auto" />
-                                <div className="text-xs font-semibold">No Image</div>
-                              </div>
-                              
-                              {/* Rarity sparkles animation */}
-                              {character.rarity !== 'common' && (
-                                <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                                  <div className="absolute -top-1 -right-1 text-white/30 animate-pulse">
-                                    <Sparkles className="w-4 h-4" />
-                                  </div>
-                                  <div className="absolute -bottom-1 -left-1 text-white/20 animate-pulse" style={{animationDelay: '0.5s'}}>
-                                    <Sparkles className="w-3 h-3" />
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                          
-                          {/* Rarity Badge - SMALLER */}
-                          <div className={`absolute top-1 right-1 flex items-center gap-1 px-1 py-0.5 rounded-full text-xs font-bold ${rarityConfig.bg} ${rarityConfig.border.replace('border-', 'text-')}`}>
-                            {rarityConfig.icon}
-                            <span className="capitalize text-xs">{character.rarity[0]}</span>
-                          </div>
-                          
-                          {/* Selected Indicator */}
-                          {isSelected && (
-                            <div className="absolute inset-0 bg-purple-500/20 flex items-center justify-center rounded-lg">
-                              <div className="bg-purple-600 text-white text-xs font-bold px-2 py-1 rounded-full shadow-lg">
-                                ★ Selected
-                              </div>
-                            </div>
-                          )}
-                          
-                          {/* VIP Badge */}
-                          {character.vip && (
-                            <div className="absolute top-1 left-1 bg-gradient-to-r from-pink-500 to-purple-600 text-white text-xs font-bold px-1 py-0.5 rounded-full">
-                              VIP
-                            </div>
-                          )}
-                        </div>
-                        
-                        {/* Character Info - SMALLER */}
-                        <div className="text-center">
-                          <h3 className="text-white font-bold mb-1 text-xs">{character.name}</h3>
-                          <p className="text-gray-400 text-xs mb-1 leading-tight h-6 overflow-hidden">
-                            {character.description.slice(0, 40)}{character.description.length > 40 ? '...' : ''}
-                          </p>
-                          
-                          <div className="flex items-center justify-center">
-                            {!isUnlocked ? (
-                              <div className="text-center">
-                                <div className="text-red-400 text-xs font-semibold">🔒 Lv{character.unlockLevel}</div>
-                              </div>
-                            ) : (
-                              <div className="text-center">
-                                <div className="text-green-400 text-xs font-semibold flex items-center justify-center gap-1">
-                                  <Unlock className="w-2 h-2" />
-                                  ✓
-                                </div>
-                                <div className="text-gray-500 text-xs">{imageCount} imgs</div>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                
-                {/* Empty State */}
-                {!loading && filteredCharacters.length === 0 && (
-                  <div className="text-center py-16">
-                    <div className="bg-gray-800/50 rounded-2xl p-8 max-w-md mx-auto">
-                      <Crown className="w-20 h-20 text-gray-600 mx-auto mb-4" />
-                      <h3 className="text-xl font-semibold text-gray-300 mb-3">
-                        No {activeTab} characters
-                      </h3>
-                      <p className="text-gray-500 text-sm leading-relaxed">
-                        {activeTab === 'locked' 
-                          ? 'All characters have been unlocked! Amazing progress.' 
-                          : activeTab === 'vip'
-                            ? 'VIP characters are unlocked at higher levels. Keep playing to access exclusive content!'
-                            : activeTab === 'unlocked'
-                              ? 'No characters unlocked yet. Start your journey by unlocking your first character!'
-                              : 'No characters available. Check the Characters tab in Admin Panel to add more.'}
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </ScrollContainer>
-          )}
+          </ScrollContainer>
         </div>
-        
-        {/* Footer Info */}
-        <div className="border-t border-gray-700 p-4 bg-gray-800/50 flex-shrink-0">
-          <div className="text-center text-gray-400 text-sm">
-            {selectedCharacter ? (
-              <div className="flex items-center justify-center gap-4">
-                <span>Selected: <strong className="text-purple-400">{selectedCharacter.name}</strong></span>
-                <span>•</span>
-                <span>Rarity: <strong className="capitalize">{selectedCharacter.rarity}</strong></span>
-                <span>•</span>
-                <span>Gallery: <strong>{getCharacterImageCount(selectedCharacter.id)} images</strong></span>
-              </div>
-            ) : (
-              <span>Select a character to begin your ClassikLust adventure!</span>
-            )}
+
+        {/* Footer Actions */}
+        <div className="border-t border-gray-700 p-4 bg-gray-800/50 flex items-center justify-between">
+          <div className="text-gray-400 text-sm">
+            {highlighted ? (<>
+              Selected: <strong className="text-purple-400">{highlighted.name}</strong> • Gallery: <strong>{getImageCount(highlighted.id)} images</strong>
+            </>) : 'Pick a character'}
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => setShowGallery(true)} disabled={!highlighted} className="px-3 py-2 rounded bg-gray-700 text-white hover:bg-gray-600 disabled:opacity-50">Open Gallery</button>
+            <button onClick={() => highlighted && isHighlightedUnlocked && persistSelection(highlighted.id)} disabled={!highlighted || !isHighlightedUnlocked || saving} className="px-4 py-2 rounded bg-purple-600 hover:bg-purple-700 text-white disabled:opacity-50">{saving ? 'Saving…' : 'Select'}</button>
           </div>
         </div>
       </div>
+
+      {/* Optional: lightweight gallery modal placeholder - to be wired to your gallery component */}
+      {showGallery && (
+        <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4" onClick={()=>setShowGallery(false)}>
+          <div className="bg-gray-900 border border-gray-700 rounded-xl max-w-5xl w-full max-h-[90vh] overflow-hidden" onClick={e=>e.stopPropagation()}>
+            <div className="flex items-center justify-between p-4 border-b border-gray-700">
+              <div className="text-white font-semibold">Gallery • {highlighted?.name}</div>
+              <button className="text-gray-400 hover:text-white" onClick={()=>setShowGallery(false)}><X className="w-5 h-5"/></button>
+            </div>
+            <ScrollContainer height="h-[70vh]">
+              <div className="p-4 grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                {images.filter(img=> img.characterId===highlighted?.id && !img.isHidden).map(img=> (
+                  <div key={img.id} className="aspect-square rounded-lg overflow-hidden border border-gray-700">
+                    <img src={img.url} alt="img" className="w-full h-full object-cover"/>
+                  </div>
+                ))}
+                {images.filter(img=> img.characterId===highlighted?.id && !img.isHidden).length===0 && (
+                  <div className="col-span-full text-center text-gray-500 py-8">No images yet</div>
+                )}
+              </div>
+            </ScrollContainer>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
