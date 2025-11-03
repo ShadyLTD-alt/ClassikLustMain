@@ -26,7 +26,7 @@ import logger from "./logger";
 // ✅ LUNA FIX: Import MasterDataService for single source of truth
 import masterDataService from "./utils/MasterDataService";
 // 🎯 JSON-FIRST: Import new player state manager
-import { playerStateManager, getPlayerState, updatePlayerState, selectCharacterForPlayer, purchaseUpgradeForPlayer } from "./utils/playerStateManager";
+import { playerStateManager, getPlayerState, updatePlayerState, selectCharacterForPlayer, purchaseUpgradeForPlayer, setDisplayImageForPlayer } from "./utils/playerStateManager";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -64,7 +64,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   logger.info('⚡ Registering routes...');
 
   // Health check endpoint - MUST BE FIRST
-  logger.info('✅ Setting up /api/health route...');
   app.get("/api/health", async (req, res) => {
     try {
       const playerStateHealth = await playerStateManager.healthCheck();
@@ -87,18 +86,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // 🌙 LUNABUG ROUTES - Now using ESM compatible .mjs file!
-  logger.info('🌙 Setting up LunaBug routes...');
+  // 🌙 LUNABUG ROUTES
   try {
     const lunaBugRoutes = await import('./routes/lunabug.mjs');
     app.use('/api/lunabug', lunaBugRoutes.default);
-    logger.info('✅ LunaBug routes registered at /api/lunabug');
+    console.log('✅ LunaBug routes registered at /api/lunabug');
   } catch (error) {
-    logger.error(`❌ LunaBug routes failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    logger.info('🌙 LunaBug will use client-side fallback mode');
+    console.error(`❌ LunaBug routes failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    console.log('🌙 LunaBug will use client-side fallback mode');
   }
 
-  logger.info('📁 Setting up /api/upload route...');
   app.post("/api/upload", requireAuth, upload.single("image"), async (req, res) => {
     if (!req.file) {
       return res.status(400).json({ error: "No file uploaded" });
@@ -174,10 +171,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  logger.info('🔐 Setting up auth routes...');
   app.get("/api/auth/me", requireAuth, async (req, res) => {
     try {
-      // 🎯 JSON-FIRST: Load from JSON state manager
+      // 🎯 JSON-FIRST: Load from main JSON
       const playerState = await getPlayerState(req.player!.id);
       res.json({ success: true, player: playerState });
     } catch (error) {
@@ -203,13 +199,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let player = await storage.getPlayerByTelegramId(devTelegramId);
 
       if (!player) {
-        // ✅ LUNA FIX: Use MasterDataService instead of hardcoded values
         const playerData = await masterDataService.createNewPlayerData(devTelegramId, sanitizedUsername);
-        
         player = await storage.createPlayer(playerData);
         await savePlayerDataToJSON(player);
-        
-        logger.info(`🎮 Luna: Created new dev player using master defaults for ${sanitizedUsername}`);
+        console.log(`🎮 Created new dev player: ${sanitizedUsername}`);
       } else {
         await storage.updatePlayer(player.id, { lastLogin: new Date() });
         await savePlayerDataToJSON(player);
@@ -229,7 +222,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  logger.info('📨 Setting up Telegram auth...');
   app.post("/api/auth/telegram", async (req, res) => {
     try {
       const { initData } = req.body;
@@ -257,13 +249,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let player = await storage.getPlayerByTelegramId(telegramId);
 
       if (!player) {
-        // ✅ LUNA FIX: Use MasterDataService instead of hardcoded values  
         const playerData = await masterDataService.createNewPlayerData(telegramId, username);
-        
         player = await storage.createPlayer(playerData);
         await savePlayerDataToJSON(player);
-        
-        logger.info(`🎮 Luna: Created new Telegram player using master defaults for ${username}`);
+        console.log(`🎮 Created new Telegram player: ${username}`);
       } else {
         await storage.updatePlayer(player.id, { lastLogin: new Date() });
         await savePlayerDataToJSON(player);
@@ -283,7 +272,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  logger.info('🎮 Setting up game data routes...');
   // Get all upgrades (from memory)
   app.get("/api/upgrades", requireAuth, async (_req, res) => {
     try {
@@ -385,15 +373,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: 'Failed to delete media' });
     }
   });
-
-  logger.info('👤 Setting up JSON-FIRST player routes...');
   
-  // 🎯 JSON-FIRST: Get player data (from JSON snapshots)
+  // 🎯 JSON-FIRST: Get player data (from main-gamedata JSON)
   app.get("/api/player/me", requireAuth, async (req, res) => {
     try {
       const playerState = await getPlayerState(req.player!.id);
       res.json({ player: playerState });
-      console.log(`📤 Player ${req.player!.username || req.player!.id} data served from JSON`);
     } catch (error) {
       logger.error('Player fetch error', { error: error instanceof Error ? error.message : 'Unknown' });
       res.status(500).json({ error: 'Failed to fetch player data' });
@@ -428,17 +413,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.json({ player: updatedState });
       }
       
-      console.log(`💾 Player ${req.player!.username || req.player!.id} updated via JSON-first system`);
     } catch (error) {
       logger.error('Player update error', { error: error instanceof Error ? error.message : 'Unknown' });
       res.status(500).json({ error: 'Failed to update player' });
     }
   });
 
-  // 🎯 JSON-FIRST: Character selection (dedicated endpoint) 🎭
+  // 🎭 JSON-FIRST: Character selection (dedicated endpoint with DEBUG LOGGING)
   app.post("/api/player/select-character", requireAuth, async (req, res) => {
     try {
       const { characterId } = req.body;
+      
+      console.log(`🎭 [CHARACTER SELECT] Player ${req.player!.id} selecting: ${characterId}`);
       
       if (!characterId) {
         return res.status(400).json({ error: 'Character ID is required' });
@@ -446,17 +432,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Verify character exists and is unlocked
       const playerState = await getPlayerState(req.player!.id);
+      console.log(`🎭 [CHARACTER SELECT] Current selected: ${playerState.selectedCharacterId}`);
+      console.log(`🎭 [CHARACTER SELECT] Unlocked characters: ${playerState.unlockedCharacters.join(', ')}`);
+      
       if (!playerState.unlockedCharacters.includes(characterId)) {
+        console.log(`❌ [CHARACTER SELECT] Character ${characterId} not unlocked for player ${req.player!.id}`);
         return res.status(403).json({ error: 'Character not unlocked' });
       }
 
       const updatedState = await selectCharacterForPlayer(req.player!.id, characterId);
       
+      console.log(`✅ [CHARACTER SELECT] Player ${req.player!.id} selected character ${characterId}`);
+      console.log(`💾 [CHARACTER SELECT] JSON file updated: ${updatedState.telegramId}_${updatedState.username}.json`);
+      
       res.json({ success: true, player: updatedState });
-      console.log(`🎭 Player ${req.player!.username || req.player!.id} selected character ${characterId} via JSON-first`);
     } catch (error) {
+      console.error(`🔴 [CHARACTER SELECT] Error for player ${req.player!.id}:`, error);
       logger.error('Character selection error', { error: error instanceof Error ? error.message : 'Unknown' });
       res.status(500).json({ error: 'Failed to select character' });
+    }
+  });
+
+  // 🖼️ NEW: Set display image endpoint for gallery
+  app.post("/api/player/set-display-image", requireAuth, async (req, res) => {
+    try {
+      const { imageUrl } = req.body;
+      
+      if (!imageUrl) {
+        return res.status(400).json({ error: 'Image URL is required' });
+      }
+
+      console.log(`🖼️ [DISPLAY IMAGE] Player ${req.player!.id} setting display image: ${imageUrl}`);
+      
+      const updatedState = await setDisplayImageForPlayer(req.player!.id, imageUrl);
+      
+      console.log(`✅ [DISPLAY IMAGE] Display image updated for player ${req.player!.id}`);
+      res.json({ success: true, player: updatedState });
+    } catch (error) {
+      console.error(`🔴 [DISPLAY IMAGE] Error for player ${req.player!.id}:`, error);
+      logger.error('Display image error', { error: error instanceof Error ? error.message : 'Unknown' });
+      res.status(500).json({ error: 'Failed to set display image' });
     }
   });
 
@@ -480,7 +495,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const updatedState = await purchaseUpgradeForPlayer(req.player!.id, upgradeId, level, cost);
       
       res.json({ success: true, player: updatedState });
-      console.log(`🛒 Player ${req.player!.username || req.player!.id} purchased upgrade ${upgradeId} level ${level} via JSON-first`);
     } catch (error) {
       logger.error('Upgrade purchase error', { error: error instanceof Error ? error.message : 'Unknown' });
       res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to purchase upgrade' });
@@ -564,10 +578,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  logger.info('🚀 Creating HTTP server...');
   const httpServer = createServer(app);
   
-  logger.info('✅ All routes registered successfully');
-  logger.info('🎯 JSON-FIRST: Player state system initialized with atomic writes and delta syncing');
+  console.log('✅ All routes registered successfully');
+  console.log('🎯 JSON-FIRST: Player system using main-gamedata/player-data/ with proper naming');
   return httpServer;
 }
