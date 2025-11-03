@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ScrollContainer } from '@/components/layout/ScrollContainer';
 import { Code, Bug, Sparkles, Copy, RefreshCw, AlertTriangle, MessageSquare, Send, Bot, User, Zap, Moon, Key } from 'lucide-react';
 
 interface LunaBugDebuggerProps {
@@ -703,61 +704,66 @@ export default function LunaBugDebugger({ isOpen, onClose }: LunaBugDebuggerProp
                 </div>
               </CardHeader>
               <CardContent className="flex-grow flex flex-col overflow-hidden">
-                <ScrollArea className="flex-1 mb-4">
-                  {messages.map((msg, index) => (
-                    <div key={index} className={`mb-3 flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`max-w-[85%] flex ${msg.sender === 'user' ? 'flex-row-reverse' : 'flex-row'} gap-3 items-start`}>
-                        <div className={`p-4 rounded-lg ${
-                          msg.sender === 'user' 
-                            ? 'bg-blue-600 text-white' 
-                            : msg.type === 'debug' 
-                              ? 'bg-purple-600/80 text-white border border-purple-400/50'
-                              : 'bg-slate-700 text-slate-200'
-                        }`}>
-                          <div className="whitespace-pre-wrap">{msg.text}</div>
-                          <div className={`text-xs mt-2 ${
-                            msg.sender === 'user' 
-                              ? 'text-blue-200' 
-                              : msg.type === 'debug' 
-                                ? 'text-purple-200' 
-                                : 'text-slate-400'
-                          } text-right`}>
-                            {new Date(msg.timestamp).toLocaleTimeString({ hour: '2-digit', minute: '2-digit' })}
-                            {msg.type === 'debug' && <span className="ml-2">🔍</span>}
-                          </div>
-                        </div>
-                        {msg.sender === 'user' ? (
-                          <User className="w-5 h-5 text-blue-400 mt-1 flex-shrink-0" />
-                        ) : (
-                          <div className="flex items-center">
-                            {msg.type === 'debug' ? (
-                              <Zap className="w-5 h-5 text-purple-400 mt-1 flex-shrink-0" />
+                {/* FIXED: Use ScrollContainer instead of ScrollArea */}
+                <div className="flex-1 mb-4 min-h-0">
+                  <ScrollContainer height="h-full">
+                    <div className="p-2">
+                      {messages.map((msg, index) => (
+                        <div key={index} className={`mb-3 flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                          <div className={`max-w-[85%] flex ${msg.sender === 'user' ? 'flex-row-reverse' : 'flex-row'} gap-3 items-start`}>
+                            <div className={`p-4 rounded-lg ${
+                              msg.sender === 'user' 
+                                ? 'bg-blue-600 text-white' 
+                                : msg.type === 'debug' 
+                                  ? 'bg-purple-600/80 text-white border border-purple-400/50'
+                                  : 'bg-slate-700 text-slate-200'
+                            }`}>
+                              <div className="whitespace-pre-wrap">{msg.text}</div>
+                              <div className={`text-xs mt-2 ${
+                                msg.sender === 'user' 
+                                  ? 'text-blue-200' 
+                                  : msg.type === 'debug' 
+                                    ? 'text-purple-200' 
+                                    : 'text-slate-400'
+                              } text-right`}>
+                                {new Date(msg.timestamp).toLocaleTimeString({ hour: '2-digit', minute: '2-digit' })}
+                                {msg.type === 'debug' && <span className="ml-2">🔍</span>}
+                              </div>
+                            </div>
+                            {msg.sender === 'user' ? (
+                              <User className="w-5 h-5 text-blue-400 mt-1 flex-shrink-0" />
                             ) : (
-                              <Moon className="w-5 h-5 text-purple-400 mt-1 flex-shrink-0" />
+                              <div className="flex items-center">
+                                {msg.type === 'debug' ? (
+                                  <Zap className="w-5 h-5 text-purple-400 mt-1 flex-shrink-0" />
+                                ) : (
+                                  <Moon className="w-5 h-5 text-purple-400 mt-1 flex-shrink-0" />
+                                )}
+                              </div>
                             )}
                           </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                  
-                  {/* Loading indicator for chat */}
-                  {(isChatLoading || chatMutation.isPending) && (
-                    <div className="mb-2 flex justify-start">
-                      <div className="max-w-[80%] flex flex-row gap-3 items-start">
-                        <Moon className="w-5 h-5 text-purple-400 mt-1" />
-                        <div className="bg-slate-700 text-slate-200 p-4 rounded-lg">
-                          <div className="flex space-x-1">
-                            <div className="w-2 h-2 rounded-full bg-purple-300 animate-bounce"></div>
-                            <div className="w-2 h-2 rounded-full bg-purple-300 animate-bounce" style={{animationDelay: '0.2s'}}></div>
-                            <div className="w-2 h-2 rounded-full bg-purple-300 animate-bounce" style={{animationDelay: '0.4s'}}></div>
+                        </div>
+                      ))}
+                      
+                      {/* Loading indicator for chat */}
+                      {(isChatLoading || chatMutation.isPending) && (
+                        <div className="mb-2 flex justify-start">
+                          <div className="max-w-[80%] flex flex-row gap-3 items-start">
+                            <Moon className="w-5 h-5 text-purple-400 mt-1" />
+                            <div className="bg-slate-700 text-slate-200 p-4 rounded-lg">
+                              <div className="flex space-x-1">
+                                <div className="w-2 h-2 rounded-full bg-purple-300 animate-bounce"></div>
+                                <div className="w-2 h-2 rounded-full bg-purple-300 animate-bounce" style={{animationDelay: '0.2s'}}></div>
+                                <div className="w-2 h-2 rounded-full bg-purple-300 animate-bounce" style={{animationDelay: '0.4s'}}></div>
+                              </div>
+                            </div>
                           </div>
                         </div>
-                      </div>
+                      )}
+                      <div ref={messagesEndRef} />
                     </div>
-                  )}
-                  <div ref={messagesEndRef} />
-                </ScrollArea>
+                  </ScrollContainer>
+                </div>
 
                 <div className="flex gap-2">
                   <Input
