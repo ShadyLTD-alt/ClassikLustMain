@@ -6,6 +6,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Crown, Lock, Star, X } from 'lucide-react';
 import { useGame } from '@/contexts/GameContext';
+import { ScrollContainer } from '@/components/layout/ScrollContainer';
 
 interface CharacterSelectorProps {
   isOpen: boolean;
@@ -45,9 +46,9 @@ export default function CharacterSelector({ isOpen, onClose }: CharacterSelector
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] bg-gray-900/95 backdrop-blur-lg text-white border-purple-500/50 overflow-hidden">
+      <DialogContent className="max-w-5xl max-h-[90vh] bg-gray-900/95 backdrop-blur-lg text-white border-purple-500/50 overflow-hidden">
         {/* SINGLE Header with close button */}
-        <DialogHeader className="border-b border-purple-500/30 pb-4">
+        <DialogHeader className="border-b border-purple-500/30 pb-4 flex-shrink-0">
           <div className="flex items-center justify-between">
             <div>
               <DialogTitle className="text-2xl font-bold lust-brand">
@@ -75,9 +76,9 @@ export default function CharacterSelector({ isOpen, onClose }: CharacterSelector
           </div>
         </DialogHeader>
 
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 min-h-0">
           <Tabs value={selectedTab} onValueChange={setSelectedTab} className="h-full flex flex-col">
-            <TabsList className="grid w-full grid-cols-4 bg-black/40 mb-4">
+            <TabsList className="grid w-full grid-cols-4 bg-black/40 mb-4 flex-shrink-0">
               <TabsTrigger value="all" className="data-[state=active]:bg-purple-600 text-white">
                 All
               </TabsTrigger>
@@ -92,82 +93,84 @@ export default function CharacterSelector({ isOpen, onClose }: CharacterSelector
               </TabsTrigger>
             </TabsList>
 
-            <TabsContent value={selectedTab} className="flex-1 overflow-auto">
+            <TabsContent value={selectedTab} className="flex-1 min-h-0">
               {filteredCharacters.length > 0 ? (
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 pb-4">
-                  {filteredCharacters.map((character) => {
-                    const isUnlocked = state.unlockedCharacters.includes(character.id);
-                    const isSelected = state.selectedCharacterId === character.id;
-                    const characterImages = getCharacterImages(character.id);
+                <ScrollContainer height="h-full">
+                  <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 p-4 pb-8">
+                    {filteredCharacters.map((character) => {
+                      const isUnlocked = state.unlockedCharacters.includes(character.id);
+                      const isSelected = state.selectedCharacterId === character.id;
+                      const characterImages = getCharacterImages(character.id);
 
-                    return (
-                      <Card
-                        key={character.id}
-                        className={`cursor-pointer transition-all duration-200 border-2 ${
-                          isSelected
-                            ? 'border-purple-400 bg-purple-900/30'
-                            : isUnlocked
-                            ? 'border-purple-600/50 bg-black/40 hover:border-purple-500 hover:bg-purple-900/20'
-                            : 'border-gray-600 bg-gray-800/40 opacity-60'
-                        }`}
-                        onClick={() => handleCharacterSelect(character.id)}
-                      >
-                        <CardContent className="p-4">
-                          <div className="relative">
-                            {/* Character Image */}
-                            <div className="aspect-[3/4] mb-3 rounded-lg overflow-hidden bg-gray-800">
-                              {character.defaultImage ? (
-                                <img
-                                  src={character.defaultImage}
-                                  alt={character.name}
-                                  className="w-full h-full object-cover"
-                                  onError={(e) => {
-                                    (e.target as HTMLImageElement).src = '/uploads/placeholder-character.jpg';
-                                  }}
-                                />
-                              ) : (
-                                <div className="w-full h-full flex items-center justify-center text-gray-500">
-                                  <Crown className="w-12 h-12" />
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Character Info */}
-                            <div className="text-center">
-                              <h3 className="font-semibold text-white mb-1">{character.name}</h3>
-                              <div className="flex items-center justify-center gap-2 mb-2">
-                                {character.vip && (
-                                  <Badge variant="secondary" className="text-xs bg-yellow-600/20 text-yellow-400">
-                                    <Crown className="w-3 h-3 mr-1" />
-                                    VIP
-                                  </Badge>
-                                )}
-                                {isSelected && (
-                                  <Badge variant="secondary" className="text-xs bg-purple-600/20 text-purple-400">
-                                    <Star className="w-3 h-3 mr-1" />
-                                    Selected
-                                  </Badge>
+                      return (
+                        <Card
+                          key={character.id}
+                          className={`cursor-pointer transition-all duration-200 border-2 hover:scale-105 ${
+                            isSelected
+                              ? 'border-purple-400 bg-purple-900/30 shadow-lg'
+                              : isUnlocked
+                              ? 'border-purple-600/50 bg-black/40 hover:border-purple-500 hover:bg-purple-900/20'
+                              : 'border-gray-600 bg-gray-800/40 opacity-60'
+                          }`}
+                          onClick={() => handleCharacterSelect(character.id)}
+                        >
+                          <CardContent className="p-3">
+                            <div className="relative">
+                              {/* Character Image - SMALLER: aspect-[3/5] */}
+                              <div className="aspect-[3/5] mb-2 rounded-lg overflow-hidden bg-gray-800">
+                                {character.defaultImage ? (
+                                  <img
+                                    src={character.defaultImage}
+                                    alt={character.name}
+                                    className="w-full h-full object-cover"
+                                    onError={(e) => {
+                                      (e.target as HTMLImageElement).src = '/uploads/placeholder-character.jpg';
+                                    }}
+                                  />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center text-gray-500">
+                                    <Crown className="w-8 h-8" />
+                                  </div>
                                 )}
                               </div>
 
-                              {/* Unlock Status */}
-                              {isUnlocked ? (
-                                <div className="text-green-400 text-xs">
-                                  Unlocked | {characterImages.length} images
+                              {/* Character Info - SMALLER */}
+                              <div className="text-center">
+                                <h3 className="font-semibold text-white mb-1 text-sm">{character.name}</h3>
+                                <div className="flex items-center justify-center gap-1 mb-2">
+                                  {character.vip && (
+                                    <Badge variant="secondary" className="text-xs bg-yellow-600/20 text-yellow-400 px-1 py-0">
+                                      <Crown className="w-2 h-2 mr-1" />
+                                      VIP
+                                    </Badge>
+                                  )}
+                                  {isSelected && (
+                                    <Badge variant="secondary" className="text-xs bg-purple-600/20 text-purple-400 px-1 py-0">
+                                      <Star className="w-2 h-2 mr-1" />
+                                      ★
+                                    </Badge>
+                                  )}
                                 </div>
-                              ) : (
-                                <div className="text-gray-400 text-xs flex items-center justify-center gap-1">
-                                  <Lock className="w-3 h-3" />
-                                  Unlock at Level {character.unlockLevel}
-                                </div>
-                              )}
+
+                                {/* Unlock Status - SMALLER */}
+                                {isUnlocked ? (
+                                  <div className="text-green-400 text-xs">
+                                    ✓ {characterImages.length} imgs
+                                  </div>
+                                ) : (
+                                  <div className="text-gray-400 text-xs flex items-center justify-center gap-1">
+                                    <Lock className="w-2 h-2" />
+                                    Lv{character.unlockLevel}
+                                  </div>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
-                </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                </ScrollContainer>
               ) : (
                 <div className="flex flex-col items-center justify-center py-12 text-gray-400">
                   <div className="w-16 h-16 mb-4 rounded-lg bg-gray-700 flex items-center justify-center">
@@ -182,7 +185,7 @@ export default function CharacterSelector({ isOpen, onClose }: CharacterSelector
         </div>
 
         {/* Footer */}
-        <div className="border-t border-purple-500/30 pt-4 mt-4">
+        <div className="border-t border-purple-500/30 pt-4 mt-4 flex-shrink-0">
           <div className="text-center text-gray-400 text-sm">
             Characters
           </div>
