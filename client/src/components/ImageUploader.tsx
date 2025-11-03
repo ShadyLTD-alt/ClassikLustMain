@@ -189,6 +189,16 @@ export default function ImageUploader({ adminMode = false }: { adminMode?: boole
     }
   };
 
+  const handleRemovePose = (poseToRemove: string) => {
+    setSelectedPoses(prev => prev.filter(p => p !== poseToRemove));
+  };
+
+  const handleAddPose = (pose: string) => {
+    if (!selectedPoses.includes(pose)) {
+      setSelectedPoses(prev => [...prev, pose]);
+    }
+  };
+
   // FIXED: Inline render (no Dialog wrapper) - prevents double menu
   return (
     <div className="space-y-6">
@@ -229,6 +239,81 @@ export default function ImageUploader({ adminMode = false }: { adminMode?: boole
           <Input id="unlock-level" type="number" min="1" value={unlockLevel} onChange={(e)=> setUnlockLevel(parseInt(e.target.value)||1)} />
         </div>
       </div>
+
+      {/* RESTORED: Poses Section - Exactly like in the screenshot */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm flex items-center gap-2">
+            😊 Poses
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            {/* Add Pose Input */}
+            <div className="flex gap-2">
+              <Input
+                value={newPoseInput}
+                onChange={(e) => setNewPoseInput(e.target.value)}
+                placeholder="Add a pose (e.g., sitting, bikini)"
+                className="flex-1"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && newPoseInput.trim()) {
+                    addNewPoseToMasterArray(newPoseInput);
+                    handleAddPose(newPoseInput.trim().toLowerCase());
+                    setNewPoseInput('');
+                  }
+                }}
+              />
+              <Button 
+                onClick={() => {
+                  if (newPoseInput.trim()) {
+                    addNewPoseToMasterArray(newPoseInput);
+                    handleAddPose(newPoseInput.trim().toLowerCase());
+                    setNewPoseInput('');
+                  }
+                }}
+                variant="outline"
+                size="sm"
+                disabled={!newPoseInput.trim()}
+              >
+                <Plus className="w-4 h-4" />
+              </Button>
+            </div>
+
+            {/* Available Poses Pills */}
+            <div className="flex flex-wrap gap-2">
+              {availablePoses.map(pose => (
+                <Badge
+                  key={pose}
+                  variant={selectedPoses.includes(pose) ? "default" : "outline"}
+                  className="cursor-pointer hover:bg-primary/80"
+                  onClick={() => selectedPoses.includes(pose) ? handleRemovePose(pose) : handleAddPose(pose)}
+                >
+                  {pose}
+                </Badge>
+              ))}
+            </div>
+
+            {/* Selected Poses Display */}
+            {selectedPoses.length > 0 && (
+              <div>
+                <Label className="text-xs text-muted-foreground">Selected Poses ({selectedPoses.length})</Label>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {selectedPoses.map(pose => (
+                    <Badge key={pose} variant="secondary" className="text-xs">
+                      {pose} 
+                      <X 
+                        className="w-3 h-3 ml-1 cursor-pointer hover:text-destructive" 
+                        onClick={() => handleRemovePose(pose)}
+                      />
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="flex gap-2 justify-center">
         <Button onClick={loadDataArraysFromServer} disabled={isLoadingArrays} variant="outline" size="sm">
@@ -310,7 +395,7 @@ export default function ImageUploader({ adminMode = false }: { adminMode?: boole
                 <img 
                   src={editingImage.url?.startsWith('http') ? editingImage.url : `${location.origin}${editingImage.url}`} 
                   alt="Editing" 
-                  className="w-full h-full object-cover" 
+                  className="w-full h-full object-cover bg-gray-800" 
                 />
               </div>
               <div className="flex-1 space-y-3">
