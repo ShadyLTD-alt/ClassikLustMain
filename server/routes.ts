@@ -25,13 +25,17 @@ import { generateSecureToken, getSessionExpiry } from "./utils/auth";
 import logger from "./logger";
 // ✅ LUNA FIX: Import MasterDataService for single source of truth
 import masterDataService from "./utils/MasterDataService";
-// 🎯 JSON-FIRST: Import new player state manager
+// 🎯 JSON-FIRST: Import new player state manager WITH FIXED EXPORTS
 import { playerStateManager, getPlayerState, updatePlayerState, selectCharacterForPlayer, purchaseUpgradeForPlayer, setDisplayImageForPlayer } from "./utils/playerStateManager";
 // 🌙 LUNA LEARNING: Import learning system
 import { lunaLearning } from "./utils/lunaLearningSystem";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// 📁 Directory constants for master-data template system
+const MASTER_DATA_DIR = path.join(process.cwd(), 'master-data');
+const MAIN_GAMEDATA_DIR = path.join(process.cwd(), 'main-gamedata');
 
 const storageConfig = multer.diskStorage({
   destination: function (req, _file, cb) {
@@ -107,6 +111,87 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       logger.error('Luna learning report error', { error: error instanceof Error ? error.message : 'Unknown' });
       res.status(500).json({ error: 'Failed to generate Luna learning report' });
+    }
+  });
+
+  // 📁 ADMIN: Load master-data templates
+  app.get("/api/admin/master/characters", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const templatesDir = path.join(MASTER_DATA_DIR, 'characters');
+      const files = await fs.promises.readdir(templatesDir).catch(() => []);
+      const templates = [];
+      
+      for (const file of files.filter(f => f.endsWith('.json'))) {
+        try {
+          const data = await fs.promises.readFile(path.join(templatesDir, file), 'utf8');
+          const template = JSON.parse(data);
+          templates.push(template);
+        } catch (error) {
+          logger.warn(`Failed to load character template ${file}`);
+        }
+      }
+      
+      console.log(`📂 [ADMIN] Loaded ${templates.length} character templates from master-data`);
+      res.json({ success: true, templates });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to load character templates' });
+    }
+  });
+
+  // 🎭 ADMIN: Create character (master-data template → main-gamedata save)
+  app.post("/api/admin/characters/create", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const { templateId, ...customFields } = req.body;
+      
+      console.log(`🎭 [CREATE CHARACTER] Loading template ${templateId || 'default'} from master-data...`);
+      
+      // Load template from master-data
+      let template = {};
+      if (templateId) {
+        try {
+          const templatePath = path.join(MASTER_DATA_DIR, 'characters', `${templateId}.json`);
+          const templateData = await fs.promises.readFile(templatePath, 'utf8');
+          template = JSON.parse(templateData);
+          console.log(`📂 [CREATE CHARACTER] Template loaded: ${templateId}`);
+        } catch (error) {
+          console.warn(`⚠️ [CREATE CHARACTER] Template ${templateId} not found, using defaults`);
+        }
+      }
+      
+      // Merge template with custom fields
+      const newCharacter = {
+        id: customFields.id || `char_${Date.now()}`,
+        name: customFields.name || 'New Character',
+        description: customFields.description || 'A mysterious character',
+        unlockLevel: customFields.unlockLevel || 1,
+        avatarImage: customFields.avatarImage || null,
+        defaultImage: customFields.defaultImage || null,
+        categories: customFields.categories || [],
+        poses: customFields.poses || [],
+        isHidden: customFields.isHidden || false,
+        ...template, // Apply template defaults first
+        ...customFields, // Override with user input
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+      
+      // Save to main-gamedata/characters/
+      await saveCharacterToJSON(newCharacter);
+      
+      // Also save to database for compatibility
+      try {
+        const dbCharacter = await storage.createCharacter(newCharacter);
+        console.log(`✅ [CREATE CHARACTER] Character created: ${newCharacter.name} (${newCharacter.id})`);
+        console.log(`📁 [CREATE CHARACTER] Saved to: main-gamedata/characters/${newCharacter.id}.json`);
+        res.json({ success: true, character: dbCharacter });
+      } catch (dbError) {
+        // Character saved to JSON successfully, DB save failed (not critical)
+        console.log(`⚠️ [CREATE CHARACTER] JSON saved but DB failed - character will work from JSON`);
+        res.json({ success: true, character: newCharacter, warning: 'DB save failed but JSON saved' });
+      }
+    } catch (error) {
+      logger.error('Create character failed', { error: error instanceof Error ? error.message : 'Unknown' });
+      res.status(500).json({ error: 'Failed to create character' });
     }
   });
 
@@ -197,7 +282,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/auth/me", requireAuth, async (req, res) => {
     try {
-      // 🎯 JSON-FIRST: Load from main JSON
+      // 🎯 JSON-FIRST: Load from per-player folder JSON
       const playerState = await getPlayerState(req.player!.id);
       res.json({ success: true, player: playerState });
     } catch (error) {
@@ -352,17 +437,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // UPDATE media upload
+  // 🖼️ ENHANCED: Update media with poses and character reassignment
   app.patch("/api/media/:id", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
       const updates = req.body;
       
-      const updatedMedia = await storage.updateMediaUpload(id, updates);
-      if (!updatedMedia) {
+      console.log(`🖼️ [UPDATE MEDIA] Updating media ${id}...`, updates);
+      
+      const existingMedia = await storage.getMediaUpload(id);
+      if (!existingMedia) {
         return res.status(404).json({ error: 'Media not found' });
       }
       
+      // Validate poses array if provided
+      if (updates.poses && !Array.isArray(updates.poses)) {
+        return res.status(400).json({ error: 'Poses must be an array of strings' });
+      }
+      
+      if (updates.poses && !updates.poses.every((p: any) => typeof p === 'string')) {
+        return res.status(400).json({ error: 'All poses must be strings' });
+      }
+      
+      // Log character reassignment
+      if (updates.characterId && updates.characterId !== existingMedia.characterId) {
+        console.log(`🎭 [UPDATE MEDIA] Reassigning from character ${existingMedia.characterId} to ${updates.characterId}`);
+      }
+      
+      // Log pose updates
+      if (updates.poses) {
+        console.log(`🎭 [UPDATE MEDIA] Updating poses:`, {
+          old: existingMedia.poses || [],
+          new: updates.poses
+        });
+      }
+      
+      const updatedMedia = await storage.updateMediaUpload(id, {
+        ...updates,
+        updatedAt: new Date()
+      });
+      
+      console.log(`✅ [UPDATE MEDIA] Media ${id} updated successfully`);
       res.json({ success: true, media: updatedMedia });
     } catch (error: any) {
       logger.error('Media update error', { error: error.message });
@@ -398,7 +513,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // 🎯 JSON-FIRST: Get player data (from main-gamedata JSON)
+  // 🎯 JSON-FIRST: Get player data (from per-player folder)
   app.get("/api/player/me", requireAuth, async (req, res) => {
     try {
       const playerState = await getPlayerState(req.player!.id);
@@ -409,7 +524,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // 🎯 JSON-FIRST: Update player data (immediate JSON + async DB)
+  // 🎯 JSON-FIRST: Update player data (immediate per-player JSON + async DB)
   app.patch("/api/player/me", requireAuth, async (req, res) => {
     try {
       const updates = req.body;
@@ -443,7 +558,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // 🎭 JSON-FIRST: Character selection with enhanced debugging
+  // 🎭 FIXED: Character selection with per-player folder JSON
   app.post("/api/player/select-character", requireAuth, async (req, res) => {
     try {
       const { characterId } = req.body;
@@ -451,51 +566,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`🎭 [CHARACTER SELECT] Player ${req.player!.username || req.player!.id} selecting: ${characterId}`);
       
       if (!characterId) {
+        console.log(`❌ [CHARACTER SELECT] No characterId provided`);
         return res.status(400).json({ error: 'Character ID is required' });
       }
 
-      // Verify character exists and is unlocked
+      // Enhanced validation and debugging
       const playerState = await getPlayerState(req.player!.id);
-      console.log(`🎭 [CHARACTER SELECT] Current: ${playerState.selectedCharacterId}`);
-      console.log(`🎭 [CHARACTER SELECT] Unlocked: [${playerState.unlockedCharacters.join(', ')}]`);
+      console.log(`🎭 [CHARACTER SELECT] Current character: ${playerState.selectedCharacterId}`);
+      console.log(`🎭 [CHARACTER SELECT] Unlocked characters: [${playerState.unlockedCharacters.join(', ')}]`);
       
       if (!playerState.unlockedCharacters.includes(characterId)) {
-        console.log(`❌ [CHARACTER SELECT] Character ${characterId} not unlocked`);
-        return res.status(403).json({ error: 'Character not unlocked' });
+        console.log(`❌ [CHARACTER SELECT] Character ${characterId} not in unlocked list`);
+        return res.status(403).json({ error: `Character ${characterId} is not unlocked` });
       }
 
+      // Attempt character selection
+      console.log(`🔄 [CHARACTER SELECT] Attempting to select ${characterId}...`);
       const updatedState = await selectCharacterForPlayer(req.player!.id, characterId);
       
-      console.log(`✅ [CHARACTER SELECT] SUCCESS: ${characterId} selected`);
-      console.log(`💾 [CHARACTER SELECT] JSON updated: main-gamedata/player-data/player-${updatedState.username || updatedState.telegramId}.json`);
+      console.log(`✅ [CHARACTER SELECT] SUCCESS: ${characterId} selected for ${updatedState.username}`);
+      console.log(`📁 [CHARACTER SELECT] Saved to per-player folder: main-gamedata/player-data/player-${updatedState.username || updatedState.telegramId}/player.json`);
       
       res.json({ success: true, player: updatedState });
     } catch (error) {
       console.error(`🔴 [CHARACTER SELECT] FAILED for ${req.player!.username || req.player!.id}:`, error);
       logger.error('Character selection error', { error: error instanceof Error ? error.message : 'Unknown' });
-      res.status(500).json({ error: 'Failed to select character' });
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to select character' });
     }
   });
 
-  // 🖼️ Set display image endpoint for gallery
+  // 🖼️ FIXED: Set display image with per-player folder JSON
   app.post("/api/player/set-display-image", requireAuth, async (req, res) => {
     try {
       const { imageUrl } = req.body;
       
-      if (!imageUrl) {
-        return res.status(400).json({ error: 'Image URL is required' });
-      }
-
       console.log(`🖼️ [DISPLAY IMAGE] Player ${req.player!.username || req.player!.id} setting: ${imageUrl}`);
       
+      if (!imageUrl || typeof imageUrl !== 'string') {
+        console.log(`❌ [DISPLAY IMAGE] Invalid or missing imageUrl:`, imageUrl);
+        return res.status(400).json({ error: 'Valid image URL is required' });
+      }
+
+      // Security: ensure URL is from uploads
+      if (!imageUrl.startsWith('/uploads/')) {
+        console.log(`❌ [DISPLAY IMAGE] URL not from uploads directory: ${imageUrl}`);
+        return res.status(400).json({ error: 'Image URL must be from uploads directory' });
+      }
+      
+      console.log(`🔄 [DISPLAY IMAGE] Attempting to set display image...`);
       const updatedState = await setDisplayImageForPlayer(req.player!.id, imageUrl);
       
-      console.log(`✅ [DISPLAY IMAGE] SUCCESS: ${imageUrl}`);
+      console.log(`✅ [DISPLAY IMAGE] SUCCESS: ${imageUrl} set for ${updatedState.username}`);
+      console.log(`📁 [DISPLAY IMAGE] Saved to per-player folder: main-gamedata/player-data/player-${updatedState.username || updatedState.telegramId}/player.json`);
+      
       res.json({ success: true, player: updatedState });
     } catch (error) {
       console.error(`🔴 [DISPLAY IMAGE] FAILED:`, error);
       logger.error('Display image error', { error: error instanceof Error ? error.message : 'Unknown' });
-      res.status(500).json({ error: 'Failed to set display image' });
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to set display image' });
     }
   });
 
@@ -605,7 +733,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
   
   console.log('✅ All routes registered successfully');
-  console.log('🎯 JSON-FIRST: Player system using main-gamedata/player-data/ with player-{username}.json naming');
+  console.log('🎯 JSON-FIRST: Player system using per-player folders: main-gamedata/player-data/player-{username}/player.json');
+  console.log('📁 Master-data templates available for admin create flows');
   console.log('🌙 Luna Learning System active for error prevention');
   return httpServer;
 }
