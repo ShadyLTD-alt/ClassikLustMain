@@ -1,18 +1,17 @@
 import { useState, useRef, useEffect } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollContainer } from '@/components/layout/ScrollContainer';
-import { Code, Bug, Sparkles, Copy, RefreshCw, AlertTriangle, MessageSquare, Send, Bot, User, Zap, Moon, Key } from 'lucide-react';
+import { Code, Bug, Sparkles, Copy, AlertTriangle, MessageSquare, Send, User, Zap, Moon, Key } from 'lucide-react';
 
 interface LunaBugDebuggerProps {
   isOpen: boolean;
@@ -453,105 +452,109 @@ export default function LunaBugDebugger({ isOpen, onClose }: LunaBugDebuggerProp
                       Code & Error Details
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="flex-grow overflow-y-auto space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label className="text-slate-300">Language</Label>
-                        <Select value={language} onValueChange={setLanguage}>
-                          <SelectTrigger className="bg-slate-700/30 border-slate-600/50 text-white mt-2">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent className="bg-slate-800 border-slate-600">
-                            <SelectItem value="typescript">TypeScript</SelectItem>
-                            <SelectItem value="javascript">JavaScript</SelectItem>
-                            <SelectItem value="react">React</SelectItem>
-                            <SelectItem value="nodejs">Node.js</SelectItem>
-                            <SelectItem value="sql">SQL</SelectItem>
-                            <SelectItem value="json">JSON</SelectItem>
-                            <SelectItem value="other">Other</SelectItem>
-                          </SelectContent>
-                        </Select>
+                  <CardContent className="flex-grow space-y-4">
+                    <ScrollContainer height="h-full">
+                      <div className="space-y-4 p-2">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label className="text-slate-300">Language</Label>
+                            <Select value={language} onValueChange={setLanguage}>
+                              <SelectTrigger className="bg-slate-700/30 border-slate-600/50 text-white mt-2">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent className="bg-slate-800 border-slate-600">
+                                <SelectItem value="typescript">TypeScript</SelectItem>
+                                <SelectItem value="javascript">JavaScript</SelectItem>
+                                <SelectItem value="react">React</SelectItem>
+                                <SelectItem value="nodejs">Node.js</SelectItem>
+                                <SelectItem value="sql">SQL</SelectItem>
+                                <SelectItem value="json">JSON</SelectItem>
+                                <SelectItem value="other">Other</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <Label className="text-slate-300">Issue Type</Label>
+                            <Select value={debugType} onValueChange={setDebugType}>
+                              <SelectTrigger className="bg-slate-700/30 border-slate-600/50 text-white mt-2">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent className="bg-slate-800 border-slate-600">
+                                <SelectItem value="error">Runtime Error</SelectItem>
+                                <SelectItem value="syntax">Syntax Error</SelectItem>
+                                <SelectItem value="logic">Logic Error</SelectItem>
+                                <SelectItem value="performance">Performance Issue</SelectItem>
+                                <SelectItem value="optimization">Code Optimization</SelectItem>
+                                <SelectItem value="review">Code Review</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+
+                        <div>
+                          <Label className="text-slate-300">Problematic Code</Label>
+                          <Textarea
+                            value={code}
+                            onChange={(e) => setCode(e.target.value)}
+                            placeholder="Paste your code that's causing issues..."
+                            className="bg-slate-700/30 border-slate-600/50 text-white min-h-[120px] font-mono text-sm mt-2"
+                          />
+                        </div>
+
+                        <div>
+                          <Label className="text-slate-300">Error Message/Issue Description</Label>
+                          <Textarea
+                            value={error}
+                            onChange={(e) => setError(e.target.value)}
+                            placeholder="Paste the error message or describe the issue in detail..."
+                            className="bg-slate-700/30 border-slate-600/50 text-white min-h-[80px] mt-2"
+                          />
+                        </div>
+
+                        <div>
+                          <Label className="text-slate-300">Additional Context</Label>
+                          <Textarea
+                            value={context}
+                            onChange={(e) => setContext(e.target.value)}
+                            placeholder="Environment, expected behavior, steps to reproduce, etc..."
+                            className="bg-slate-700/30 border-slate-600/50 text-white min-h-[60px] mt-2"
+                          />
+                        </div>
+
+                        <div className="flex gap-2">
+                          <Button
+                            onClick={handleDebug}
+                            disabled={debugMutation.isPending || (!code.trim() && !error.trim()) || !apiKeySet}
+                            className="bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 flex-1"
+                          >
+                            <Bug className="w-4 h-4 mr-2" />
+                            {debugMutation.isPending ? '🌙 Analyzing...' : '🌙 Analyze Code'}
+                          </Button>
+                          <Button onClick={clearForm} variant="outline" className="border-slate-600">
+                            Clear
+                          </Button>
+                        </div>
+                        
+                        {/* API Key Settings */}
+                        {apiKeySet && (
+                          <div className="pt-3 border-t border-slate-600">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setApiKeySet(false);
+                                setApiKey('');
+                                localStorage.removeItem('mistral_api_key');
+                              }}
+                              className="text-xs border-slate-600"
+                            >
+                              <Key className="w-3 h-3 mr-2" />
+                              Change API Key
+                            </Button>
+                          </div>
+                        )}
                       </div>
-                      <div>
-                        <Label className="text-slate-300">Issue Type</Label>
-                        <Select value={debugType} onValueChange={setDebugType}>
-                          <SelectTrigger className="bg-slate-700/30 border-slate-600/50 text-white mt-2">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent className="bg-slate-800 border-slate-600">
-                            <SelectItem value="error">Runtime Error</SelectItem>
-                            <SelectItem value="syntax">Syntax Error</SelectItem>
-                            <SelectItem value="logic">Logic Error</SelectItem>
-                            <SelectItem value="performance">Performance Issue</SelectItem>
-                            <SelectItem value="optimization">Code Optimization</SelectItem>
-                            <SelectItem value="review">Code Review</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-
-                    <div>
-                      <Label className="text-slate-300">Problematic Code</Label>
-                      <Textarea
-                        value={code}
-                        onChange={(e) => setCode(e.target.value)}
-                        placeholder="Paste your code that's causing issues..."
-                        className="bg-slate-700/30 border-slate-600/50 text-white min-h-[120px] font-mono text-sm mt-2"
-                      />
-                    </div>
-
-                    <div>
-                      <Label className="text-slate-300">Error Message/Issue Description</Label>
-                      <Textarea
-                        value={error}
-                        onChange={(e) => setError(e.target.value)}
-                        placeholder="Paste the error message or describe the issue in detail..."
-                        className="bg-slate-700/30 border-slate-600/50 text-white min-h-[80px] mt-2"
-                      />
-                    </div>
-
-                    <div>
-                      <Label className="text-slate-300">Additional Context</Label>
-                      <Textarea
-                        value={context}
-                        onChange={(e) => setContext(e.target.value)}
-                        placeholder="Environment, expected behavior, steps to reproduce, etc..."
-                        className="bg-slate-700/30 border-slate-600/50 text-white min-h-[60px] mt-2"
-                      />
-                    </div>
-
-                    <div className="flex gap-2">
-                      <Button
-                        onClick={handleDebug}
-                        disabled={debugMutation.isPending || (!code.trim() && !error.trim()) || !apiKeySet}
-                        className="bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 flex-1"
-                      >
-                        <Bug className="w-4 h-4 mr-2" />
-                        {debugMutation.isPending ? '🌙 Analyzing...' : '🌙 Analyze Code'}
-                      </Button>
-                      <Button onClick={clearForm} variant="outline" className="border-slate-600">
-                        Clear
-                      </Button>
-                    </div>
-                    
-                    {/* API Key Settings */}
-                    {apiKeySet && (
-                      <div className="pt-3 border-t border-slate-600">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setApiKeySet(false);
-                            setApiKey('');
-                            localStorage.removeItem('mistral_api_key');
-                          }}
-                          className="text-xs border-slate-600"
-                        >
-                          <Key className="w-3 h-3 mr-2" />
-                          Change API Key
-                        </Button>
-                      </div>
-                    )}
+                    </ScrollContainer>
                   </CardContent>
                 </Card>
               </div>
@@ -579,7 +582,7 @@ export default function LunaBugDebugger({ isOpen, onClose }: LunaBugDebuggerProp
                       )}
                     </div>
                   </CardHeader>
-                  <CardContent className="flex-grow overflow-y-auto">
+                  <CardContent className="flex-grow overflow-hidden">
                     {debugMutation.isPending ? (
                       <div className="flex items-center justify-center h-40">
                         <div className="text-center">
@@ -589,8 +592,8 @@ export default function LunaBugDebugger({ isOpen, onClose }: LunaBugDebuggerProp
                         </div>
                       </div>
                     ) : assistance ? (
-                      <ScrollArea className="h-full max-h-full">
-                        <div className="space-y-4">
+                      <ScrollContainer height="h-full">
+                        <div className="space-y-4 p-2">
                           <div className="flex items-center gap-2">
                             <Badge className="bg-green-600/80 border-green-500/50">Analysis Complete</Badge>
                             <Badge variant="outline" className="border-blue-500/50 text-blue-300">
@@ -657,7 +660,7 @@ export default function LunaBugDebugger({ isOpen, onClose }: LunaBugDebuggerProp
                             </div>
                           )}
                         </div>
-                      </ScrollArea>
+                      </ScrollContainer>
                     ) : (
                       <div className="flex items-center justify-center h-40 text-slate-400">
                         <div className="text-center">
@@ -703,13 +706,13 @@ export default function LunaBugDebugger({ isOpen, onClose }: LunaBugDebuggerProp
                   </div>
                 </div>
               </CardHeader>
-              <CardContent className="flex-grow flex flex-col overflow-hidden">
-                {/* FIXED: Use ScrollContainer instead of ScrollArea */}
-                <div className="flex-1 mb-4 min-h-0">
+              <CardContent className="flex-grow flex flex-col overflow-hidden min-h-0">
+                {/* 🔧 FIXED: Chat messages with proper ScrollContainer */}
+                <div className="flex-1 mb-4 min-h-0" style={{ touchAction: 'pan-y' }}>
                   <ScrollContainer height="h-full">
-                    <div className="p-2">
+                    <div className="space-y-3 p-2">
                       {messages.map((msg, index) => (
-                        <div key={index} className={`mb-3 flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                        <div key={index} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
                           <div className={`max-w-[85%] flex ${msg.sender === 'user' ? 'flex-row-reverse' : 'flex-row'} gap-3 items-start`}>
                             <div className={`p-4 rounded-lg ${
                               msg.sender === 'user' 
@@ -718,7 +721,7 @@ export default function LunaBugDebugger({ isOpen, onClose }: LunaBugDebuggerProp
                                   ? 'bg-purple-600/80 text-white border border-purple-400/50'
                                   : 'bg-slate-700 text-slate-200'
                             }`}>
-                              <div className="whitespace-pre-wrap">{msg.text}</div>
+                              <div className="whitespace-pre-wrap break-words">{msg.text}</div>
                               <div className={`text-xs mt-2 ${
                                 msg.sender === 'user' 
                                   ? 'text-blue-200' 
@@ -747,7 +750,7 @@ export default function LunaBugDebugger({ isOpen, onClose }: LunaBugDebuggerProp
                       
                       {/* Loading indicator for chat */}
                       {(isChatLoading || chatMutation.isPending) && (
-                        <div className="mb-2 flex justify-start">
+                        <div className="flex justify-start">
                           <div className="max-w-[80%] flex flex-row gap-3 items-start">
                             <Moon className="w-5 h-5 text-purple-400 mt-1" />
                             <div className="bg-slate-700 text-slate-200 p-4 rounded-lg">
@@ -770,7 +773,7 @@ export default function LunaBugDebugger({ isOpen, onClose }: LunaBugDebuggerProp
                     value={chatInput}
                     onChange={(e) => setChatInput(e.target.value)}
                     placeholder="Ask Luna about your code, debugging, or any programming questions..."
-                    onKeyPress={(e) => e.key === 'Enter' && handleChatSend()}
+                    onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleChatSend()}
                     className="flex-1 bg-slate-700 border-slate-600 text-white"
                     disabled={isChatLoading || chatMutation.isPending || !apiKeySet}
                   />
