@@ -26,7 +26,7 @@ const CharacterSelectionScrollable: React.FC<CharacterSelectionScrollableProps> 
   onClose, 
   onSelect 
 }) => {
-  const { state, characters, images, selectCharacter } = useGame();
+  const { state, characters, images } = useGame();
   const [highlighted, setHighlighted] = useState<Character | null>(null);
   const [activeTab, setActiveTab] = useState<'all' | 'unlocked' | 'locked' | 'vip'>('all');
   const [showGallery, setShowGallery] = useState(false);
@@ -40,21 +40,37 @@ const CharacterSelectionScrollable: React.FC<CharacterSelectionScrollableProps> 
     else if (characters.length) setHighlighted(characters[0] as Character);
   }, [isOpen, state?.selectedCharacterId, characters]);
 
+  // 🎯 JSON-FIRST: Use dedicated character selection endpoint
   const persistSelection = async (characterId: string) => {
     setSaving(true);
     try {
-      // Persist selected character; reset display image so default is used until user picks one
-      await fetch('/api/player/me', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('sessionToken')}` },
-        body: JSON.stringify({ selectedCharacterId: characterId, selectedImageId: null, displayImage: null })
+      console.log(`🎭 Selecting character ${characterId}...`);
+      
+      const response = await fetch('/api/player/select-character', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json', 
+          'Authorization': `Bearer ${localStorage.getItem('sessionToken')}` 
+        },
+        body: JSON.stringify({ characterId })
       });
-      // Update local state via context
-      selectCharacter(characterId);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log(`✅ Character ${characterId} selected successfully`, result);
+      
+      // Trigger context refresh (the new JSON-first data will be loaded)
+      window.location.reload(); // Simple refresh to load new state
+      
       onSelect && highlighted && onSelect(highlighted);
       onClose();
-    } catch (e) {
-      console.error('Failed to save selection', e);
+    } catch (error) {
+      console.error('🔴 Failed to save character selection:', error);
+      alert(`Failed to select character: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setSaving(false);
     }
@@ -99,7 +115,7 @@ const CharacterSelectionScrollable: React.FC<CharacterSelectionScrollableProps> 
             <div className="bg-purple-600 p-2 rounded-lg"><Crown className="w-5 h-5 text-white" /></div>
             <div>
               <h2 className="text-xl font-bold text-white">Character Selection</h2>
-              <div className="text-sm text-gray-400">@{state?.selectedCharacterId || 'Player'} • Level {state?.level || 1}</div>
+              <div className="text-sm text-gray-400">@{state?.username || 'Player'} • Level {state?.level || 1}</div>
             </div>
             <div className="flex bg-gray-800 rounded-lg p-1 ml-6">
               {['all','unlocked','locked','vip'].map(tab => (
@@ -158,7 +174,7 @@ const CharacterSelectionScrollable: React.FC<CharacterSelectionScrollableProps> 
         </div>
       </div>
 
-      {/* Optional: lightweight gallery modal placeholder - to be wired to your gallery component */}
+      {/* Gallery Modal */}
       {showGallery && (
         <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4" onClick={()=>setShowGallery(false)}>
           <div className="bg-gray-900 border border-gray-700 rounded-xl max-w-5xl w-full max-h-[90vh] overflow-hidden" onClick={e=>e.stopPropagation()}>
