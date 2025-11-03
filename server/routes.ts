@@ -315,6 +315,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // UPDATE media upload
+  app.patch("/api/media/:id", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const updates = req.body;
+      
+      const updatedMedia = await storage.updateMediaUpload(id, updates);
+      if (!updatedMedia) {
+        return res.status(404).json({ error: 'Media not found' });
+      }
+      
+      res.json({ success: true, media: updatedMedia });
+    } catch (error: any) {
+      logger.error('Media update error', { error: error.message });
+      res.status(500).json({ error: 'Failed to update media' });
+    }
+  });
+
+  // DELETE media upload
+  app.delete("/api/media/:id", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      const media = await storage.getMediaUpload(id);
+      if (!media) {
+        return res.status(404).json({ error: 'Media not found' });
+      }
+      
+      // Delete file from filesystem if it exists
+      try {
+        const filePath = path.join(__dirname, "..", media.url);
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      } catch (fileError) {
+        logger.warn('Failed to delete media file', { url: media.url, error: fileError });
+      }
+      
+      await storage.deleteMediaUpload(id);
+      res.json({ success: true });
+    } catch (error: any) {
+      logger.error('Media delete error', { error: error.message });
+      res.status(500).json({ error: 'Failed to delete media' });
+    }
+  });
+
   logger.info('👤 Setting up player routes...');
   app.get("/api/player/me", requireAuth, async (req, res) => {
     try {
