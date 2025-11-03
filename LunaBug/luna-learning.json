@@ -1,0 +1,80 @@
+[
+  {
+    "timestamp": "2025-11-03T21:05:40.685Z",
+    "errorPattern": "MaxListenersExceededWarning: Possible EventEmitter memory leak detected",
+    "errorType": "EVENT_EMITTER",
+    "impact": "HIGH",
+    "solution": "Increase EventEmitter.defaultMaxListeners and instance.setMaxListeners(50+). Add proper cleanup in shutdown handlers.",
+    "codeExample": "EventEmitter.defaultMaxListeners = 20;\nthis.setMaxListeners(50);\n// Add cleanup method with removeAllListeners()",
+    "preventionChecks": [
+      "Check for EventEmitter usage in classes",
+      "Verify cleanup methods exist for graceful shutdown",
+      "Monitor listener counts in health checks"
+    ]
+  },
+  {
+    "timestamp": "2025-11-03T21:05:40.685Z",
+    "errorPattern": "ReferenceError: module is not defined in ES module scope",
+    "errorType": "ES_MODULE",
+    "impact": "CRITICAL",
+    "solution": "Remove CommonJS exports (module.exports) from ES modules. Use only export default/export syntax.",
+    "codeExample": "// ❌ BAD (CommonJS in ES module)\nmodule.exports = { service };\n\n// ✅ GOOD (ES module only)\nexport default service;\nexport { service };",
+    "preventionChecks": [
+      "Scan for module.exports in .ts files",
+      "Verify package.json has \"type\": \"module\"",
+      "Check for require() usage - should be import"
+    ]
+  },
+  {
+    "timestamp": "2025-11-03T21:05:40.685Z",
+    "errorPattern": "column \"maxEnergy\" does not exist",
+    "errorType": "DATABASE_FIELD",
+    "impact": "HIGH",
+    "solution": "Use correct PostgreSQL column names: energyMax not maxEnergy. Add field validation in MasterDataService.",
+    "codeExample": "// ❌ BAD\n{ maxEnergy: 1000 }\n\n// ✅ GOOD  \n{ energyMax: 1000 }\n\n// Add validation\nvalidateFieldNaming(data: any) {\n  if ('maxEnergy' in data) {\n    data.energyMax = data.maxEnergy;\n    delete data.maxEnergy;\n  }\n}",
+    "preventionChecks": [
+      "Validate field names match database schema",
+      "Auto-correct common naming mistakes",
+      "Use MasterDataService for consistent field naming"
+    ]
+  },
+  {
+    "timestamp": "2025-11-03T21:05:40.685Z",
+    "errorPattern": "Wrong player JSON directory: using uploads/snapshots instead of main-gamedata/player-data",
+    "errorType": "DIRECTORY_STRUCTURE",
+    "impact": "HIGH",
+    "solution": "Use main-gamedata/player-data/ as primary, uploads/snapshots/ only for backups. File naming: player-{username}.json with telegramId fallback.",
+    "codeExample": "// ✅ CORRECT STRUCTURE\nthis.playersDir = path.join(process.cwd(), 'main-gamedata', 'player-data');\nthis.snapshotsDir = path.join(process.cwd(), 'uploads', 'snapshots', 'players');\n\n// ✅ CORRECT NAMING\ngetPlayerFileName(telegramId, username) {\n  return username ? `player-${username.replace(/[^a-zA-Z0-9_-]/g, '_')}.json` : `player-${telegramId}.json`;\n}",
+    "preventionChecks": [
+      "Verify directory paths use main-gamedata for primary data",
+      "Check file naming follows player-{username}.json pattern",
+      "Ensure snapshots are backup only, not primary storage"
+    ]
+  },
+  {
+    "timestamp": "2025-11-03T21:05:40.685Z",
+    "errorPattern": "Character selection API calls failing without proper error handling",
+    "errorType": "API_TIMEOUT",
+    "impact": "MEDIUM",
+    "solution": "Add AbortSignal.timeout() to all API calls, proper error handling with user feedback, and debug logging.",
+    "codeExample": "const response = await fetch('/api/endpoint', {\n  signal: AbortSignal.timeout(10000),\n  // ... other options\n});\n\n// Add debug logging\nconsole.log('[ENDPOINT] Request details:', { playerId, data });",
+    "preventionChecks": [
+      "Add timeout controls to all fetch() calls",
+      "Include proper error handling with user feedback",
+      "Add debug logging for API operations"
+    ]
+  },
+  {
+    "timestamp": "2025-11-03T21:05:40.685Z",
+    "errorPattern": "Image loading failures due to malformed URLs or missing files",
+    "errorType": "IMAGE_LOADING",
+    "impact": "MEDIUM",
+    "solution": "Add image error handling with fallback system, placeholder images, and error state tracking.",
+    "codeExample": "const [imageErrors, setImageErrors] = useState<Set<string>>(new Set());\n\nconst handleImageError = (url: string) => {\n  setImageErrors(prev => new Set(prev).add(url));\n};\n\n<img onError={() => handleImageError(url)} />",
+    "preventionChecks": [
+      "Add onError handlers to all img elements",
+      "Implement fallback image system",
+      "Track failed image URLs to prevent retry loops"
+    ]
+  }
+]
