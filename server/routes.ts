@@ -27,6 +27,8 @@ import logger from "./logger";
 import masterDataService from "./utils/MasterDataService";
 // 🎯 JSON-FIRST: Import new player state manager
 import { playerStateManager, getPlayerState, updatePlayerState, selectCharacterForPlayer, purchaseUpgradeForPlayer, setDisplayImageForPlayer } from "./utils/playerStateManager";
+// 🌙 LUNA LEARNING: Import learning system
+import { lunaLearning } from "./utils/lunaLearningSystem";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -83,6 +85,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         timestamp: new Date().toISOString(),
         error: error instanceof Error ? error.message : 'Health check failed'
       });
+    }
+  });
+
+  // 🌙 LUNA LEARNING ENDPOINT
+  app.get("/api/luna/learning-report", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const summary = lunaLearning.getLearningSummary();
+      const checklist = lunaLearning.getPreventionChecklist();
+      const scan = await lunaLearning.runPreventionScan();
+      
+      res.json({
+        success: true,
+        luna: {
+          learning: summary,
+          preventionChecklist: checklist,
+          currentScan: scan,
+          message: "Luna's accumulated knowledge from error patterns"
+        }
+      });
+    } catch (error) {
+      logger.error('Luna learning report error', { error: error instanceof Error ? error.message : 'Unknown' });
+      res.status(500).json({ error: 'Failed to generate Luna learning report' });
     }
   });
 
@@ -419,12 +443,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // 🎭 JSON-FIRST: Character selection (dedicated endpoint with DEBUG LOGGING)
+  // 🎭 JSON-FIRST: Character selection with enhanced debugging
   app.post("/api/player/select-character", requireAuth, async (req, res) => {
     try {
       const { characterId } = req.body;
       
-      console.log(`🎭 [CHARACTER SELECT] Player ${req.player!.id} selecting: ${characterId}`);
+      console.log(`🎭 [CHARACTER SELECT] Player ${req.player!.username || req.player!.id} selecting: ${characterId}`);
       
       if (!characterId) {
         return res.status(400).json({ error: 'Character ID is required' });
@@ -432,28 +456,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Verify character exists and is unlocked
       const playerState = await getPlayerState(req.player!.id);
-      console.log(`🎭 [CHARACTER SELECT] Current selected: ${playerState.selectedCharacterId}`);
-      console.log(`🎭 [CHARACTER SELECT] Unlocked characters: ${playerState.unlockedCharacters.join(', ')}`);
+      console.log(`🎭 [CHARACTER SELECT] Current: ${playerState.selectedCharacterId}`);
+      console.log(`🎭 [CHARACTER SELECT] Unlocked: [${playerState.unlockedCharacters.join(', ')}]`);
       
       if (!playerState.unlockedCharacters.includes(characterId)) {
-        console.log(`❌ [CHARACTER SELECT] Character ${characterId} not unlocked for player ${req.player!.id}`);
+        console.log(`❌ [CHARACTER SELECT] Character ${characterId} not unlocked`);
         return res.status(403).json({ error: 'Character not unlocked' });
       }
 
       const updatedState = await selectCharacterForPlayer(req.player!.id, characterId);
       
-      console.log(`✅ [CHARACTER SELECT] Player ${req.player!.id} selected character ${characterId}`);
-      console.log(`💾 [CHARACTER SELECT] JSON file updated: ${updatedState.telegramId}_${updatedState.username}.json`);
+      console.log(`✅ [CHARACTER SELECT] SUCCESS: ${characterId} selected`);
+      console.log(`💾 [CHARACTER SELECT] JSON updated: main-gamedata/player-data/player-${updatedState.username || updatedState.telegramId}.json`);
       
       res.json({ success: true, player: updatedState });
     } catch (error) {
-      console.error(`🔴 [CHARACTER SELECT] Error for player ${req.player!.id}:`, error);
+      console.error(`🔴 [CHARACTER SELECT] FAILED for ${req.player!.username || req.player!.id}:`, error);
       logger.error('Character selection error', { error: error instanceof Error ? error.message : 'Unknown' });
       res.status(500).json({ error: 'Failed to select character' });
     }
   });
 
-  // 🖼️ NEW: Set display image endpoint for gallery
+  // 🖼️ Set display image endpoint for gallery
   app.post("/api/player/set-display-image", requireAuth, async (req, res) => {
     try {
       const { imageUrl } = req.body;
@@ -462,14 +486,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: 'Image URL is required' });
       }
 
-      console.log(`🖼️ [DISPLAY IMAGE] Player ${req.player!.id} setting display image: ${imageUrl}`);
+      console.log(`🖼️ [DISPLAY IMAGE] Player ${req.player!.username || req.player!.id} setting: ${imageUrl}`);
       
       const updatedState = await setDisplayImageForPlayer(req.player!.id, imageUrl);
       
-      console.log(`✅ [DISPLAY IMAGE] Display image updated for player ${req.player!.id}`);
+      console.log(`✅ [DISPLAY IMAGE] SUCCESS: ${imageUrl}`);
       res.json({ success: true, player: updatedState });
     } catch (error) {
-      console.error(`🔴 [DISPLAY IMAGE] Error for player ${req.player!.id}:`, error);
+      console.error(`🔴 [DISPLAY IMAGE] FAILED:`, error);
       logger.error('Display image error', { error: error instanceof Error ? error.message : 'Unknown' });
       res.status(500).json({ error: 'Failed to set display image' });
     }
@@ -489,9 +513,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: 'Level exceeds maximum' });
       }
 
-      // Calculate cost (you'll need to import/implement this)
       const cost = upgrade.baseCost * Math.pow(upgrade.costMultiplier, level - 1);
-      
       const updatedState = await purchaseUpgradeForPlayer(req.player!.id, upgradeId, level, cost);
       
       res.json({ success: true, player: updatedState });
@@ -552,11 +574,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // 🎯 JSON-FIRST: Admin endpoint to view system health
+  // 🎯 JSON-FIRST: Admin endpoint to view system health + Luna learning
   app.get("/api/admin/system-health", requireAuth, requireAdmin, async (req, res) => {
     try {
       const playerHealth = await playerStateManager.healthCheck();
       const masterDataReport = await masterDataService.getDataIntegrityReport();
+      const lunaLearningReport = lunaLearning.getLearningSummary();
       
       res.json({ 
         success: true,
@@ -567,6 +590,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ...playerHealth
           },
           masterData: masterDataReport,
+          lunaLearning: lunaLearningReport,
           uptime: process.uptime(),
           memory: process.memoryUsage(),
           env: process.env.NODE_ENV
@@ -581,6 +605,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
   
   console.log('✅ All routes registered successfully');
-  console.log('🎯 JSON-FIRST: Player system using main-gamedata/player-data/ with proper naming');
+  console.log('🎯 JSON-FIRST: Player system using main-gamedata/player-data/ with player-{username}.json naming');
+  console.log('🌙 Luna Learning System active for error prevention');
   return httpServer;
 }
