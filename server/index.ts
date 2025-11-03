@@ -5,7 +5,29 @@ import { syncAllGameData } from "./utils/dataLoader";
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
-import logger from "./logger";
+// ❌ LUNA FIX: Remove problematic winston logger import
+// import logger from "./logger";
+// ✅ LUNA FIX: Use simple console logging for now
+const logger = {
+  info: (msg: any, meta?: any) => {
+    const timestamp = new Date().toISOString();
+    console.log(`${timestamp} [INFO] ${typeof msg === 'string' ? msg : JSON.stringify(msg)}`, meta || '');
+  },
+  warn: (msg: any, meta?: any) => {
+    const timestamp = new Date().toISOString();
+    console.warn(`${timestamp} [WARN] ${typeof msg === 'string' ? msg : JSON.stringify(msg)}`, meta || '');
+  },
+  error: (msg: any, error?: any) => {
+    const timestamp = new Date().toISOString();
+    console.error(`${timestamp} [ERROR] ${typeof msg === 'string' ? msg : JSON.stringify(msg)}`, error || '');
+  },
+  debug: (msg: any, meta?: any) => {
+    if (process.env.NODE_ENV !== 'production') {
+      const timestamp = new Date().toISOString();
+      console.debug(`${timestamp} [DEBUG] ${typeof msg === 'string' ? msg : JSON.stringify(msg)}`, meta || '');
+    }
+  }
+};
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -18,13 +40,15 @@ if (!fs.existsSync(logsDir)) {
 
 const app = express();
 
-// Error handlers at the very top
+// ✅ LUNA FIX: Simplified error handlers
 process.on('unhandledRejection', (reason, promise) => {
-  logger.error('💥 Unhandled Rejection at:', { promise, reason });
+  logger.error('💥 Unhandled Rejection at:', { promise: promise.toString(), reason: reason });
 });
 
 process.on('uncaughtException', (error) => {
   logger.error('💥 Uncaught Exception:', error);
+  console.error('💥 CRASH DETAILS:', error.message);
+  console.error(error.stack);
   process.exit(1);
 });
 
@@ -39,7 +63,7 @@ app.use(express.json({
 }));
 app.use(express.urlencoded({ extended: false }));
 
-// Request logging middleware
+// ✅ LUNA FIX: Simplified request logging middleware
 app.use((req, res, next) => {
   const start = Date.now();
   const p = req.path;
@@ -57,16 +81,16 @@ app.use((req, res, next) => {
 
     if (p.startsWith("/api")) {
       const payload = capturedJsonResponse && JSON.stringify(capturedJsonResponse).slice(0, 500);
-      logger.info({ ...base, payload });
+      logger.info(`API ${req.method} ${p} ${res.statusCode} ${duration}ms`, payload ? ` | ${payload}` : '');
     } else {
-      logger.debug(base as any);
+      logger.debug(`${req.method} ${p} ${res.statusCode} ${duration}ms`);
     }
   });
 
   // Log if request takes more than 5 seconds
   setTimeout(() => {
     if (!res.headersSent) {
-      logger.warn({ msg: 'REQUEST HANGING', method: req.method, url: req.url, ms: Date.now() - start });
+      logger.warn(`REQUEST HANGING: ${req.method} ${req.url} ${Date.now() - start}ms`);
     }
   }, 5000);
 
@@ -81,15 +105,15 @@ app.use((req, res, next) => {
   let lunaRouter = null;
   let setLunaInstance = null;
   try {
-  const { default: LunaBug } = await import('../LunaBug/luna.js'); // use class file with default export
-  const lunaApi = await import('./routes/luna.js');
-  lunaRouter = lunaApi.router;
-  setLunaInstance = lunaApi.setLunaInstance;
-  luna = new LunaBug(); // construct directly
-  setLunaInstance(luna);
-  logger.info('✅ Luna Bug initialized');
-  } catch (err) {
-  logger.warn('⚠️ Luna init skipped:', err?.message || err);
+    const { default: LunaBug } = await import('../LunaBug/luna.js');
+    const lunaApi = await import('./routes/luna.js');
+    lunaRouter = lunaApi.router;
+    setLunaInstance = lunaApi.setLunaInstance;
+    luna = new LunaBug();
+    setLunaInstance(luna);
+    logger.info('✅ Luna Bug initialized');
+  } catch (err: any) {
+    logger.warn('⚠️ Luna init skipped:', err?.message || err);
   }
 
   // Sync game data from JSON files FIRST (blocking)
