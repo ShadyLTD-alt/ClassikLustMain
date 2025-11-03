@@ -8,6 +8,7 @@ export const players = pgTable("players", {
   telegramId: text("telegramId").unique(),
   username: text("username").notNull(),
   points: integer("points").default(0).notNull(),
+  lustGems: integer("lustGems").default(0).notNull(),
   energy: integer("energy").default(1000).notNull(),
   energyMax: integer("energyMax").default(1000).notNull(),
   level: integer("level").default(1).notNull(),
@@ -19,9 +20,17 @@ export const players = pgTable("players", {
   displayImage: text("displayImage"),
   upgrades: jsonb("upgrades").default("{}").notNull().$type<Record<string, number>>(),
   unlockedCharacters: jsonb("unlockedCharacters").default("[]").notNull().$type<string[]>(),
+  totalTapsAllTime: integer("totalTapsAllTime").default(0).notNull(),
+  totalTapsToday: integer("totalTapsToday").default(0).notNull(),
+  boostExpiresAt: timestamp("boostExpiresAt"),
+  boostMultiplier: real("boostMultiplier").default(1.0).notNull(),
+  boostActive: boolean("boostActive").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   lastLogin: timestamp("lastLogin").defaultNow().notNull(),
   lastEnergyUpdate: timestamp("lastEnergyUpdate").defaultNow().notNull(),
+  lastWeeklyReset: timestamp("lastWeeklyReset").defaultNow().notNull(),
+  lastDailyReset: timestamp("lastDailyReset").defaultNow().notNull()
+  
 });
 
 // Match upgrades-master.json exactly

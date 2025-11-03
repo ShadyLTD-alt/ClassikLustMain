@@ -4,11 +4,17 @@
   "username": "ShadyLTDx",
   "points": "13937",
   "energy": 3699,
-  "energyMax": 1000,
-,  "level": 2,
+  "energyMax": 3800,
+  "lustGems": 0,
+  "level": 2,
   "experience": 0,
   "passiveIncomeRate": 235,
+  "boostActive": false,
+  "boostEnergy": 0,
+  "boostMultiplier": 1,
   "isAdmin": true,
+  "totalTapsAllTime": 0,
+  "totalTapsToday": 0,
   "selectedCharacterId": "shadow",
   "displayImage": "/uploads/characters/Aria/character/1761957849613-446154351.png",
   "upgrades": {
@@ -24,5 +30,8 @@
     "shadow"
   ],
   "lastLogin": "2025-11-03T03:36:15.455Z",
-  "lastEnergyUpdate": "2025-11-01T19:28:33.742Z"
+  "lastEnergyUpdate": "2025-11-01T19:28:33.742Z",
+  "lastWeeklyReset": "2025-11-01T19:28:33.742Z",
+  "lastDailyReset": "2025-11-01T19:28:33.742Z",
+  "boostExpiresAt": "2025-11-01T19:28:33.742Z"
 }
