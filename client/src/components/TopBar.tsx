@@ -92,7 +92,7 @@ export function TopBar({ onOpenCharacterGallery }: TopBarProps) {
           {/* Energy Card */}
           <div className="px-3 py-2 rounded-lg bg-black/30 border border-yellow-500/20 min-w-[75px]">
             <div className="text-[10px] text-yellow-300 font-semibold tracking-wide">ENERGY</div>
-            <div className="text-white text-sm font-bold tabular-nums leading-tight">{state?.energy || 0}/{state?.maxEnergy || 1000}</div>
+            <div className="text-white text-sm font-bold tabular-nums leading-tight">{state?.energy || 0}/{state?. energyMax || 1000}</div>
             <div className="text-[9px] text-yellow-400 leading-none">+{state?.energyRegenRate || 1}/s</div>
           </div>
           

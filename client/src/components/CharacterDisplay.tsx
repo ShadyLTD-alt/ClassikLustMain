@@ -110,7 +110,7 @@ export default function CharacterDisplay() {
       </div>
 
       {/* Energy Warning */}
-      {state.energy < state.maxEnergy * 0.2 && (
+      {state.energy < state.energyMax * 0.2 && (
         <motion.p 
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
