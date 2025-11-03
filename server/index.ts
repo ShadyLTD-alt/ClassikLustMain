@@ -28,6 +28,18 @@ app.use(express.json({
 }));
 app.use(express.urlencoded({ extended: false }));
 
+// 🖼️ Serve uploads statically BEFORE any SPA fallback
+app.use('/uploads', (req, res, next) => {
+  res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  next();
+});
+app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads'), {
+  fallthrough: false,
+  index: false,
+  maxAge: '1y'
+}));
+
 (async () => {
   await syncAllGameData();
   const server = await registerRoutes(app);
