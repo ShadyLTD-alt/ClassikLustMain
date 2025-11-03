@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Crown, Star, Lock, Unlock, Sparkles } from 'lucide-react';
+import { X, Crown, Star, Lock, Unlock, Sparkles, Play, Pause, Image, BarChart3 } from 'lucide-react';
 import { useGame } from '../contexts/GameContext';
 import { ScrollContainer } from '@/components/layout/ScrollContainer';
 
@@ -32,6 +32,12 @@ const CharacterSelectionScrollable: React.FC<CharacterSelectionScrollableProps> 
   const [showGallery, setShowGallery] = useState(false);
   const [saving, setSaving] = useState(false);
   const [imageErrors, setImageErrors] = useState<Set<string>>(new Set());
+  const [settingDisplayImage, setSettingDisplayImage] = useState<string | null>(null);
+  
+  // 🎥 Gallery slideshow state
+  const [slideshowActive, setSlideshowActive] = useState(false);
+  const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
+  const [slideshowInterval, setSlideshowInterval] = useState<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -41,7 +47,40 @@ const CharacterSelectionScrollable: React.FC<CharacterSelectionScrollableProps> 
     else if (characters.length) setHighlighted(characters[0] as Character);
   }, [isOpen, state?.selectedCharacterId, characters]);
 
-  // 🎯 JSON-FIRST: Use dedicated character selection endpoint with better error handling
+  // 🎥 Slideshow effect
+  useEffect(() => {
+    if (!slideshowActive || !highlighted) return;
+    
+    const galleryImages = images.filter(img => img.characterId === highlighted.id && !img.isHidden);
+    if (galleryImages.length <= 1) return;
+    
+    const interval = setInterval(() => {
+      setCurrentSlideIndex(prev => (prev + 1) % galleryImages.length);
+    }, 6000); // 6 second intervals
+    
+    setSlideshowInterval(interval);
+    
+    return () => {
+      clearInterval(interval);
+      setSlideshowInterval(null);
+    };
+  }, [slideshowActive, highlighted, images]);
+
+  // 🎥 Update display image via slideshow
+  useEffect(() => {
+    if (!slideshowActive || !highlighted) return;
+    
+    const galleryImages = images.filter(img => img.characterId === highlighted.id && !img.isHidden);
+    if (galleryImages.length === 0) return;
+    
+    const currentImage = galleryImages[currentSlideIndex];
+    if (currentImage && currentImage.url !== state?.displayImage) {
+      // Automatically update display image during slideshow
+      updateDisplayImage(currentImage.url, false); // silent update
+    }
+  }, [currentSlideIndex, slideshowActive, highlighted]);
+
+  // 🎯 JSON-FIRST: Use dedicated character selection endpoint
   const persistSelection = async (characterId: string) => {
     if (saving) return;
     setSaving(true);
@@ -61,8 +100,7 @@ const CharacterSelectionScrollable: React.FC<CharacterSelectionScrollableProps> 
           'Authorization': `Bearer ${sessionToken}` 
         },
         body: JSON.stringify({ characterId }),
-        // 🔧 FIX: Add abort controller to prevent hanging requests
-        signal: AbortSignal.timeout(10000) // 10 second timeout
+        signal: AbortSignal.timeout(10000)
       });
 
       if (!response.ok) {
@@ -78,9 +116,6 @@ const CharacterSelectionScrollable: React.FC<CharacterSelectionScrollableProps> 
       }
       
       onClose();
-      
-      // 🔧 FIX: Just close the modal - let the game context handle the refresh
-      // The GameContext autosync will pick up the change within 10 seconds
       
     } catch (error) {
       console.error('🔴 Failed to save character selection:', error);
@@ -100,9 +135,45 @@ const CharacterSelectionScrollable: React.FC<CharacterSelectionScrollableProps> 
     }
   };
 
+  // 🖼️ Set display image
+  const updateDisplayImage = async (imageUrl: string, showFeedback = true) => {
+    if (settingDisplayImage) return;
+    setSettingDisplayImage(imageUrl);
+    
+    try {
+      const sessionToken = localStorage.getItem('sessionToken');
+      if (!sessionToken) throw new Error('No session token');
+      
+      const response = await fetch('/api/player/set-display-image', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json', 
+          'Authorization': `Bearer ${sessionToken}` 
+        },
+        body: JSON.stringify({ imageUrl }),
+        signal: AbortSignal.timeout(8000)
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      if (showFeedback) {
+        console.log('✅ Display image updated successfully');
+        // Show brief success indicator
+        setTimeout(() => setSettingDisplayImage(null), 1000);
+      } else {
+        setSettingDisplayImage(null);
+      }
+    } catch (error) {
+      console.error('🔴 Failed to update display image:', error);
+      if (showFeedback) alert('Failed to set display image');
+      setSettingDisplayImage(null);
+    }
+  };
+
   // Handle image load errors
   const handleImageError = (imageUrl: string) => {
-    console.warn(`🔴 Failed to load image: ${imageUrl}`);
     setImageErrors(prev => new Set(prev).add(imageUrl));
   };
 
@@ -146,11 +217,25 @@ const CharacterSelectionScrollable: React.FC<CharacterSelectionScrollableProps> 
     return filtered.sort((a,b) => (rarityOrder[b.rarity]||0) - (rarityOrder[a.rarity]||0));
   };
 
+  const toggleSlideshow = () => {
+    if (slideshowActive) {
+      setSlideshowActive(false);
+      if (slideshowInterval) {
+        clearInterval(slideshowInterval);
+        setSlideshowInterval(null);
+      }
+    } else {
+      setSlideshowActive(true);
+      setCurrentSlideIndex(0);
+    }
+  };
+
   if (!isOpen) return null;
   const filtered = filterCharacters();
 
   const getImageCount = (id: string) => images.filter(i => i.characterId === id && !i.isHidden).length;
   const isHighlightedUnlocked = highlighted && (state?.unlockedCharacters?.includes(highlighted.id) || highlighted.unlockLevel <= (state?.level || 1));
+  const galleryImages = highlighted ? images.filter(img => img.characterId === highlighted.id && !img.isHidden) : [];
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -246,32 +331,117 @@ const CharacterSelectionScrollable: React.FC<CharacterSelectionScrollableProps> 
         </div>
       </div>
 
-      {/* Gallery Modal */}
+      {/* 🎥 Enhanced Gallery Modal with Slideshow */}
       {showGallery && (
-        <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4" onClick={()=>setShowGallery(false)}>
+        <div className="fixed inset-0 bg-black/90 z-[60] flex items-center justify-center p-4" onClick={()=>setShowGallery(false)}>
           <div className="bg-gray-900 border border-gray-700 rounded-xl max-w-5xl w-full max-h-[90vh] overflow-hidden" onClick={e=>e.stopPropagation()}>
+            {/* 📊 Gallery Header with Stats and Slideshow */}
             <div className="flex items-center justify-between p-4 border-b border-gray-700">
-              <div className="text-white font-semibold">Gallery • {highlighted?.name}</div>
-              <button className="text-gray-400 hover:text-white" onClick={()=>setShowGallery(false)}><X className="w-5 h-5"/></button>
+              <div className="flex items-center gap-4">
+                <div className="text-white font-semibold flex items-center gap-2">
+                  <Image className="w-5 h-5 text-purple-400" />
+                  Gallery • {highlighted?.name}
+                </div>
+                <div className="flex items-center gap-4 text-sm">
+                  <div className="flex items-center gap-1 text-blue-400">
+                    <BarChart3 className="w-4 h-4" />
+                    <span>Total Images: <strong>{galleryImages.length}</strong></span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-gray-300 text-sm flex items-center gap-2 cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={slideshowActive}
+                        onChange={toggleSlideshow}
+                        className="rounded" 
+                      />
+                      <div className="flex items-center gap-1">
+                        {slideshowActive ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                        <span>Slideshow</span>
+                      </div>
+                    </label>
+                    {slideshowActive && galleryImages.length > 0 && (
+                      <span className="text-xs text-gray-400">({currentSlideIndex + 1}/{galleryImages.length})</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <button className="text-gray-400 hover:text-white" onClick={()=>{
+                setSlideshowActive(false);
+                if (slideshowInterval) clearInterval(slideshowInterval);
+                setShowGallery(false);
+              }}>
+                <X className="w-5 h-5"/>
+              </button>
             </div>
+            
             <ScrollContainer height="h-[70vh]">
               <div className="p-4 grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                {images.filter(img=> img.characterId===highlighted?.id && !img.isHidden).map(img=> (
-                  <div key={img.id} className="aspect-square rounded-lg overflow-hidden border border-gray-700">
-                    <img 
-                      src={img.url} 
-                      alt="Gallery image" 
-                      className="w-full h-full object-cover"
-                      loading="lazy"
-                      onError={(e) => {
-                        const target = e.target as HTMLImageElement;
-                        target.src = '/uploads/placeholder-character.jpg';
-                      }}
-                    />
+                {galleryImages.map((img, index) => {
+                  const isCurrentSlide = slideshowActive && index === currentSlideIndex;
+                  const isSettingThisImage = settingDisplayImage === img.url;
+                  const isCurrentDisplay = state?.displayImage === img.url;
+                  
+                  return (
+                    <div key={img.id} className={`relative aspect-square rounded-lg overflow-hidden border transition-all ${
+                      isCurrentSlide ? 'border-yellow-400 ring-2 ring-yellow-400/50' :
+                      isCurrentDisplay ? 'border-green-400 ring-1 ring-green-400/30' :
+                      'border-gray-700 hover:border-gray-600'
+                    }`}>
+                      <img 
+                        src={img.url} 
+                        alt="Gallery image" 
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.src = '/uploads/placeholder-character.jpg';
+                        }}
+                      />
+                      
+                      {/* 🖼️ Set as Display Image Button */}
+                      <div className="absolute inset-0 bg-black/60 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            updateDisplayImage(img.url);
+                          }}
+                          disabled={isSettingThisImage || isCurrentDisplay}
+                          className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-xs font-semibold disabled:opacity-50 flex items-center gap-1"
+                        >
+                          {isSettingThisImage ? (
+                            <div className="w-3 h-3 border border-white/30 border-t-white rounded-full animate-spin" />
+                          ) : isCurrentDisplay ? (
+                            <>✅ Current</>
+                          ) : (
+                            <>🖼️ Set Display</>
+                          )}
+                        </button>
+                      </div>
+                      
+                      {/* 🎥 Slideshow indicator */}
+                      {isCurrentSlide && (
+                        <div className="absolute top-2 left-2 bg-yellow-500 text-black px-2 py-1 rounded text-xs font-bold">
+                          🎥 LIVE
+                        </div>
+                      )}
+                      
+                      {/* Current display indicator */}
+                      {isCurrentDisplay && !isCurrentSlide && (
+                        <div className="absolute top-2 right-2 bg-green-500 text-white px-1 py-1 rounded text-xs">
+                          ✅
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                
+                {galleryImages.length === 0 && (
+                  <div className="col-span-full text-center text-gray-500 py-8">
+                    <Image className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                    <p>No images yet</p>
+                    <p className="text-xs mt-1">Upload some images to see them here</p>
                   </div>
-                ))}
-                {images.filter(img=> img.characterId===highlighted?.id && !img.isHidden).length===0 && (
-                  <div className="col-span-full text-center text-gray-500 py-8">No images yet</div>
                 )}
               </div>
             </ScrollContainer>
