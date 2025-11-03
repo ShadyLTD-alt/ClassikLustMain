@@ -2,6 +2,7 @@ import express from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic } from "./vite";
 import { syncAllGameData } from "./utils/dataLoader";
+import { playerStateManager } from "./utils/playerStateManager";
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
@@ -41,13 +42,29 @@ app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads'), {
 }));
 
 (async () => {
+  // 🎮 Initialize game data (master configs)
+  logger.info('🎯 JSON-FIRST: Initializing game systems...');
   await syncAllGameData();
+  
+  // 🎯 JSON-FIRST: Initialize player state system
+  logger.info('💾 Initializing JSON-first player state system...');
+  const health = await playerStateManager.healthCheck();
+  logger.info('🎯 Player State Health:', health);
+  
+  // Register all routes
   const server = await registerRoutes(app);
+  
   if (app.get("env") === "development") {
     await setupVite(app, server);
   } else {
     serveStatic(app);
   }
+  
   const port = parseInt(process.env.PORT || '5000', 10);
-  server.listen({ port, host: "0.0.0.0", reusePort: true });
+  
+  server.listen({ port, host: "0.0.0.0", reusePort: true }, () => {
+    logger.info(`✅ Server running on port ${port}`);
+    logger.info('🎯 JSON-FIRST system active: Immediate JSON writes + async DB sync');
+    logger.info('💾 Player snapshots: uploads/snapshots/players/{id}/player.json');
+  });
 })();
