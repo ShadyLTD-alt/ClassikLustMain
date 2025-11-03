@@ -1,22 +1,17 @@
 /**
- * Ultra-Clean Logger - ZERO SPAM TOLERANCE 💀
- * 
- * Eliminates:
- * ❌ [object Object] spam
- * ❌ Duplicate log flooding  
- * ❌ Verbose development noise
- * ❌ PostCSS/Vite rebuild spam
+ * 🔇 Enhanced Winston Logger for JSON-First System
  * 
  * Features:
- * ✅ Smart object serialization
- * ✅ Aggressive spam deduplication
- * ✅ Production-optimized levels
- * ✅ File rotation with size limits
+ * ✅ Console shows only critical errors and important messages
+ * ✅ Full logging to files (combined.log, error.log)
+ * ✅ Smart spam filtering and deduplication
+ * ✅ JSON-first system logging integration
  */
 
 import fs from "fs";
 import path from "path";
 import winston from "winston";
+import DailyRotateFile from "winston-daily-rotate-file";
 
 const logDir = path.resolve(process.cwd(), "logs");
 
@@ -29,70 +24,100 @@ try {
   console.error("Failed to create logs directory:", err);
 }
 
-// Spam suppression engine
-class UltraSpamKiller {
-  private seenMessages = new Map<string, { count: number; lastSeen: number; hash: string }>();
-  private readonly maxRepeats = 2; // Allow 2 duplicates then suppress
-  private readonly timeWindow = 8000; // 8 second window
-  private readonly blacklist = [
+// Enhanced spam suppression for JSON-first system
+class JsonFirstSpamKiller {
+  private seenMessages = new Map<string, { count: number; lastSeen: number }>>();
+  private readonly maxRepeats = 1; // Very strict for console
+  private readonly timeWindow = 10000; // 10 second window
+  
+  // More aggressive blacklist for console
+  private readonly consoleBlacklist = [
     /\[object Object\]/i,
-    /PostCSS plugin.*autoprefixer/i,
+    /PostCSS plugin/i,
     /Re-optimizing dependencies/i,
     /dependencies.*changed/i,
     /Vite dev server ready/i,
-    /require is not defined in ES module scope/i,
-    /Failed to register LunaBug routes.*Cannot find module/i,
     /vite.*config.*changed/i,
     /hmr.*update/i,
-    /internal.*server.*error/i,
+    /Player.*already queued for sync/i,
+    /Player.*unchanged, skipping DB sync/i,
+    /Loading player.*state/i,
+    /\[API\].*200.*json/i,
+    /Session validation response/i,
+    /Already queued for sync/i,
+    /Health check result/i
   ];
   
-  shouldAllow(level: string, message: string): boolean {
-    // Blacklist check - instant kill
-    if (this.blacklist.some(pattern => pattern.test(message))) {
+  // File logging blacklist (less aggressive)
+  private readonly fileBlacklist = [
+    /PostCSS plugin.*autoprefixer/i,
+    /Vite dev server ready/i
+  ];
+  
+  shouldAllowConsole(level: string, message: string): boolean {
+    // Only show errors, warnings, and important info in console
+    if (!['error', 'warn'].includes(level)) {
+      // Allow some important info messages
+      if (!this.isImportantMessage(message)) {
+        return false;
+      }
+    }
+    
+    // Console blacklist check
+    if (this.consoleBlacklist.some(pattern => pattern.test(message))) {
       return false;
     }
     
-    // Production: only allow warn and error
-    if (process.env.NODE_ENV === 'production' && !['warn', 'error'].includes(level)) {
+    return this.checkDuplication(`console:${level}`, message);
+  }
+  
+  shouldAllowFile(level: string, message: string): boolean {
+    // Files get everything except blacklisted items
+    if (this.fileBlacklist.some(pattern => pattern.test(message))) {
       return false;
     }
     
-    // Generate message fingerprint for deduplication
-    const fingerprint = this.generateFingerprint(level, message);
+    return this.checkDuplication(`file:${level}`, message);
+  }
+  
+  private isImportantMessage(message: string): boolean {
+    const important = [
+      /JSON-FIRST.*system.*active/i,
+      /Server running on port/i,
+      /Player.*selected character/i,
+      /Character.*selected successfully/i,
+      /routes registered successfully/i,
+      /Master.*Data.*initialized/i,
+      /Player.*main JSON saved/i,
+      /Created new.*player/i,
+      /Graceful shutdown handlers registered/i,
+      /PlayerStateManager cleanup/i
+    ];
+    
+    return important.some(pattern => pattern.test(message));
+  }
+  
+  private checkDuplication(prefix: string, message: string): boolean {
+    const key = `${prefix}:${message.slice(0, 50)}`;
     const now = Date.now();
-    const existing = this.seenMessages.get(fingerprint);
+    const existing = this.seenMessages.get(key);
     
     if (!existing) {
-      this.seenMessages.set(fingerprint, { count: 1, lastSeen: now, hash: fingerprint });
+      this.seenMessages.set(key, { count: 1, lastSeen: now });
       return true;
     }
     
-    // Outside time window - reset
+    // Reset if outside time window
     if (now - existing.lastSeen > this.timeWindow) {
       existing.count = 1;
       existing.lastSeen = now;
       return true;
     }
     
-    // Within time window - check count
     existing.count++;
     existing.lastSeen = now;
     
     return existing.count <= this.maxRepeats;
-  }
-  
-  private generateFingerprint(level: string, message: string): string {
-    // Create a unique fingerprint that captures the essence of the message
-    const normalized = message
-      .replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/g, '[timestamp]') // Remove timestamps
-      .replace(/\d+ms/g, '[duration]') // Remove durations
-      .replace(/port \d+/g, 'port [num]') // Remove port numbers
-      .replace(/\s+/g, ' ') // Normalize whitespace
-      .trim()
-      .slice(0, 80); // Limit length
-      
-    return `${level}:${normalized}`;
   }
   
   cleanup() {
@@ -105,94 +130,88 @@ class UltraSpamKiller {
       }
     }
   }
-  
-  getStats() {
-    return {
-      trackedMessages: this.seenMessages.size,
-      totalSuppressed: Array.from(this.seenMessages.values()).reduce(
-        (sum, entry) => sum + Math.max(0, entry.count - this.maxRepeats), 0
-      )
-    };
-  }
 }
 
-const spamKiller = new UltraSpamKiller();
+const spamKiller = new JsonFirstSpamKiller();
 
-// Ultra-clean formatter that NEVER produces [object Object]
-const ultraCleanFormat = winston.format.printf(({ level, message, timestamp, ...meta }) => {
+// Ultra-clean formatter
+const cleanFormat = winston.format.printf(({ level, message, timestamp, ...meta }) => {
   const time = new Date(timestamp).toLocaleTimeString();
   
-  // Smart message serialization
-  let cleanMsg: string;
-  if (typeof message === 'string') {
-    cleanMsg = message;
-  } else if (message && typeof message === 'object') {
-    try {
-      cleanMsg = JSON.stringify(message, null, 0);
-      // Extra safety - if it's still [object Object], describe it
-      if (cleanMsg === '{}' || cleanMsg.includes('[object')) {
-        cleanMsg = `[${message.constructor?.name || 'Object'}]`;
-      }
-    } catch {
-      cleanMsg = `[${typeof message}]`;
-    }
-  } else {
-    cleanMsg = String(message);
-  }
+  // Smart message cleaning
+  let cleanMsg = typeof message === 'string' ? message : JSON.stringify(message, null, 0);
+  if (cleanMsg.length > 200) cleanMsg = cleanMsg.slice(0, 200) + '...';
   
-  // Truncate super long messages
-  if (cleanMsg.length > 250) {
-    cleanMsg = cleanMsg.slice(0, 250) + '...';
-  }
-  
-  // Add meta only if useful
+  // Add meta if useful
   let metaStr = '';
   if (meta && Object.keys(meta).length > 0) {
     try {
       const metaJson = JSON.stringify(meta, null, 0);
-      if (metaJson !== '{}' && metaJson.length < 150) {
+      if (metaJson !== '{}' && metaJson.length < 100) {
         metaStr = ` ${metaJson}`;
       }
-    } catch {
-      // Ignore meta errors
-    }
+    } catch {}
   }
   
   return `${time} [${level.toUpperCase()}] ${cleanMsg}${metaStr}`;
 });
 
-// Create the winston logger with spam filtering
+// Create filtered console transport
+class FilteredConsoleTransport extends winston.transports.Console {
+  log(info: any, callback: any) {
+    if (spamKiller.shouldAllowConsole(info.level, info.message)) {
+      return super.log(info, callback);
+    }
+    callback();
+    return true;
+  }
+}
+
+// Create filtered file transport
+class FilteredFileTransport extends DailyRotateFile {
+  log(info: any, callback: any) {
+    if (spamKiller.shouldAllowFile(info.level, info.message)) {
+      return super.log(info, callback);
+    }
+    callback();
+    return true;
+  }
+}
+
 let logger: winston.Logger;
 
 try {
   const isDev = process.env.NODE_ENV !== 'production';
-  const logLevel = process.env.LOG_LEVEL || (isDev ? 'info' : 'warn');
   
   logger = winston.createLogger({
-    level: logLevel,
+    level: 'debug', // Capture everything for files
     format: winston.format.combine(
       winston.format.timestamp(),
       winston.format.errors({ stack: true })
     ),
     transports: [
-      // Console with spam filtering
-      new winston.transports.Console({
+      // 🔇 CONSOLE: Only critical messages
+      new FilteredConsoleTransport({
         format: winston.format.combine(
           winston.format.colorize({ all: true }),
-          ultraCleanFormat
-        ),
-        // Override log method to add spam filtering
-        log(info, callback) {
-          if (spamKiller.shouldAllow(info.level, info.message)) {
-            return winston.transports.Console.prototype.log.call(this, info, callback);
-          }
-          // Suppress spam
-          callback();
-          return true;
-        }
+          cleanFormat
+        )
       }),
       
-      // Error log file
+      // 📄 FILES: Everything (with less filtering)
+      new FilteredFileTransport({
+        filename: path.join(logDir, "combined-%DATE%.log"),
+        datePattern: 'YYYY-MM-DD',
+        maxSize: '10m',
+        maxFiles: '7d',
+        level: 'debug',
+        format: winston.format.combine(
+          winston.format.timestamp(),
+          winston.format.json()
+        )
+      }),
+      
+      // ❌ ERROR LOG: All errors
       new winston.transports.File({
         filename: path.join(logDir, "error.log"),
         level: 'error',
@@ -202,10 +221,21 @@ try {
         ),
         maxsize: 5242880, // 5MB
         maxFiles: 3
+      }),
+      
+      // 🎯 JSON-FIRST: Dedicated log for player state operations
+      new winston.transports.File({
+        filename: path.join(logDir, "json-first.log"),
+        format: winston.format.combine(
+          winston.format.timestamp(),
+          winston.format.json()
+        ),
+        maxsize: 5242880, // 5MB
+        maxFiles: 2
       })
     ],
     
-    // Handle exceptions without spam
+    // Exception handling
     exceptionHandlers: [
       new winston.transports.File({ 
         filename: path.join(logDir, "exceptions.log"),
@@ -217,31 +247,17 @@ try {
     exitOnError: false
   });
   
-  // Add general log file only in development
-  if (isDev) {
-    logger.add(new winston.transports.File({
-      filename: path.join(logDir, "combined.log"),
-      level: 'info',
-      format: winston.format.combine(
-        winston.format.timestamp(),
-        winston.format.json()
-      ),
-      maxsize: 10485760, // 10MB
-      maxFiles: 2
-    }));
-  }
-  
-  console.log("🌙 Ultra-clean logger initialized");
+  console.log("🔇 JSON-first enhanced logger initialized");
   
 } catch (err) {
   console.error("Logger initialization failed:", err);
   
   // Emergency fallback
   logger = {
-    info: (msg: any, meta?: any) => spamKiller.shouldAllow('info', String(msg)) ? console.log(msg, meta) : undefined,
+    info: (msg: any, meta?: any) => spamKiller.shouldAllowConsole('info', String(msg)) ? console.log(msg, meta) : undefined,
     error: (msg: any, meta?: any) => console.error(msg, meta),
-    warn: (msg: any, meta?: any) => spamKiller.shouldAllow('warn', String(msg)) ? console.warn(msg, meta) : undefined,
-    debug: (msg: any, meta?: any) => process.env.NODE_ENV === 'development' && spamKiller.shouldAllow('debug', String(msg)) ? console.debug(msg, meta) : undefined
+    warn: (msg: any, meta?: any) => spamKiller.shouldAllowConsole('warn', String(msg)) ? console.warn(msg, meta) : undefined,
+    debug: (msg: any, meta?: any) => process.env.NODE_ENV === 'development' && spamKiller.shouldAllowConsole('debug', String(msg)) ? console.debug(msg, meta) : undefined
   } as any;
 }
 
@@ -250,13 +266,22 @@ setInterval(() => {
   spamKiller.cleanup();
 }, 30000);
 
-// Add utility methods
-(logger as any).getSpamStats = () => spamKiller.getStats();
-(logger as any).cleanup = () => spamKiller.cleanup();
+// 🎯 Add JSON-first specific logging methods
+(logger as any).jsonFirst = {
+  playerUpdate: (playerId: string, action: string, details?: any) => {
+    logger.info(`🎯 [JSON-FIRST] Player ${playerId} ${action}`, details);
+  },
+  systemHealth: (health: any) => {
+    logger.debug(`🎯 [JSON-FIRST] System Health`, health);
+  },
+  syncComplete: (playerId: string, duration: number) => {
+    logger.debug(`🎯 [JSON-FIRST] DB Sync complete for ${playerId} (${duration}ms)`);
+  }
+};
 
-// Suppress unhandled rejection spam
+// Enhanced error handling without spam
 process.on("unhandledRejection", (reason: any) => {
-  if (spamKiller.shouldAllow('error', String(reason))) {
+  if (spamKiller.shouldAllowConsole('error', String(reason))) {
     logger.error("Unhandled Rejection", { reason });
   }
 });
