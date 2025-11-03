@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Upload, X, Image as ImageIcon, Edit, Plus, Database, RefreshCw, CheckCircle } from 'lucide-react';
 import { useGame } from '@/contexts/GameContext';
-import { Dialog, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogContent } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { ScrollContainer } from '@/components/layout/ScrollContainer';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -121,123 +120,127 @@ export default function ImageUploader({ adminMode = false }: { adminMode?: boole
     toast({ title: '✅ Image uploaded successfully!', description: `Added to ${selectedChar.name}` });
   };
 
+  // FIXED: Inline render (no Dialog wrapper) - prevents double menu
   return (
-    <Dialog>
-      <DialogTrigger asChild><Button variant="outline"><ImageIcon className="w-4 h-4 mr-2" />Image Gallery</Button></DialogTrigger>
-      <DialogContent className="max-w-4xl max-h-[85vh] overflow-hidden">
-        <DialogHeader>
-          <DialogTitle>Enhanced Image Uploader</DialogTitle>
-          <DialogDescription>Select a character, pick image type, level required, then upload with metadata</DialogDescription>
-        </DialogHeader>
-        
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="character-select">Select Character</Label>
-              <Select value={selectedCharacterId} onValueChange={setSelectedCharacterId}>
-                <SelectTrigger><SelectValue placeholder="Select a character" /></SelectTrigger>
-                <SelectContent>
-                  {characters.map(char => (<SelectItem key={char.id} value={char.id}>{char.name}</SelectItem>))}
-                </SelectContent>
-              </Select>
-            </div>
+    <div className="space-y-4">
+      <h2 className="text-xl font-bold text-center">📷 Enhanced Image Uploader</h2>
+      <p className="text-sm text-gray-400 text-center">Select character, image type, level required, then upload with metadata</p>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor="character-select">Select Character</Label>
+          <Select value={selectedCharacterId} onValueChange={setSelectedCharacterId}>
+            <SelectTrigger><SelectValue placeholder="Select a character" /></SelectTrigger>
+            <SelectContent>
+              {characters.map(char => (<SelectItem key={char.id} value={char.id}>{char.name}</SelectItem>))}
+            </SelectContent>
+          </Select>
+        </div>
 
-            {/* Restored: Image Type */}
-            <div>
-              <Label htmlFor="image-type">Image Type</Label>
-              <Select value={imageType} onValueChange={(v:any)=> setImageType(v)}>
-                <SelectTrigger id="image-type"><SelectValue placeholder="Select type" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="character">Character</SelectItem>
-                  <SelectItem value="avatar">Avatar</SelectItem>
-                  <SelectItem value="vip">VIP</SelectItem>
-                  <SelectItem value="background">Background</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+        {/* Restored: Image Type */}
+        <div>
+          <Label htmlFor="image-type">Image Type</Label>
+          <Select value={imageType} onValueChange={(v:any)=> setImageType(v)}>
+            <SelectTrigger id="image-type"><SelectValue placeholder="Select type" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="character">Character</SelectItem>
+              <SelectItem value="avatar">Avatar</SelectItem>
+              <SelectItem value="vip">VIP</SelectItem>
+              <SelectItem value="background">Background</SelectItem>
+              <SelectItem value="other">Other</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
 
-            {/* Restored: Level Required (default 1) */}
-            <div>
-              <Label htmlFor="unlock-level">Level Required</Label>
-              <Input id="unlock-level" type="number" min="1" value={unlockLevel} onChange={(e)=> setUnlockLevel(parseInt(e.target.value)||1)} />
-            </div>
+        {/* Restored: Level Required (default 1) */}
+        <div>
+          <Label htmlFor="unlock-level">Level Required</Label>
+          <Input id="unlock-level" type="number" min="1" value={unlockLevel} onChange={(e)=> setUnlockLevel(parseInt(e.target.value)||1)} />
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Button onClick={loadDataArraysFromServer} disabled={isLoadingArrays} variant="outline" size="sm">
+            <Database className="w-4 h-4 mr-2" />
+            {isLoadingArrays ? 'Loading...' : 'Sync Arrays'}
+          </Button>
+          <Button onClick={() => setCategories({ nsfw:false, vip:false, event:false, random:false })} variant="outline" size="sm">
+            <RefreshCw className="w-4 h-4 mr-2" />Reset
+          </Button>
+        </div>
+      </div>
+
+      <div>
+        <input ref={fileInputRef} id="image-upload" type="file" accept="image/*" className="hidden" onChange={handleFileSelect} />
+        <Label htmlFor="image-upload" className="cursor-pointer block">
+          <div className="border-2 border-dashed border-border rounded-lg p-8 hover-elevate flex flex-col items-center justify-center gap-2">
+            <Upload className="w-8 h-8 text-muted-foreground" />
+            <span className="text-sm text-muted-foreground">Click to select image</span>
           </div>
+        </Label>
+      </div>
 
-          <div>
-            <input ref={fileInputRef} id="image-upload" type="file" accept="image/*" className="hidden" onChange={handleFileSelect} />
-            <Label htmlFor="image-upload" className="cursor-pointer block">
-              <div className="border-2 border-dashed border-border rounded-lg p-8 hover-elevate flex flex-col items-center justify-center gap-2">
-                <Upload className="w-8 h-8 text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">Click to select image</span>
-              </div>
-            </Label>
+      {previewUrl && (
+        <div className="space-y-3">
+          <div className="relative w-full aspect-square max-w-xs mx-auto rounded-lg overflow-hidden border-2 border-primary">
+            <img src={previewUrl} alt="Preview" className="w-full h-full object-cover" />
           </div>
-
-          {previewUrl && (
-            <div className="space-y-3">
-              <div className="relative w-full aspect-square max-w-xs mx-auto rounded-lg overflow-hidden border-2 border-primary">
-                <img src={previewUrl} alt="Preview" className="w-full h-full object-cover" />
-              </div>
-
-              <Card>
-                <CardHeader className="pb-3"><CardTitle className="text-sm">Upload Settings & Categories</CardTitle></CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 gap-4">
-                    {['nsfw','vip','event','random'].map(category => (
-                      <div key={category} className="flex items-center space-x-2">
-                        <Checkbox id={category} checked={(categories as any)[category]||false} onCheckedChange={(c)=> setCategories(prev=> ({ ...prev, [category]: !!c }))} />
-                        <Label htmlFor={category} className="capitalize">{category}</Label>
-                      </div>
-                    ))}
-                    <div className="flex items-center space-x-2">
-                      <Checkbox id="hidden" checked={isHidden} onCheckedChange={(c)=> setIsHidden(!!c)} />
-                      <Label htmlFor="hidden">Hide from Character Gallery</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Checkbox id="chatEnable" checked={chatEnable} onCheckedChange={(c)=> setChatEnable(!!c)} />
-                      <Label htmlFor="chatEnable">Enable for Chat</Label>
-                    </div>
-                    <div>
-                      <Label htmlFor="chatSendPercent">Chat Send %</Label>
-                      <Input id="chatSendPercent" type="number" min="0" max="100" value={chatSendPercent} onChange={(e)=> setChatSendPercent(parseInt(e.target.value)||0)} />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <div className="flex gap-2">
-                <Button onClick={handleUpload} disabled={!selectedFile || !selectedCharacterId} className="flex-1"><Upload className="w-4 h-4 mr-2" />Upload with Metadata</Button>
-                <Button variant="outline" onClick={()=> { setSelectedFile(null); setPreviewUrl(null); }}>
-                  <X className="w-4 h-4" />Cancel
-                </Button>
-              </div>
-            </div>
-          )}
 
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between">{adminMode ? 'Uploaded Images' : 'Image Gallery'}
-                <Badge variant="outline">{characterImages.length} images</Badge>
-              </CardTitle>
-            </CardHeader>
+            <CardHeader className="pb-3"><CardTitle className="text-sm">Upload Settings & Categories</CardTitle></CardHeader>
             <CardContent>
-              <ScrollArea className="h-[60vh] md:h-[70vh]">
-                <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                  {characterImages.map(image => {
-                    const isSelected = state.selectedImageId===image.id; const isUnlocked = state.level>=image.unlockLevel;
-                    return (
-                      <div key={image.id} className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all duration-200 ${isSelected ? 'border-primary ring-2 ring-primary/50':'border-card-border'} ${isUnlocked ? 'hover:border-primary/70 hover:scale-105 cursor-pointer transform-gpu':'opacity-50 cursor-not-allowed'}`} onClick={()=> isUnlocked && !adminMode && selectImage(image.id)}>
-                        <img src={image.url} alt="Character" className={`w-full h-full object-cover ${!isUnlocked && 'blur-sm'}`} loading="lazy" />
-                      </div>
-                    );
-                  })}
+              <div className="grid grid-cols-2 gap-4">
+                {['nsfw','vip','event','random'].map(category => (
+                  <div key={category} className="flex items-center space-x-2">
+                    <Checkbox id={category} checked={(categories as any)[category]||false} onCheckedChange={(c)=> setCategories(prev=> ({ ...prev, [category]: !!c }))} />
+                    <Label htmlFor={category} className="capitalize">{category}</Label>
+                  </div>
+                ))}
+                <div className="flex items-center space-x-2">
+                  <Checkbox id="hidden" checked={isHidden} onCheckedChange={(c)=> setIsHidden(!!c)} />
+                  <Label htmlFor="hidden">Hide from Character Gallery</Label>
                 </div>
-              </ScrollArea>
+                <div className="flex items-center space-x-2">
+                  <Checkbox id="chatEnable" checked={chatEnable} onCheckedChange={(c)=> setChatEnable(!!c)} />
+                  <Label htmlFor="chatEnable">Enable for Chat</Label>
+                </div>
+                <div>
+                  <Label htmlFor="chatSendPercent">Chat Send %</Label>
+                  <Input id="chatSendPercent" type="number" min="0" max="100" value={chatSendPercent} onChange={(e)=> setChatSendPercent(parseInt(e.target.value)||0)} />
+                </div>
+              </div>
             </CardContent>
           </Card>
+
+          <div className="flex gap-2">
+            <Button onClick={handleUpload} disabled={!selectedFile || !selectedCharacterId} className="flex-1"><Upload className="w-4 h-4 mr-2" />Upload with Metadata</Button>
+            <Button variant="outline" onClick={()=> { setSelectedFile(null); setPreviewUrl(null); }}>
+              <X className="w-4 h-4" />Cancel
+            </Button>
+          </div>
         </div>
-      </DialogContent>
-    </Dialog>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">{adminMode ? 'Uploaded Images' : 'Image Gallery'}
+            <Badge variant="outline">{characterImages.length} images</Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ScrollContainer height="h-[60vh]">
+            <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+              {characterImages.map(image => {
+                const isSelected = state.selectedImageId===image.id; const isUnlocked = state.level>=image.unlockLevel;
+                return (
+                  <div key={image.id} style={{ contentVisibility: 'auto' }} className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all duration-200 ${isSelected ? 'border-primary ring-2 ring-primary/50':'border-card-border'} ${isUnlocked ? 'hover:border-primary/70 hover:scale-105 cursor-pointer transform-gpu':'opacity-50 cursor-not-allowed'}`} onClick={()=> isUnlocked && !adminMode && selectImage(image.id)}>
+                    <img src={image.url} alt="Character" className={`w-full h-full object-cover ${!isUnlocked && 'blur-sm'}`} loading="lazy" />
+                  </div>
+                );
+              })}
+            </div>
+          </ScrollContainer>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
