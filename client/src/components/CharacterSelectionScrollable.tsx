@@ -26,7 +26,7 @@ const CharacterSelectionScrollable: React.FC<CharacterSelectionScrollableProps> 
   onClose, 
   onSelect 
 }) => {
-  const { state, characters, images } = useGame();
+  const { state, characters, images, selectCharacter } = useGame(); // 🔧 Use GameContext selectCharacter
   const [highlighted, setHighlighted] = useState<Character | null>(null);
   const [activeTab, setActiveTab] = useState<'all' | 'unlocked' | 'locked' | 'vip'>('all');
   const [showGallery, setShowGallery] = useState(false);
@@ -34,7 +34,7 @@ const CharacterSelectionScrollable: React.FC<CharacterSelectionScrollableProps> 
   const [imageErrors, setImageErrors] = useState<Set<string>>(new Set());
   const [settingDisplayImage, setSettingDisplayImage] = useState<string | null>(null);
   
-  // 🎥 Gallery slideshow state
+  // 🌥 Gallery slideshow state
   const [slideshowActive, setSlideshowActive] = useState(false);
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
   const [slideshowInterval, setSlideshowInterval] = useState<NodeJS.Timeout | null>(null);
@@ -47,7 +47,7 @@ const CharacterSelectionScrollable: React.FC<CharacterSelectionScrollableProps> 
     else if (characters.length) setHighlighted(characters[0] as Character);
   }, [isOpen, state?.selectedCharacterId, characters]);
 
-  // 🎥 Slideshow effect
+  // 🌥 Slideshow effect
   useEffect(() => {
     if (!slideshowActive || !highlighted) return;
     
@@ -66,7 +66,7 @@ const CharacterSelectionScrollable: React.FC<CharacterSelectionScrollableProps> 
     };
   }, [slideshowActive, highlighted, images]);
 
-  // 🎥 Update display image via slideshow
+  // 🌥 Update display image via slideshow
   useEffect(() => {
     if (!slideshowActive || !highlighted) return;
     
@@ -78,38 +78,22 @@ const CharacterSelectionScrollable: React.FC<CharacterSelectionScrollableProps> 
       // Automatically update display image during slideshow
       updateDisplayImage(currentImage.url, false); // silent update
     }
-  }, [currentSlideIndex, slideshowActive, highlighted]);
+  }, [currentSlideIndex, slideshowActive, highlighted, state?.displayImage]);
 
-  // 🎯 JSON-FIRST: Use dedicated character selection endpoint
+  // 🎯 JSON-FIRST: Use GameContext selectCharacter (already fixed)
   const persistSelection = async (characterId: string) => {
     if (saving) return;
     setSaving(true);
     
     try {
-      console.log(`🎭 Selecting character ${characterId}...`);
+      console.log(`🎭 [CHARACTER SELECT] Selecting character ${characterId} via GameContext...`);
       
-      const sessionToken = localStorage.getItem('sessionToken');
-      if (!sessionToken) {
-        throw new Error('No session token found');
+      const success = await selectCharacter(characterId);
+      if (!success) {
+        throw new Error('Character selection failed');
       }
       
-      const response = await fetch('/api/player/select-character', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json', 
-          'Authorization': `Bearer ${sessionToken}` 
-        },
-        body: JSON.stringify({ characterId }),
-        signal: AbortSignal.timeout(10000)
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
-        throw new Error(errorData.error || `HTTP ${response.status}`);
-      }
-
-      const result = await response.json();
-      console.log(`✅ Character ${characterId} selected successfully`);
+      console.log(`✅ [CHARACTER SELECT] Character ${characterId} selected successfully via GameContext`);
       
       if (onSelect && highlighted) {
         onSelect(highlighted);
@@ -118,7 +102,7 @@ const CharacterSelectionScrollable: React.FC<CharacterSelectionScrollableProps> 
       onClose();
       
     } catch (error) {
-      console.error('🔴 Failed to save character selection:', error);
+      console.error('🔴 [CHARACTER SELECT] Failed to save character selection:', error);
       
       let errorMessage = 'Unknown error occurred';
       if (error instanceof Error) {
@@ -135,7 +119,7 @@ const CharacterSelectionScrollable: React.FC<CharacterSelectionScrollableProps> 
     }
   };
 
-  // 🖼️ Set display image
+  // 🖼️ FIXED: Set display image with proper URL normalization
   const updateDisplayImage = async (imageUrl: string, showFeedback = true) => {
     if (settingDisplayImage) return;
     setSettingDisplayImage(imageUrl);
@@ -144,30 +128,46 @@ const CharacterSelectionScrollable: React.FC<CharacterSelectionScrollableProps> 
       const sessionToken = localStorage.getItem('sessionToken');
       if (!sessionToken) throw new Error('No session token');
       
+      // 🔧 FIX: Ensure URL has leading slash
+      const normalizedUrl = imageUrl.startsWith('/') ? imageUrl : `/${imageUrl}`;
+      
+      console.log(`🖼️ [DISPLAY IMAGE] Setting display image: ${normalizedUrl}`);
+      
       const response = await fetch('/api/player/set-display-image', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json', 
           'Authorization': `Bearer ${sessionToken}` 
         },
-        body: JSON.stringify({ imageUrl }),
+        body: JSON.stringify({ imageUrl: normalizedUrl }),
         signal: AbortSignal.timeout(8000)
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+        const errorData = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+        throw new Error(errorData.error || `HTTP ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log(`✅ [DISPLAY IMAGE] Display image set successfully:`, normalizedUrl);
+      
+      // 🔧 Update GameContext immediately for instant UI feedback
+      if (result.player?.displayImage) {
+        // Dispatch to GameContext to update display image
+        const { dispatch } = useGame();
+        dispatch({ type: 'UPDATE_DISPLAY_IMAGE', payload: result.player.displayImage });
       }
 
       if (showFeedback) {
-        console.log('✅ Display image updated successfully');
+        console.log('✅ [DISPLAY IMAGE] Display image updated successfully');
         // Show brief success indicator
         setTimeout(() => setSettingDisplayImage(null), 1000);
       } else {
         setSettingDisplayImage(null);
       }
     } catch (error) {
-      console.error('🔴 Failed to update display image:', error);
-      if (showFeedback) alert('Failed to set display image');
+      console.error('🔴 [DISPLAY IMAGE] Failed to update display image:', error);
+      if (showFeedback) alert(`Failed to set display image: ${error instanceof Error ? error.message : 'Unknown error'}`);
       setSettingDisplayImage(null);
     }
   };
@@ -177,12 +177,14 @@ const CharacterSelectionScrollable: React.FC<CharacterSelectionScrollableProps> 
     setImageErrors(prev => new Set(prev).add(imageUrl));
   };
 
-  // Get fallback image URL
+  // Get fallback image URL with proper normalization
   const getFallbackImageUrl = (character: any): string | null => {
     const { defaultImage, avatarImage, displayImage } = character;
     
     // Try each image in order, skipping ones that failed to load
-    const candidates = [displayImage, defaultImage, avatarImage].filter(Boolean);
+    const candidates = [displayImage, defaultImage, avatarImage]
+      .filter(Boolean)
+      .map(url => url.startsWith('/') ? url : `/${url}`); // 🔧 FIX: Normalize URLs
     
     for (const url of candidates) {
       if (!imageErrors.has(url)) {
@@ -331,11 +333,11 @@ const CharacterSelectionScrollable: React.FC<CharacterSelectionScrollableProps> 
         </div>
       </div>
 
-      {/* 🎥 Enhanced Gallery Modal with Slideshow */}
+      {/* 🌥 Enhanced Gallery Modal with Slideshow */}
       {showGallery && (
         <div className="fixed inset-0 bg-black/90 z-[60] flex items-center justify-center p-4" onClick={()=>setShowGallery(false)}>
           <div className="bg-gray-900 border border-gray-700 rounded-xl max-w-5xl w-full max-h-[90vh] overflow-hidden" onClick={e=>e.stopPropagation()}>
-            {/* 📊 Gallery Header with Stats and Slideshow */}
+            {/* 📈 Gallery Header with Stats and Slideshow */}
             <div className="flex items-center justify-between p-4 border-b border-gray-700">
               <div className="flex items-center gap-4">
                 <div className="text-white font-semibold flex items-center gap-2">
@@ -389,13 +391,14 @@ const CharacterSelectionScrollable: React.FC<CharacterSelectionScrollableProps> 
                       'border-gray-700 hover:border-gray-600'
                     }`}>
                       <img 
-                        src={img.url} 
+                        src={img.url || '/uploads/placeholder-character.jpg'} 
                         alt="Gallery image" 
                         className="w-full h-full object-cover"
                         loading="lazy"
                         onError={(e) => {
                           const target = e.target as HTMLImageElement;
                           target.src = '/uploads/placeholder-character.jpg';
+                          handleImageError(img.url || '');
                         }}
                       />
                       
@@ -404,9 +407,11 @@ const CharacterSelectionScrollable: React.FC<CharacterSelectionScrollableProps> 
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            updateDisplayImage(img.url);
+                            if (img.url) {
+                              updateDisplayImage(img.url);
+                            }
                           }}
-                          disabled={isSettingThisImage || isCurrentDisplay}
+                          disabled={isSettingThisImage || isCurrentDisplay || !img.url}
                           className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-xs font-semibold disabled:opacity-50 flex items-center gap-1"
                         >
                           {isSettingThisImage ? (
@@ -419,10 +424,10 @@ const CharacterSelectionScrollable: React.FC<CharacterSelectionScrollableProps> 
                         </button>
                       </div>
                       
-                      {/* 🎥 Slideshow indicator */}
+                      {/* 🌥 Slideshow indicator */}
                       {isCurrentSlide && (
                         <div className="absolute top-2 left-2 bg-yellow-500 text-black px-2 py-1 rounded text-xs font-bold">
-                          🎥 LIVE
+                          🌥 LIVE
                         </div>
                       )}
                       
@@ -430,6 +435,13 @@ const CharacterSelectionScrollable: React.FC<CharacterSelectionScrollableProps> 
                       {isCurrentDisplay && !isCurrentSlide && (
                         <div className="absolute top-2 right-2 bg-green-500 text-white px-1 py-1 rounded text-xs">
                           ✅
+                        </div>
+                      )}
+                      
+                      {/* 🔧 DEBUG: Show URL for admin */}
+                      {process.env.NODE_ENV === 'development' && state?.isAdmin && (
+                        <div className="absolute bottom-0 left-0 right-0 bg-black/80 text-white text-xs p-1 truncate" title={img.url || ''}>
+                          {img.url || 'No URL'}
                         </div>
                       )}
                     </div>
