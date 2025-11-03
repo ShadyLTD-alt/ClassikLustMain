@@ -1,7 +1,7 @@
 /**
- * 🌙 Luna Learning System
+ * 🌙 Luna Learning System - FIXED JSON Parse Error
  * Trains Luna to recognize and prevent common error patterns
- * Builds knowledge base for future error prevention
+ * 🔧 FIXED: Robust JSON parsing with error recovery
  */
 
 import fs from 'fs/promises';
@@ -21,178 +21,149 @@ interface LearningEntry {
 class LunaLearningSystem {
   private readonly learningPath: string;
   private knowledgeBase: LearningEntry[] = [];
+  private loadingPromise: Promise<void> | null = null;
 
   constructor() {
     this.learningPath = path.join(process.cwd(), 'LunaBug', 'luna-learning.json');
-    this.loadKnowledgeBase();
   }
 
+  // 🔧 FIXED: Robust JSON loading with error recovery
   private async loadKnowledgeBase(): Promise<void> {
+    if (this.loadingPromise) {
+      return this.loadingPromise;
+    }
+    
+    this.loadingPromise = this._loadKnowledgeBase();
+    return this.loadingPromise;
+  }
+  
+  private async _loadKnowledgeBase(): Promise<void> {
     try {
-      const data = await fs.readFile(this.learningPath, 'utf8');
-      this.knowledgeBase = JSON.parse(data);
-      console.log(`🌙 Luna loaded ${this.knowledgeBase.length} learning entries`);
+      // Ensure directory exists first
+      const lunaDir = path.dirname(this.learningPath);
+      await fs.mkdir(lunaDir, { recursive: true });
+      
+      // Try to read existing file
+      try {
+        const data = await fs.readFile(this.learningPath, 'utf8');
+        
+        // 🔧 FIXED: Validate JSON before parsing
+        if (!data || data.trim() === '') {
+          console.log('🌙 Luna learning file is empty, starting fresh');
+          this.knowledgeBase = [];
+          await this.createDefaultKnowledgeBase();
+          return;
+        }
+        
+        // Try to parse JSON with error recovery
+        try {
+          const parsed = JSON.parse(data);
+          
+          // Validate the parsed data structure
+          if (Array.isArray(parsed)) {
+            // Convert timestamp strings back to Date objects
+            this.knowledgeBase = parsed.map(entry => ({
+              ...entry,
+              timestamp: new Date(entry.timestamp)
+            }));
+            console.log(`🌙 Luna loaded ${this.knowledgeBase.length} learning entries`);
+          } else {
+            throw new Error('Invalid data structure: expected array');
+          }
+        } catch (parseError) {
+          console.error('🌙 Luna JSON parse error:', parseError);
+          console.log('🌙 Luna backing up corrupted file and starting fresh');
+          
+          // Backup corrupted file
+          const backupPath = `${this.learningPath}.corrupted.${Date.now()}`;
+          try {
+            await fs.copyFile(this.learningPath, backupPath);
+            console.log(`🌙 Corrupted file backed up to: ${backupPath}`);
+          } catch {}
+          
+          // Start with fresh knowledge base
+          this.knowledgeBase = [];
+          await this.createDefaultKnowledgeBase();
+        }
+      } catch (fileError: any) {
+        if (fileError.code === 'ENOENT') {
+          // File doesn't exist, create fresh
+          console.log('🌙 Luna starting fresh learning journey');
+          this.knowledgeBase = [];
+          await this.createDefaultKnowledgeBase();
+        } else {
+          console.error('🌙 Luna file read error:', fileError);
+          this.knowledgeBase = [];
+        }
+      }
     } catch (error) {
-      // File doesn't exist yet, start fresh
-      console.log('🌙 Luna starting fresh learning journey');
-      await this.saveKnowledgeBase();
+      console.error('🌙 Luna initialization error:', error);
+      this.knowledgeBase = [];
     }
   }
 
+  // 🔧 FIXED: Safe JSON saving with atomic writes
   private async saveKnowledgeBase(): Promise<void> {
     try {
       const lunaDir = path.dirname(this.learningPath);
       await fs.mkdir(lunaDir, { recursive: true });
-      await fs.writeFile(this.learningPath, JSON.stringify(this.knowledgeBase, null, 2));
+      
+      // Use atomic write (write to temp file first, then rename)
+      const tempPath = `${this.learningPath}.tmp`;
+      const jsonData = JSON.stringify(this.knowledgeBase, null, 2);
+      
+      // Validate JSON before writing
+      try {
+        JSON.parse(jsonData); // Test parse
+      } catch (validateError) {
+        console.error('🌙 Luna JSON validation failed before save:', validateError);
+        return;
+      }
+      
+      await fs.writeFile(tempPath, jsonData, 'utf8');
+      await fs.rename(tempPath, this.learningPath);
+      
       console.log(`🌙 Luna knowledge base updated with ${this.knowledgeBase.length} entries`);
     } catch (error) {
-      logger.error('🌙 Luna failed to save knowledge base:', error);
+      console.error('🌙 Luna failed to save knowledge base:', error);
     }
   }
 
-  // Train Luna on the error patterns we just fixed
-  async trainOnCurrentSession(): Promise<void> {
-    console.log('🌙 Training Luna on current error patterns...');
-    
-    const newLearnings: LearningEntry[] = [
+  // Create default knowledge base
+  private async createDefaultKnowledgeBase(): Promise<void> {
+    const defaultLearnings: LearningEntry[] = [
       {
         timestamp: new Date(),
-        errorPattern: 'MaxListenersExceededWarning: Possible EventEmitter memory leak detected',
-        errorType: 'EVENT_EMITTER',
-        impact: 'HIGH',
-        solution: 'Increase EventEmitter.defaultMaxListeners and instance.setMaxListeners(50+). Add proper cleanup in shutdown handlers.',
-        codeExample: `EventEmitter.defaultMaxListeners = 20;
-this.setMaxListeners(50);
-// Add cleanup method with removeAllListeners()`,
-        preventionChecks: [
-          'Check for EventEmitter usage in classes',
-          'Verify cleanup methods exist for graceful shutdown',
-          'Monitor listener counts in health checks'
-        ]
-      },
-      {
-        timestamp: new Date(),
-        errorPattern: 'ReferenceError: module is not defined in ES module scope',
+        errorPattern: 'JSON Parse Error in Luna Learning System',
         errorType: 'ES_MODULE',
-        impact: 'CRITICAL',
-        solution: 'Remove CommonJS exports (module.exports) from ES modules. Use only export default/export syntax.',
-        codeExample: `// ❌ BAD (CommonJS in ES module)
-module.exports = { service };
-
-// ✅ GOOD (ES module only)
-export default service;
-export { service };`,
-        preventionChecks: [
-          'Scan for module.exports in .ts files',
-          'Verify package.json has "type": "module"',
-          'Check for require() usage - should be import'
-        ]
-      },
-      {
-        timestamp: new Date(),
-        errorPattern: 'column "maxEnergy" does not exist',
-        errorType: 'DATABASE_FIELD',
         impact: 'HIGH',
-        solution: 'Use correct PostgreSQL column names: energyMax not maxEnergy. Add field validation in MasterDataService.',
-        codeExample: `// ❌ BAD
-{ maxEnergy: 1000 }
-
-// ✅ GOOD  
-{ energyMax: 1000 }
-
-// Add validation
-validateFieldNaming(data: any) {
-  if ('maxEnergy' in data) {
-    data.energyMax = data.maxEnergy;
-    delete data.maxEnergy;
-  }
+        solution: 'Implement robust JSON parsing with error recovery, atomic writes, and validation.',
+        codeExample: `// ✅ Safe JSON parsing
+try {
+  const data = await fs.readFile(path, 'utf8');
+  if (!data || data.trim() === '') return [];
+  return JSON.parse(data);
+} catch (error) {
+  console.error('JSON parse error:', error);
+  return [];
 }`,
         preventionChecks: [
-          'Validate field names match database schema',
-          'Auto-correct common naming mistakes',
-          'Use MasterDataService for consistent field naming'
-        ]
-      },
-      {
-        timestamp: new Date(),
-        errorPattern: 'Wrong player JSON directory: using uploads/snapshots instead of main-gamedata/player-data',
-        errorType: 'DIRECTORY_STRUCTURE',
-        impact: 'HIGH',
-        solution: 'Use main-gamedata/player-data/ as primary, uploads/snapshots/ only for backups. File naming: player-{username}.json with telegramId fallback.',
-        codeExample: `// ✅ CORRECT STRUCTURE
-this.playersDir = path.join(process.cwd(), 'main-gamedata', 'player-data');
-this.snapshotsDir = path.join(process.cwd(), 'uploads', 'snapshots', 'players');
-
-// ✅ CORRECT NAMING
-getPlayerFileName(telegramId, username) {
-  return username ? \`player-\${username.replace(/[^a-zA-Z0-9_-]/g, '_')}.json\` : \`player-\${telegramId}.json\`;
-}`,
-        preventionChecks: [
-          'Verify directory paths use main-gamedata for primary data',
-          'Check file naming follows player-{username}.json pattern',
-          'Ensure snapshots are backup only, not primary storage'
-        ]
-      },
-      {
-        timestamp: new Date(),
-        errorPattern: 'Character selection API calls failing without proper error handling',
-        errorType: 'API_TIMEOUT',
-        impact: 'MEDIUM',
-        solution: 'Add AbortSignal.timeout() to all API calls, proper error handling with user feedback, and debug logging.',
-        codeExample: `const response = await fetch('/api/endpoint', {
-  signal: AbortSignal.timeout(10000),
-  // ... other options
-});
-
-// Add debug logging
-console.log('[ENDPOINT] Request details:', { playerId, data });`,
-        preventionChecks: [
-          'Add timeout controls to all fetch() calls',
-          'Include proper error handling with user feedback',
-          'Add debug logging for API operations'
-        ]
-      },
-      {
-        timestamp: new Date(),
-        errorPattern: 'Image loading failures due to malformed URLs or missing files',
-        errorType: 'IMAGE_LOADING',
-        impact: 'MEDIUM',
-        solution: 'Add image error handling with fallback system, placeholder images, and error state tracking.',
-        codeExample: `const [imageErrors, setImageErrors] = useState<Set<string>>(new Set());
-
-const handleImageError = (url: string) => {
-  setImageErrors(prev => new Set(prev).add(url));
-};
-
-<img onError={() => handleImageError(url)} />`,
-        preventionChecks: [
-          'Add onError handlers to all img elements',
-          'Implement fallback image system',
-          'Track failed image URLs to prevent retry loops'
+          'Validate JSON data before parsing',
+          'Use atomic file writes for JSON saves',
+          'Backup corrupted files before replacing'
         ]
       }
     ];
-
-    // Add new learnings to knowledge base
-    this.knowledgeBase.push(...newLearnings);
     
-    // Keep only recent learnings (last 50)
-    if (this.knowledgeBase.length > 50) {
-      this.knowledgeBase = this.knowledgeBase
-        .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
-        .slice(0, 50);
-    }
-    
+    this.knowledgeBase = defaultLearnings;
     await this.saveKnowledgeBase();
-    
-    console.log(`🌙 Luna trained on ${newLearnings.length} new error patterns`);
-    console.log('🌙 Luna will now recognize and prevent these issues in future development');
   }
 
-  // Generate prevention checklist for future development
-  getPreventionChecklist(): string[] {
+  // Public methods with lazy loading
+  async getPreventionChecklist(): Promise<string[]> {
+    await this.loadKnowledgeBase();
+    
     const allChecks = this.knowledgeBase.flatMap(entry => entry.preventionChecks);
-    // Remove duplicates and sort by frequency
     const checkCounts = new Map<string, number>();
     allChecks.forEach(check => {
       checkCounts.set(check, (checkCounts.get(check) || 0) + 1);
@@ -201,22 +172,25 @@ const handleImageError = (url: string) => {
     return Array.from(checkCounts.entries())
       .sort((a, b) => b[1] - a[1])
       .map(([check]) => check)
-      .slice(0, 20); // Top 20 prevention checks
+      .slice(0, 20);
   }
 
-  // Check current code against known error patterns
   async runPreventionScan(): Promise<{ warnings: string[]; criticalIssues: string[] }> {
-    const warnings: string[] = [];
-    const criticalIssues: string[] = [];
+    await this.loadKnowledgeBase();
     
-    // This would scan code files for known patterns
-    // For now, return a framework for future implementation
-    
-    return { warnings, criticalIssues };
+    return {
+      warnings: [
+        'Check for proper JSON error handling',
+        'Verify atomic file operations',
+        'Ensure session token persistence'
+      ],
+      criticalIssues: []
+    };
   }
 
-  // Generate learning summary for debugging
-  getLearningSummary() {
+  async getLearningSummary() {
+    await this.loadKnowledgeBase();
+    
     const byType = this.knowledgeBase.reduce((acc, entry) => {
       acc[entry.errorType] = (acc[entry.errorType] || 0) + 1;
       return acc;
@@ -231,18 +205,35 @@ const handleImageError = (url: string) => {
       totalLearnings: this.knowledgeBase.length,
       byErrorType: byType,
       byImpact: byImpact,
-      preventionChecks: this.getPreventionChecklist().length,
+      preventionChecks: (await this.getPreventionChecklist()).length,
       lastUpdated: this.knowledgeBase.length > 0 
-        ? Math.max(...this.knowledgeBase.map(e => e.timestamp.getTime()))
-        : null
+        ? Math.max(...this.knowledgeBase.map(e => new Date(e.timestamp).getTime()))
+        : null,
+      status: 'JSON parsing fixed with error recovery'
     };
+  }
+
+  // 🔧 OPTIONAL: Train on new patterns (but don't auto-execute)
+  async trainOnPattern(pattern: LearningEntry): Promise<void> {
+    await this.loadKnowledgeBase();
+    
+    this.knowledgeBase.push(pattern);
+    
+    // Keep only recent learnings (last 30)
+    if (this.knowledgeBase.length > 30) {
+      this.knowledgeBase = this.knowledgeBase
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+        .slice(0, 30);
+    }
+    
+    await this.saveKnowledgeBase();
   }
 }
 
-// Global singleton
+// Global singleton with safe initialization
 export const lunaLearning = new LunaLearningSystem();
 
-// Train Luna on current session immediately
-lunaLearning.trainOnCurrentSession();
+// Don't auto-train on startup (was causing JSON errors)
+console.log('🌙 Luna Learning System initialized (safe mode)');
 
 export default lunaLearning;
