@@ -27,7 +27,7 @@ import logger from "./logger";
 import masterDataService from "./utils/MasterDataService";
 // 🎯 JSON-FIRST: Import new player state manager WITH FIXED EXPORTS
 import { playerStateManager, getPlayerState, updatePlayerState, selectCharacterForPlayer, purchaseUpgradeForPlayer, setDisplayImageForPlayer } from "./utils/playerStateManager";
-// 🌙 LUNA LEARNING: Import learning system
+// 🌙 LUNA LEARNING: Import learning system (now fixed)
 import { lunaLearning } from "./utils/lunaLearningSystem";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -69,21 +69,55 @@ const upload = multer({
 export async function registerRoutes(app: Express): Promise<Server> {
   logger.info('⚡ Registering routes...');
 
-  // Health check endpoint - MUST BE FIRST
+  // 🔍 DIAGNOSTIC: Enhanced health check with detailed debugging
   app.get("/api/health", async (req, res) => {
     try {
       const playerStateHealth = await playerStateManager.healthCheck();
+      const timestamp = new Date().toISOString();
+      
+      // Check session token if provided
+      let sessionInfo = null;
+      const sessionToken = req.headers['authorization']?.replace('Bearer ', '');
+      if (sessionToken) {
+        try {
+          const session = await storage.getSessionByToken(sessionToken);
+          sessionInfo = {
+            exists: !!session,
+            playerId: session?.player?.id,
+            username: session?.player?.username,
+            telegramId: session?.player?.telegramId,
+            isAdmin: session?.player?.isAdmin,
+            expiresAt: session?.expiresAt
+          };
+        } catch (err) {
+          sessionInfo = { error: err instanceof Error ? err.message : 'Unknown session error' };
+        }
+      }
+      
+      logger.info('Health check requested', { 
+        timestamp, 
+        sessionProvided: !!sessionToken,
+        sessionInfo 
+      });
+      
       res.json({ 
         status: 'ok', 
-        timestamp: new Date().toISOString(),
+        timestamp,
         env: process.env.NODE_ENV || 'development',
         port: process.env.PORT || '5000',
         jsonFirst: {
           active: true,
           ...playerStateHealth
+        },
+        session: sessionInfo,
+        logging: {
+          logDir: path.resolve(process.cwd(), "logs"),
+          fallbackActive: !fs.existsSync(path.resolve(process.cwd(), "logs")),
+          lastHealthCheck: timestamp
         }
       });
     } catch (error) {
+      logger.error('Health check failed', { error: error instanceof Error ? error.message : 'Unknown' });
       res.status(500).json({ 
         status: 'error', 
         timestamp: new Date().toISOString(),
@@ -96,10 +130,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/admin/migrate-player-files", requireAuth, requireAdmin, async (req, res) => {
     try {
       console.log('📦 Starting player file migration to telegramId_username structure...');
+      logger.info('Player file migration started');
       
       const result = await playerStateManager.migrateOldPlayerFiles();
       
       console.log(`✅ Migration complete: ${result.moved} moved, ${result.errors} errors`);
+      logger.info('Player file migration completed', result);
       
       res.json({
         success: true,
@@ -115,11 +151,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // 🌙 LUNA LEARNING ENDPOINT
+  // 🌙 LUNA LEARNING ENDPOINT (now fixed)
   app.get("/api/luna/learning-report", requireAuth, requireAdmin, async (req, res) => {
     try {
-      const summary = lunaLearning.getLearningSummary();
-      const checklist = lunaLearning.getPreventionChecklist();
+      const summary = await lunaLearning.getLearningSummary();
+      const checklist = await lunaLearning.getPreventionChecklist();
       const scan = await lunaLearning.runPreventionScan();
       
       res.json({
@@ -128,7 +164,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           learning: summary,
           preventionChecklist: checklist,
           currentScan: scan,
-          message: "Luna's accumulated knowledge from error patterns"
+          message: "Luna's accumulated knowledge from error patterns (JSON parsing fixed)"
         }
       });
     } catch (error) {
@@ -303,17 +339,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // 🔍 DIAGNOSTIC: Enhanced auth/me endpoint with detailed logging
   app.get("/api/auth/me", requireAuth, async (req, res) => {
     try {
+      console.log(`🔍 [AUTH/ME] Request from player: ${req.player?.username || req.player?.id}`);
+      console.log(`🔍 [AUTH/ME] Player data:`, {
+        id: req.player?.id,
+        telegramId: req.player?.telegramId,
+        username: req.player?.username,
+        isAdmin: req.player?.isAdmin
+      });
+      
       // 🎯 JSON-FIRST: Load from telegramId_username folder JSON
       const playerState = await getPlayerState(req.player!.id);
+      console.log(`✅ [AUTH/ME] Loaded player state for: ${playerState.username}`);
+      
       res.json({ success: true, player: playerState });
     } catch (error) {
-      logger.error('Auth error', { error: error instanceof Error ? error.message : 'Unknown error' });
+      console.error(`🔴 [AUTH/ME] Failed to load player ${req.player?.username}:`, error);
+      logger.error('Auth/me error', { 
+        playerId: req.player?.id,
+        username: req.player?.username,
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      });
       res.status(500).json({ error: 'Failed to fetch player data' });
     }
   });
 
+  // 🔍 ENHANCED: Dev auth with better debugging
   app.post("/api/auth/dev", async (req, res) => {
     if (process.env.NODE_ENV === 'production') {
       return res.status(403).json({ error: 'Development login not available in production' });
@@ -321,34 +374,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     try {
       const { username } = req.body;
+      console.log(`🔍 [DEV AUTH] Login request for username: ${username}`);
+      
       if (!username || username.trim().length === 0) {
         return res.status(400).json({ error: 'Username is required' });
       }
 
       const sanitizedUsername = username.trim().substring(0, 50);
       const devTelegramId = `dev_${sanitizedUsername.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+      
+      console.log(`🔍 [DEV AUTH] Generated telegramId: ${devTelegramId}`);
 
       let player = await storage.getPlayerByTelegramId(devTelegramId);
+      console.log(`🔍 [DEV AUTH] Player lookup result:`, {
+        found: !!player,
+        id: player?.id,
+        username: player?.username,
+        telegramId: player?.telegramId
+      });
 
       if (!player) {
+        console.log(`🔍 [DEV AUTH] Creating new dev player...`);
         const playerData = await masterDataService.createNewPlayerData(devTelegramId, sanitizedUsername);
         player = await storage.createPlayer(playerData);
         await savePlayerDataToJSON(player);
         console.log(`🎮 Created new dev player: ${sanitizedUsername} (${devTelegramId}_${sanitizedUsername})`);
       } else {
+        console.log(`🔍 [DEV AUTH] Updating existing player login time...`);
         await storage.updatePlayer(player.id, { lastLogin: new Date() });
         await savePlayerDataToJSON(player);
       }
 
       const sessionToken = generateSecureToken();
+      console.log(`🔍 [DEV AUTH] Generated session token: ${sessionToken.slice(0, 8)}...`);
+      
       await storage.createSession({
         playerId: player.id,
         token: sessionToken,
         expiresAt: getSessionExpiry(),
       });
+      
+      console.log(`✅ [DEV AUTH] Session created for player ${player.username}`);
+      logger.info('Dev auth successful', { username: player.username, playerId: player.id });
 
       res.json({ success: true, player, sessionToken });
     } catch (error) {
+      console.error(`🔴 [DEV AUTH] Failed:`, error);
       logger.error('Dev auth error', { error: error instanceof Error ? error.message : 'Unknown error' });
       res.status(500).json({ error: 'Authentication failed', details: (error as Error).message });
     }
@@ -489,7 +560,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Log pose updates
       if (updates.poses) {
-        console.log(`🎭 [UPDATE MEDIA] Updating poses:`, {
+        console.log(`🎪 [UPDATE MEDIA] Updating poses:`, {
           old: existingMedia.poses || [],
           new: updates.poses
         });
@@ -536,13 +607,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // 🎯 JSON-FIRST: Get player data (from telegramId_username folder)
+  // 🎯 JSON-FIRST: Get player data (from telegramId_username folder) - ENHANCED DEBUGGING
   app.get("/api/player/me", requireAuth, async (req, res) => {
     try {
+      console.log(`🔍 [PLAYER/ME] Request from: ${req.player?.username || req.player?.id}`);
+      
       const playerState = await getPlayerState(req.player!.id);
+      console.log(`✅ [PLAYER/ME] Successfully loaded state for: ${playerState.username}`);
+      console.log(`🔍 [PLAYER/ME] State summary:`, {
+        points: playerState.points,
+        level: playerState.level,
+        selectedCharacterId: playerState.selectedCharacterId,
+        displayImage: playerState.displayImage ? 'set' : 'null',
+        upgradesCount: Object.keys(playerState.upgrades).length,
+        unlockedCharacters: playerState.unlockedCharacters.length
+      });
+      
       res.json({ player: playerState });
     } catch (error) {
-      logger.error('Player fetch error', { error: error instanceof Error ? error.message : 'Unknown' });
+      console.error(`🔴 [PLAYER/ME] Failed for ${req.player?.username}:`, error);
+      logger.error('Player fetch error', { 
+        playerId: req.player?.id,
+        username: req.player?.username,
+        error: error instanceof Error ? error.message : 'Unknown' 
+      });
       res.status(500).json({ error: 'Failed to fetch player data' });
     }
   });
@@ -551,6 +639,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/player/me", requireAuth, async (req, res) => {
     try {
       const updates = req.body;
+      console.log(`🔍 [PLAYER/ME PATCH] Update request from: ${req.player?.username}`, Object.keys(updates));
       
       // Security: prevent admin escalation
       if (updates.isAdmin !== undefined) {
@@ -567,6 +656,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Apply updates via JSON-first manager
       const updatedState = await updatePlayerState(req.player!.id, updates);
+      console.log(`✅ [PLAYER/ME PATCH] Successfully updated: ${updatedState.username}`);
 
       // Handle sendBeacon requests (no response expected)
       if (req.headers['content-type']?.includes('text/plain')) {
@@ -576,12 +666,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
     } catch (error) {
-      logger.error('Player update error', { error: error instanceof Error ? error.message : 'Unknown' });
+      console.error(`🔴 [PLAYER/ME PATCH] Failed for ${req.player?.username}:`, error);
+      logger.error('Player update error', { 
+        playerId: req.player?.id,
+        username: req.player?.username,
+        error: error instanceof Error ? error.message : 'Unknown' 
+      });
       res.status(500).json({ error: 'Failed to update player' });
     }
   });
 
-  // 🎭 FIXED: Character selection with telegramId_username folder JSON
+  // 🎭 FIXED: Character selection with telegramId_username folder JSON - ENHANCED LOGGING
   app.post("/api/player/select-character", requireAuth, async (req, res) => {
     try {
       const { characterId } = req.body;
@@ -612,12 +707,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true, player: updatedState });
     } catch (error) {
       console.error(`🔴 [CHARACTER SELECT] FAILED for ${req.player!.username || req.player!.id}:`, error);
-      logger.error('Character selection error', { error: error instanceof Error ? error.message : 'Unknown' });
+      logger.error('Character selection error', { 
+        playerId: req.player?.id,
+        username: req.player?.username,
+        characterId: req.body.characterId,
+        error: error instanceof Error ? error.message : 'Unknown' 
+      });
       res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to select character' });
     }
   });
 
-  // 🖼️ FIXED: Set display image with telegramId_username folder JSON
+  // 🖼️ FIXED: Set display image with telegramId_username folder JSON - ENHANCED LOGGING
   app.post("/api/player/set-display-image", requireAuth, async (req, res) => {
     try {
       const { imageUrl } = req.body;
@@ -643,7 +743,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true, player: updatedState });
     } catch (error) {
       console.error(`🔴 [DISPLAY IMAGE] FAILED:`, error);
-      logger.error('Display image error', { error: error instanceof Error ? error.message : 'Unknown' });
+      logger.error('Display image error', { 
+        playerId: req.player?.id,
+        username: req.player?.username,
+        imageUrl: req.body.imageUrl,
+        error: error instanceof Error ? error.message : 'Unknown' 
+      });
       res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to set display image' });
     }
   });
@@ -652,22 +757,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/player/upgrades", requireAuth, async (req, res) => {
     try {
       const { upgradeId, level } = req.body;
+      console.log(`🛒 [UPGRADE] Player ${req.player?.username} purchasing ${upgradeId} level ${level}`);
+      
       const upgrade = getUpgradeFromMemory(upgradeId);
       
       if (!upgrade) {
+        console.log(`❌ [UPGRADE] Invalid upgrade: ${upgradeId}`);
         return res.status(400).json({ error: 'Invalid upgrade' });
       }
 
       if (level > upgrade.maxLevel) {
+        console.log(`❌ [UPGRADE] Level ${level} exceeds max ${upgrade.maxLevel} for ${upgradeId}`);
         return res.status(400).json({ error: 'Level exceeds maximum' });
       }
 
       const cost = upgrade.baseCost * Math.pow(upgrade.costMultiplier, level - 1);
       const updatedState = await purchaseUpgradeForPlayer(req.player!.id, upgradeId, level, cost);
       
+      console.log(`✅ [UPGRADE] Success for ${updatedState.username}`);
       res.json({ success: true, player: updatedState });
     } catch (error) {
-      logger.error('Upgrade purchase error', { error: error instanceof Error ? error.message : 'Unknown' });
+      console.error(`🔴 [UPGRADE] Failed for ${req.player?.username}:`, error);
+      logger.error('Upgrade purchase error', { 
+        playerId: req.player?.id,
+        username: req.player?.username,
+        upgradeId: req.body.upgradeId,
+        error: error instanceof Error ? error.message : 'Unknown' 
+      });
       res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to purchase upgrade' });
     }
   });
@@ -676,10 +792,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/player/health", requireAuth, async (req, res) => {
     try {
       const health = await playerStateManager.healthCheck();
+      console.log(`🔍 [PLAYER HEALTH] Check requested by: ${req.player?.username}`);
+      
       res.json({ 
         success: true, 
         health,
-        message: 'JSON-first player state system status'
+        message: 'JSON-first player state system status',
+        requestedBy: req.player?.username
       });
     } catch (error) {
       logger.error('Player state health check error', { error: error instanceof Error ? error.message : 'Unknown' });
@@ -711,6 +830,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: 'Player ID is required' });
       }
 
+      console.log(`⚡ [FORCE SYNC] Admin forcing sync for player: ${playerId}`);
       await playerStateManager.forceDatabaseSync(playerId);
       
       res.json({ 
@@ -728,7 +848,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const playerHealth = await playerStateManager.healthCheck();
       const masterDataReport = await masterDataService.getDataIntegrityReport();
-      const lunaLearningReport = lunaLearning.getLearningSummary();
+      const lunaLearningReport = await lunaLearning.getLearningSummary();
+      
+      console.log(`🔍 [SYSTEM HEALTH] Admin health check by: ${req.player?.username}`);
       
       res.json({ 
         success: true,
@@ -742,12 +864,90 @@ export async function registerRoutes(app: Express): Promise<Server> {
           lunaLearning: lunaLearningReport,
           uptime: process.uptime(),
           memory: process.memoryUsage(),
-          env: process.env.NODE_ENV
+          env: process.env.NODE_ENV,
+          requestedBy: req.player?.username
         }
       });
     } catch (error) {
       logger.error('System health error', { error: error instanceof Error ? error.message : 'Unknown' });
       res.status(500).json({ error: 'Failed to get system health' });
+    }
+  });
+
+  // 🔍 NEW: Debug endpoint to check specific player folder
+  app.get("/api/debug/player-folder/:playerId", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const { playerId } = req.params;
+      
+      console.log(`🔍 [DEBUG] Checking player folder for: ${playerId}`);
+      
+      // Get player from DB to get telegramId and username
+      const player = await storage.getPlayer(playerId);
+      if (!player) {
+        return res.status(404).json({ error: 'Player not found in database' });
+      }
+      
+      const playerStateManager_private = playerStateManager as any;
+      const folderName = playerStateManager_private.getFolderName(player.telegramId, player.username);
+      const jsonFileName = playerStateManager_private.getJsonFileName(player.telegramId, player.username);
+      const jsonPath = playerStateManager_private.getJsonPath(player.telegramId, player.username);
+      
+      // Check if folder and file exist
+      const folderPath = path.dirname(jsonPath);
+      
+      let folderExists = false;
+      let fileExists = false;
+      let folderContents: string[] = [];
+      let fileContent: any = null;
+      
+      try {
+        await fs.access(folderPath);
+        folderExists = true;
+        folderContents = await fs.readdir(folderPath).catch(() => []);
+        
+        try {
+          await fs.access(jsonPath);
+          fileExists = true;
+          const data = await fs.readFile(jsonPath, 'utf8');
+          fileContent = JSON.parse(data);
+        } catch {}
+      } catch {}
+      
+      const debugInfo = {
+        playerId,
+        player: {
+          id: player.id,
+          telegramId: player.telegramId,
+          username: player.username
+        },
+        expectedStructure: {
+          folderName,
+          jsonFileName,
+          fullPath: jsonPath
+        },
+        actualState: {
+          folderExists,
+          fileExists,
+          folderContents,
+          fileContentPreview: fileContent ? {
+            username: fileContent.username,
+            telegramId: fileContent.telegramId,
+            selectedCharacterId: fileContent.selectedCharacterId,
+            points: fileContent.points,
+            level: fileContent.level
+          } : null
+        }
+      };
+      
+      console.log(`🔍 [DEBUG] Player folder debug:`, debugInfo);
+      
+      res.json({
+        success: true,
+        debug: debugInfo
+      });
+    } catch (error) {
+      console.error(`🔴 [DEBUG] Player folder check failed:`, error);
+      res.status(500).json({ error: 'Debug check failed' });
     }
   });
   
@@ -756,7 +956,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   console.log('✅ All routes registered successfully');
   console.log('🎯 JSON-FIRST: Player system using telegramId_username folders: main-gamedata/player-data/{telegramId}_{username}/player_{username}.json');
   console.log('📁 Master-data templates available for admin create flows');
-  console.log('🌙 Luna Learning System active for error prevention');
+  console.log('🌙 Luna Learning System active (JSON parsing fixed)');
   console.log('📦 Migration endpoint available: POST /api/admin/migrate-player-files');
+  console.log('🔍 Debug endpoint available: GET /api/debug/player-folder/{playerId}');
+  console.log('🔇 Winston logging active with enhanced error tracking');
   return httpServer;
 }
