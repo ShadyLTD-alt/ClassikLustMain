@@ -4,7 +4,8 @@
   "username": "ShadyLTDx",
   "points": "13937",
   "energy": 3699,
-  "level": 2,
+  "energyMax": 1000,
+,  "level": 2,
   "experience": 0,
   "passiveIncomeRate": 235,
   "isAdmin": true,
@@ -13,7 +14,7 @@
   "upgrades": {
     "perTap": 30,
     "perHour": 19,
-    "energyMax": 17,
+    "energyMax": 17
     "energyRegen": 12,
     "criticalChance": 27,
     "incomeMultiplier": 7

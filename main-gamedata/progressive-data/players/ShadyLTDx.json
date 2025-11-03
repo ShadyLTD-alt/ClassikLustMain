@@ -1,0 +1,37 @@
+{
+  "id": "8e2e5ac9-d623-4daa-b797-ea332a805d31",
+  "telegramId": "dev_shadyltdx",
+  "username": "ShadyLTDx",
+  "points": 14747,
+  "lustPoints": 14747,
+  "lustGems": 0,
+  "energy": 3699,
+  "energyMax": 3700,
+  "level": 2,
+  "experience": 0,
+  "passiveIncomeRate": 235,
+  "upgrades": {
+    "perTap": 30,
+    "perHour": 19,
+    "energyMax": 17,
+    "energyRegen": 12,
+    "criticalChance": 27,
+    "incomeMultiplier": 7
+  },
+  "unlockedCharacters": [
+    "frost",
+    "shadow"
+  ],
+  "selectedCharacterId": "shadow",
+  "selectedImageId": "uploads/characters/Aria/avatar/1761957864312-894884737.jpg",
+  "displayImage": "/uploads/characters/Aria/character/1761957849613-446154351.png",
+  "isAdmin": true,
+  "lastLogin": "2025-11-03T03:36:15.455Z",
+  "createdAt": "2025-11-01T19:28:33.742Z",
+  "boostActive": false,
+  "boostMultiplier": 1,
+  "boostExpiresAt": null,
+  "boostEnergy": 0,
+  "totalTapsToday": 0,
+  "totalTapsAllTime": 0
+}
