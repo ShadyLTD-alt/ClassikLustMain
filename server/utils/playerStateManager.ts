@@ -48,6 +48,7 @@ class PlayerStateManager extends EventEmitter {
   private locks = new Map<string, AsyncLock>();
   private pendingSyncs = new Set<string>();
   private syncTimeouts = new Map<string, NodeJS.Timeout>();
+  private readonly playersDir: string;
   private readonly snapshotsDir: string;
 
   constructor() {
@@ -55,16 +56,23 @@ class PlayerStateManager extends EventEmitter {
     // 🔧 FIX: Set higher max listeners for this instance
     this.setMaxListeners(50);
     
+    // 📁 CORRECTED: Use main-gamedata/player-data/ as primary directory
+    this.playersDir = path.join(process.cwd(), 'main-gamedata', 'player-data');
+    // 📁 Snapshots are backup only
     this.snapshotsDir = path.join(process.cwd(), 'uploads', 'snapshots', 'players');
-    this.ensureSnapshotsDirectory();
+    
+    this.ensureDirectories();
   }
 
-  private async ensureSnapshotsDirectory(): Promise<void> {
+  private async ensureDirectories(): Promise<void> {
     try {
+      await fs.mkdir(this.playersDir, { recursive: true });
       await fs.mkdir(this.snapshotsDir, { recursive: true });
-      console.log('📁 Player snapshots directory ensured:', this.snapshotsDir);
+      console.log('📁 Player directories ensured:');
+      console.log('  📁 Primary:', this.playersDir);
+      console.log('  📁 Backup:', this.snapshotsDir);
     } catch (error) {
-      console.error('Failed to create snapshots directory:', error);
+      console.error('Failed to create player directories:', error);
     }
   }
 
@@ -91,7 +99,13 @@ class PlayerStateManager extends EventEmitter {
     return crypto.createHash('md5').update(JSON.stringify(critical)).digest('hex');
   }
 
-  // Load player state (JSON first, DB fallback)
+  // 📁 Generate proper filename based on telegramId and username
+  private getPlayerFileName(telegramId: string, username: string): string {
+    const sanitized = username.replace(/[^a-zA-Z0-9_-]/g, '_');
+    return `${telegramId}_${sanitized}.json`;
+  }
+
+  // Load player state (JSON first from main-gamedata, DB fallback)
   async loadPlayer(playerId: string): Promise<PlayerState> {
     const lock = this.getLock(playerId);
     
@@ -103,15 +117,16 @@ class PlayerStateManager extends EventEmitter {
 
       console.log(`📂 Loading player ${playerId} state...`);
       
-      // Try JSON first (source of truth)
-      let state = await this.loadFromSnapshot(playerId);
+      // Try JSON first from main-gamedata (source of truth)
+      let state = await this.loadFromMainJson(playerId);
       
       if (!state) {
-        console.log(`📂 No JSON found for ${playerId}, loading from DB...`);
+        console.log(`📂 No main JSON found for ${playerId}, loading from DB...`);
         // Fallback: load from DB and create initial JSON
         state = await this.loadFromDatabase(playerId);
         if (state) {
-          await this.saveSnapshot(playerId, state);
+          await this.saveMainJson(playerId, state);
+          await this.createBackupSnapshot(playerId, state);
         }
       }
 
@@ -143,10 +158,10 @@ class PlayerStateManager extends EventEmitter {
         }
       };
 
-      console.log(`💾 Updating player ${playerId} state to JSON...`);
+      console.log(`💾 Updating player ${playerId} state to main JSON...`);
       
-      // IMMEDIATE: Save to JSON (source of truth)
-      await this.saveSnapshot(playerId, newState);
+      // IMMEDIATE: Save to main-gamedata JSON (source of truth)
+      await this.saveMainJson(playerId, newState);
       
       // Update in-memory cache
       this.states.set(playerId, newState);
@@ -154,21 +169,23 @@ class PlayerStateManager extends EventEmitter {
       // 🔧 FIX: Debounced DB sync (prevent too many concurrent syncs)
       this.queueDatabaseSync(playerId, newState);
       
+      // Create backup every 10 updates
+      if (Math.random() < 0.1) {
+        this.createBackupSnapshot(playerId, newState);
+      }
+      
       console.log(`✅ Player ${playerId} state updated`);
       return newState;
     });
   }
 
-  // Atomic JSON snapshot save with file locking
-  private async saveSnapshot(playerId: string, state: PlayerState): Promise<void> {
-    const playerDir = path.join(this.snapshotsDir, playerId);
-    const filePath = path.join(playerDir, 'player.json');
+  // 📁 Save to main-gamedata directory with proper naming
+  private async saveMainJson(playerId: string, state: PlayerState): Promise<void> {
+    const filename = this.getPlayerFileName(state.telegramId, state.username);
+    const filePath = path.join(this.playersDir, filename);
     const lockPath = `${filePath}.lock`;
 
     try {
-      // Ensure player directory exists
-      await fs.mkdir(playerDir, { recursive: true });
-
       // 🔧 FIX: Shorter timeout and retry for file locking
       const release = await lockfile.lock(filePath, {
         lockfilePath: lockPath,
@@ -186,25 +203,30 @@ class PlayerStateManager extends EventEmitter {
         await fs.writeFile(tempPath, jsonData, 'utf8');
         await fs.rename(tempPath, filePath);
         
-        console.log(`💾 Player ${playerId} JSON snapshot saved atomically`);
+        console.log(`💾 Player ${playerId} main JSON saved: ${filename}`);
       } finally {
         await release();
       }
     } catch (error) {
-      console.error(`🔴 Failed to save player ${playerId} snapshot:`, error);
+      console.error(`🔴 Failed to save player ${playerId} main JSON:`, error);
       throw error;
     }
   }
 
-  // Load from JSON snapshot
-  private async loadFromSnapshot(playerId: string): Promise<PlayerState | null> {
-    const filePath = path.join(this.snapshotsDir, playerId, 'player.json');
-    
+  // 📁 Load from main-gamedata directory
+  private async loadFromMainJson(playerId: string): Promise<PlayerState | null> {
     try {
+      // First try to get player info from DB to build filename
+      const player = await storage.getPlayer(playerId);
+      if (!player) return null;
+      
+      const filename = this.getPlayerFileName(player.telegramId, player.username);
+      const filePath = path.join(this.playersDir, filename);
+      
       const data = await fs.readFile(filePath, 'utf8');
       const state = JSON.parse(data);
       
-      console.log(`📂 Player ${playerId} loaded from JSON snapshot`);
+      console.log(`📂 Player ${playerId} loaded from main JSON: ${filename}`);
       return {
         ...state,
         // Ensure dates are properly parsed
@@ -216,9 +238,9 @@ class PlayerStateManager extends EventEmitter {
       };
     } catch (error) {
       if ((error as any).code === 'ENOENT') {
-        return null; // No snapshot exists
+        return null; // No main JSON exists
       }
-      console.error(`🔴 Failed to load player ${playerId} snapshot:`, error);
+      console.error(`🔴 Failed to load player ${playerId} main JSON:`, error);
       return null;
     }
   }
@@ -378,15 +400,14 @@ class PlayerStateManager extends EventEmitter {
     }
   }
 
-  // Create backup snapshots (rotation)
-  async createBackup(playerId: string): Promise<void> {
+  // 💾 Create backup snapshots (separate from main data)
+  private async createBackupSnapshot(playerId: string, state: PlayerState): Promise<void> {
     const playerDir = path.join(this.snapshotsDir, playerId);
-    const currentPath = path.join(playerDir, 'player.json');
     const backupPath = path.join(playerDir, `backup-${Date.now()}.json`);
     
     try {
-      // Copy current to backup
-      await fs.copyFile(currentPath, backupPath);
+      await fs.mkdir(playerDir, { recursive: true });
+      await fs.writeFile(backupPath, JSON.stringify(state, null, 2), 'utf8');
       
       // Keep only last 5 backups
       const files = await fs.readdir(playerDir);
@@ -400,7 +421,7 @@ class PlayerStateManager extends EventEmitter {
         await fs.unlink(path.join(playerDir, backup.name));
       }
       
-      console.log(`💾 Created backup for player ${playerId}, keeping ${Math.min(backups.length, 5)} total`);
+      console.log(`💾 Created backup snapshot for player ${playerId}, keeping ${Math.min(backups.length, 5)} total`);
     } catch (error) {
       console.warn(`⚠️ Failed to create backup for player ${playerId}:`, error);
     }
@@ -435,22 +456,52 @@ class PlayerStateManager extends EventEmitter {
     await this.syncToDatabase(playerId, state);
   }
 
-  // 🔧 FIX: Enhanced health check with timeout info
-  async healthCheck(): Promise<{ jsonFiles: number; cachedPlayers: number; pendingSyncs: number; pendingTimeouts: number }> {
+  // 🔧 FIX: Enhanced health check with directory info
+  async healthCheck(): Promise<{ 
+    mainJsonFiles: number; 
+    backupSnapshots: number;
+    cachedPlayers: number; 
+    pendingSyncs: number; 
+    pendingTimeouts: number;
+    directories: {
+      main: string;
+      backup: string;
+    };
+  }> {
     try {
-      const playerDirs = await fs.readdir(this.snapshotsDir);
+      const mainFiles = await fs.readdir(this.playersDir).catch(() => []);
+      const backupDirs = await fs.readdir(this.snapshotsDir).catch(() => []);
+      
+      let totalBackups = 0;
+      for (const dir of backupDirs) {
+        try {
+          const backups = await fs.readdir(path.join(this.snapshotsDir, dir));
+          totalBackups += backups.filter(f => f.startsWith('backup-')).length;
+        } catch {}
+      }
+      
       return {
-        jsonFiles: playerDirs.length,
+        mainJsonFiles: mainFiles.filter(f => f.endsWith('.json')).length,
+        backupSnapshots: totalBackups,
         cachedPlayers: this.states.size,
         pendingSyncs: this.pendingSyncs.size,
-        pendingTimeouts: this.syncTimeouts.size
+        pendingTimeouts: this.syncTimeouts.size,
+        directories: {
+          main: this.playersDir,
+          backup: this.snapshotsDir
+        }
       };
     } catch {
       return {
-        jsonFiles: 0,
+        mainJsonFiles: 0,
+        backupSnapshots: 0,
         cachedPlayers: this.states.size,
         pendingSyncs: this.pendingSyncs.size,
-        pendingTimeouts: this.syncTimeouts.size
+        pendingTimeouts: this.syncTimeouts.size,
+        directories: {
+          main: this.playersDir,
+          backup: this.snapshotsDir
+        }
       };
     }
   }
@@ -509,6 +560,14 @@ export async function selectCharacterForPlayer(playerId: string, characterId: st
     selectedCharacterId: characterId,
     selectedImageId: null, // Reset to use character's default
     displayImage: null     // Reset to use character's default
+  });
+}
+
+export async function setDisplayImageForPlayer(playerId: string, imageUrl: string): Promise<PlayerState> {
+  console.log(`🖼️ Setting display image for player ${playerId}: ${imageUrl}`);
+  
+  return await playerStateManager.updatePlayer(playerId, {
+    displayImage: imageUrl
   });
 }
 
