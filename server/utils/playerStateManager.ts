@@ -32,15 +32,11 @@ interface PlayerState {
   totalTapsAllTime: number;
   lastDailyReset: Date;
   lastWeeklyReset: Date;
-  lastSync: {
-    timestamp: number;
-    hash: string;
-  };
+  lastSync: { timestamp: number; hash: string };
   createdAt: Date;
   updatedAt: Date;
 }
 
-// 🔧 FIX: Increase EventEmitter max listeners for JSON-first system
 EventEmitter.defaultMaxListeners = 20;
 
 class PlayerStateManager extends EventEmitter {
@@ -48,43 +44,41 @@ class PlayerStateManager extends EventEmitter {
   private locks = new Map<string, AsyncLock>();
   private pendingSyncs = new Set<string>();
   private syncTimeouts = new Map<string, NodeJS.Timeout>();
-  private readonly playersDir: string;
-  private readonly snapshotsDir: string;
+  private readonly playersRoot: string; // main-gamedata/player-data
+  private readonly snapshotsDir: string; // uploads/snapshots/players
 
   constructor() {
     super();
-    // 🔧 FIX: Set higher max listeners for this instance
     this.setMaxListeners(50);
-    
-    // 📁 CORRECTED: Use main-gamedata/player-data/ as primary directory
-    this.playersDir = path.join(process.cwd(), 'main-gamedata', 'player-data');
-    // 📁 Snapshots are backup only
+    this.playersRoot = path.join(process.cwd(), 'main-gamedata', 'player-data');
     this.snapshotsDir = path.join(process.cwd(), 'uploads', 'snapshots', 'players');
-    
     this.ensureDirectories();
   }
 
-  private async ensureDirectories(): Promise<void> {
-    try {
-      await fs.mkdir(this.playersDir, { recursive: true });
-      await fs.mkdir(this.snapshotsDir, { recursive: true });
-      console.log('📁 Player directories ensured:');
-      console.log('  📁 Primary:', this.playersDir);
-      console.log('  📁 Backup:', this.snapshotsDir);
-    } catch (error) {
-      console.error('Failed to create player directories:', error);
-    }
+  private async ensureDirectories() {
+    await fs.mkdir(this.playersRoot, { recursive: true });
+    await fs.mkdir(this.snapshotsDir, { recursive: true });
   }
 
-  // Get or create lock for player
   private getLock(playerId: string): AsyncLock {
-    if (!this.locks.has(playerId)) {
-      this.locks.set(playerId, new AsyncLock());
-    }
+    if (!this.locks.has(playerId)) this.locks.set(playerId, new AsyncLock());
     return this.locks.get(playerId)!;
   }
 
-  // Hash critical fields to detect changes
+  // New: folder name and file name helpers
+  private getFolderName(telegramId: string, username?: string | null): string {
+    const clean = (s: string) => s.replace(/[^a-zA-Z0-9_-]/g, '_');
+    if (username && username.trim() && username !== 'null' && username !== 'undefined') {
+      return `player-${clean(username.trim())}`;
+    }
+    return `player-${clean(telegramId)}`;
+  }
+
+  private getJsonPath(telegramId: string, username?: string | null): string {
+    const folder = this.getFolderName(telegramId, username);
+    return path.join(this.playersRoot, folder, 'player.json');
+  }
+
   private hashState(state: Partial<PlayerState>): string {
     const critical = {
       points: state.points,
@@ -99,174 +93,87 @@ class PlayerStateManager extends EventEmitter {
     return crypto.createHash('md5').update(JSON.stringify(critical)).digest('hex');
   }
 
-  // 📁 Generate proper filename: player-{username} or player-{telegramId} as fallback
-  private getPlayerFileName(telegramId: string, username?: string | null): string {
-    const cleanUsername = username?.trim();
-    
-    if (cleanUsername && cleanUsername !== '' && cleanUsername !== 'null' && cleanUsername !== 'undefined') {
-      const sanitized = cleanUsername.replace(/[^a-zA-Z0-9_-]/g, '_');
-      return `player-${sanitized}.json`;
-    } else {
-      // Fallback to telegramId if username is null/empty/invalid
-      const sanitizedTelegramId = telegramId.replace(/[^a-zA-Z0-9_-]/g, '_');
-      return `player-${sanitizedTelegramId}.json`;
-    }
-  }
-
-  // Load player state (JSON first from main-gamedata, DB fallback)
   async loadPlayer(playerId: string): Promise<PlayerState> {
     const lock = this.getLock(playerId);
-    
     return await lock.acquire(playerId, async () => {
-      // Return cached if available
-      if (this.states.has(playerId)) {
-        return this.states.get(playerId)!;
-      }
+      if (this.states.has(playerId)) return this.states.get(playerId)!;
 
-      console.log(`📂 Loading player ${playerId} state...`);
-      
-      // Try JSON first from main-gamedata (source of truth)
       let state = await this.loadFromMainJson(playerId);
-      
       if (!state) {
-        console.log(`📂 No main JSON found for ${playerId}, loading from DB...`);
-        // Fallback: load from DB and create initial JSON
         state = await this.loadFromDatabase(playerId);
         if (state) {
           await this.saveMainJson(playerId, state);
           await this.createBackupSnapshot(playerId, state);
         }
       }
-
-      if (!state) {
-        throw new Error(`Player ${playerId} not found in JSON or DB`);
-      }
-
+      if (!state) throw new Error(`Player ${playerId} not found`);
       this.states.set(playerId, state);
-      console.log(`✅ Player ${playerId} state loaded and cached`);
       return state;
     });
   }
 
-  // Update player state (immediate JSON + queued DB sync)
   async updatePlayer(playerId: string, updates: Partial<PlayerState>): Promise<PlayerState> {
     const lock = this.getLock(playerId);
-    
     return await lock.acquire(playerId, async () => {
-      const currentState = await this.loadPlayer(playerId);
-      
-      // Apply updates with timestamp
+      const current = await this.loadPlayer(playerId);
       const newState: PlayerState = {
-        ...currentState,
+        ...current,
         ...updates,
         updatedAt: new Date(),
-        lastSync: {
-          timestamp: Date.now(),
-          hash: this.hashState({ ...currentState, ...updates })
-        }
+        lastSync: { timestamp: Date.now(), hash: this.hashState({ ...current, ...updates }) }
       };
-
-      console.log(`💾 Updating player ${playerId} state to main JSON...`);
-      
-      // IMMEDIATE: Save to main-gamedata JSON (source of truth)
       await this.saveMainJson(playerId, newState);
-      
-      // Update in-memory cache
       this.states.set(playerId, newState);
-      
-      // 🔧 FIX: Debounced DB sync (prevent too many concurrent syncs)
       this.queueDatabaseSync(playerId, newState);
-      
-      // Create backup every 10 updates
-      if (Math.random() < 0.1) {
-        this.createBackupSnapshot(playerId, newState);
-      }
-      
-      console.log(`✅ Player ${playerId} state updated`);
+      if (Math.random() < 0.1) this.createBackupSnapshot(playerId, newState);
       return newState;
     });
   }
 
-  // 📁 Save to main-gamedata directory with proper naming
   private async saveMainJson(playerId: string, state: PlayerState): Promise<void> {
-    const filename = this.getPlayerFileName(state.telegramId, state.username);
-    const filePath = path.join(this.playersDir, filename);
+    const filePath = this.getJsonPath(state.telegramId, state.username);
+    const dir = path.dirname(filePath);
     const lockPath = `${filePath}.lock`;
-
+    await fs.mkdir(dir, { recursive: true });
+    const release = await lockfile.lock(filePath, { lockfilePath: lockPath, retries: 3, minTimeout: 50, maxTimeout: 500, realpath: false });
     try {
-      // 🔧 FIX: Shorter timeout and retry for file locking
-      const release = await lockfile.lock(filePath, {
-        lockfilePath: lockPath,
-        retries: 3,
-        minTimeout: 50,
-        maxTimeout: 500,
-        realpath: false
-      });
-
-      try {
-        // Atomic write: temp -> rename
-        const tempPath = `${filePath}.tmp`;
-        const jsonData = JSON.stringify(state, null, 2);
-        
-        await fs.writeFile(tempPath, jsonData, 'utf8');
-        await fs.rename(tempPath, filePath);
-        
-        console.log(`💾 Player ${state.username || state.telegramId} main JSON saved: ${filename}`);
-      } finally {
-        await release();
-      }
-    } catch (error) {
-      console.error(`🔴 Failed to save player ${playerId} main JSON:`, error);
-      throw error;
+      const tmp = `${filePath}.tmp`;
+      await fs.writeFile(tmp, JSON.stringify(state, null, 2), 'utf8');
+      await fs.rename(tmp, filePath);
+      console.log(`💾 Player JSON saved: ${filePath}`);
+    } finally {
+      await release();
     }
   }
 
-  // 📁 Load from main-gamedata directory
   private async loadFromMainJson(playerId: string): Promise<PlayerState | null> {
     try {
-      // First try to get player info from DB to build filename
       const player = await storage.getPlayer(playerId);
       if (!player) return null;
-      
-      const filename = this.getPlayerFileName(player.telegramId, player.username);
-      const filePath = path.join(this.playersDir, filename);
-      
+      const filePath = this.getJsonPath(player.telegramId, player.username);
       const data = await fs.readFile(filePath, 'utf8');
       const state = JSON.parse(data);
-      
-      console.log(`📂 Player ${player.username || player.telegramId} loaded from main JSON: ${filename}`);
       return {
         ...state,
-        // Ensure dates are properly parsed
         boostExpiresAt: state.boostExpiresAt ? new Date(state.boostExpiresAt) : null,
         lastDailyReset: new Date(state.lastDailyReset || Date.now()),
         lastWeeklyReset: new Date(state.lastWeeklyReset || Date.now()),
         createdAt: new Date(state.createdAt || Date.now()),
         updatedAt: new Date(state.updatedAt || Date.now())
       };
-    } catch (error) {
-      if ((error as any).code === 'ENOENT') {
-        return null; // No main JSON exists
-      }
-      console.error(`🔴 Failed to load player ${playerId} main JSON:`, error);
+    } catch (err: any) {
+      if (err.code === 'ENOENT') return null;
+      console.error('Failed to load player JSON:', err);
       return null;
     }
   }
 
-  // Load from database (fallback)
   private async loadFromDatabase(playerId: string): Promise<PlayerState | null> {
     try {
-      console.log(`🗃️ Loading player ${playerId} from database...`);
-      
       const player = await storage.getPlayer(playerId);
       if (!player) return null;
-      
       const upgrades = await storage.getPlayerUpgrades(playerId);
-      const upgradesMap = upgrades.reduce((acc, upgrade) => {
-        acc[upgrade.upgradeId] = upgrade.level;
-        return acc;
-      }, {} as Record<string, number>);
-
+      const upgradesMap = upgrades.reduce((acc, u) => { acc[u.upgradeId] = u.level; return acc; }, {} as Record<string, number>);
       const state: PlayerState = {
         id: player.id,
         telegramId: player.telegramId,
@@ -293,305 +200,94 @@ class PlayerStateManager extends EventEmitter {
         totalTapsAllTime: player.totalTapsAllTime || 0,
         lastDailyReset: player.lastDailyReset ? new Date(player.lastDailyReset) : new Date(),
         lastWeeklyReset: player.lastWeeklyReset ? new Date(player.lastWeeklyReset) : new Date(),
-        lastSync: {
-          timestamp: Date.now(),
-          hash: ''
-        },
+        lastSync: { timestamp: Date.now(), hash: '' },
         createdAt: player.createdAt ? new Date(player.createdAt) : new Date(),
         updatedAt: new Date()
       };
-
-      // Calculate initial hash
       state.lastSync.hash = this.hashState(state);
-      
-      console.log(`✅ Player ${player.username || player.telegramId} loaded from database`);
       return state;
-    } catch (error) {
-      console.error(`🔴 Failed to load player ${playerId} from database:`, error);
+    } catch (e) {
+      console.error('Failed to load from DB:', e);
       return null;
     }
   }
 
-  // 🔧 FIX: Improved debounced DB sync with proper cleanup
   private queueDatabaseSync(playerId: string, state: PlayerState) {
-    // Clear existing timeout for this player
-    const existingTimeout = this.syncTimeouts.get(playerId);
-    if (existingTimeout) {
-      clearTimeout(existingTimeout);
-      this.syncTimeouts.delete(existingTimeout);
-    }
-    
-    // Skip if already pending
-    if (this.pendingSyncs.has(playerId)) {
-      console.log(`⏳ Player ${playerId} already queued for sync, updating timeout...`);
-    }
-    
+    const existing = this.syncTimeouts.get(playerId);
+    if (existing) { clearTimeout(existing); this.syncTimeouts.delete(playerId); }
     this.pendingSyncs.add(playerId);
-    console.log(`🔄 Queuing DB sync for player ${playerId}...`);
-    
-    // 🔧 FIX: Use setTimeout with proper cleanup
-    const timeout = setTimeout(async () => {
-      try {
-        await this.syncToDatabase(playerId, state);
-      } catch (error) {
-        console.error(`🔴 DB sync failed for player ${playerId}:`, error);
-        // Emit error event for monitoring
-        this.emit('syncError', { playerId, error });
-      } finally {
-        this.pendingSyncs.delete(playerId);
-        this.syncTimeouts.delete(playerId);
-      }
-    }, 3000); // 🔧 FIX: Increased to 3 seconds to reduce API spam
-    
-    this.syncTimeouts.set(playerId, timeout);
+    const t = setTimeout(async () => {
+      try { await this.syncToDatabase(playerId, state); } catch (e) { this.emit('syncError', { playerId, error: e }); }
+      finally { this.pendingSyncs.delete(playerId); this.syncTimeouts.delete(playerId); }
+    }, 3000);
+    this.syncTimeouts.set(playerId, t);
   }
 
-  // Sync to database (only if changed)
   private async syncToDatabase(playerId: string, state: PlayerState) {
+    const cached = this.states.get(playerId);
+    if (!cached) return;
+    const currentHash = this.hashState(cached);
+    if (currentHash === state.lastSync.hash) return;
+    await storage.updatePlayer(playerId, {
+      points: state.points,
+      lustPoints: state.lustPoints,
+      lustGems: state.lustGems,
+      energy: state.energy,
+      energyMax: state.energyMax,
+      energyRegenRate: state.energyRegenRate,
+      level: state.level,
+      selectedCharacterId: state.selectedCharacterId,
+      selectedImageId: state.selectedImageId,
+      displayImage: state.displayImage,
+      unlockedCharacters: state.unlockedCharacters,
+      unlockedImages: state.unlockedImages,
+      passiveIncomeRate: state.passiveIncomeRate,
+      isAdmin: state.isAdmin,
+      boostActive: state.boostActive,
+      boostMultiplier: state.boostMultiplier,
+      boostExpiresAt: state.boostExpiresAt,
+      totalTapsToday: state.totalTapsToday,
+      totalTapsAllTime: state.totalTapsAllTime,
+      lastDailyReset: state.lastDailyReset,
+      lastWeeklyReset: state.lastWeeklyReset
+    });
+    for (const [id, lvl] of Object.entries(state.upgrades)) {
+      await storage.setPlayerUpgrade(playerId, id, lvl);
+    }
+    cached.lastSync = { timestamp: Date.now(), hash: currentHash };
+  }
+
+  private async createBackupSnapshot(playerId: string, state: PlayerState) {
+    const dir = path.join(this.snapshotsDir, playerId);
+    await fs.mkdir(dir, { recursive: true });
+    const backup = path.join(dir, `backup-${Date.now()}.json`);
+    await fs.writeFile(backup, JSON.stringify(state, null, 2), 'utf8');
     try {
-      // Check if we need to sync (compare hashes)
-      const currentCached = this.states.get(playerId);
-      if (!currentCached) {
-        console.log(`⚠️ Player ${playerId} not in cache during sync, skipping...`);
-        return;
+      const files = await fs.readdir(dir);
+      const backups = files.filter(f => f.startsWith('backup-') && f.endsWith('.json')).sort();
+      while (backups.length > 5) {
+        const f = backups.shift();
+        if (f) await fs.rm(path.join(dir, f));
       }
-
-      const currentHash = this.hashState(currentCached);
-      if (currentHash === state.lastSync.hash) {
-        return; // No need to log unchanged syncs
-      }
-
-      console.log(`🔄 Syncing player ${playerId} to database...`);
-      
-      // Update main player record
-      await storage.updatePlayer(playerId, {
-        points: state.points,
-        lustPoints: state.lustPoints,
-        lustGems: state.lustGems,
-        energy: state.energy,
-        energyMax: state.energyMax,
-        energyRegenRate: state.energyRegenRate,
-        level: state.level,
-        selectedCharacterId: state.selectedCharacterId,
-        selectedImageId: state.selectedImageId,
-        displayImage: state.displayImage,
-        unlockedCharacters: state.unlockedCharacters,
-        unlockedImages: state.unlockedImages,
-        passiveIncomeRate: state.passiveIncomeRate,
-        isAdmin: state.isAdmin,
-        boostActive: state.boostActive,
-        boostMultiplier: state.boostMultiplier,
-        boostExpiresAt: state.boostExpiresAt,
-        totalTapsToday: state.totalTapsToday,
-        totalTapsAllTime: state.totalTapsAllTime,
-        lastDailyReset: state.lastDailyReset,
-        lastWeeklyReset: state.lastWeeklyReset
-      });
-
-      // Update upgrades (only changed ones)
-      for (const [upgradeId, level] of Object.entries(state.upgrades)) {
-        await storage.setPlayerUpgrade(playerId, upgradeId, level);
-      }
-
-      // Update hash to mark as synced
-      currentCached.lastSync = {
-        timestamp: Date.now(),
-        hash: currentHash
-      };
-
-      console.log(`✅ Player ${state.username || state.telegramId} synced to DB`);
-      this.emit('syncSuccess', { playerId, timestamp: Date.now() });
-    } catch (error) {
-      console.error(`🔴 Database sync failed for player ${playerId}:`, error);
-      throw error;
-    }
+    } catch {}
   }
 
-  // 💾 Create backup snapshots (separate from main data)
-  private async createBackupSnapshot(playerId: string, state: PlayerState): Promise<void> {
-    const playerDir = path.join(this.snapshotsDir, playerId);
-    const backupPath = path.join(playerDir, `backup-${Date.now()}.json`);
-    
-    try {
-      await fs.mkdir(playerDir, { recursive: true });
-      await fs.writeFile(backupPath, JSON.stringify(state, null, 2), 'utf8');
-      
-      // Keep only last 5 backups
-      const files = await fs.readdir(playerDir);
-      const backups = files
-        .filter(f => f.startsWith('backup-') && f.endsWith('.json'))
-        .map(f => ({ name: f, time: parseInt(f.replace('backup-', '').replace('.json', '')) }))
-        .sort((a, b) => b.time - a.time); // Newest first
-      
-      // Delete old backups (keep 5)
-      for (const backup of backups.slice(5)) {
-        await fs.unlink(path.join(playerDir, backup.name));
-      }
-      
-      // Only log backup creation occasionally to reduce spam
-    } catch (error) {
-      // Only warn for backup failures, don't spam console
-    }
-  }
+  getCachedState(playerId: string): PlayerState | null { return this.states.get(playerId) || null; }
 
-  // Get cached state (no file I/O)
-  getCachedState(playerId: string): PlayerState | null {
-    return this.states.get(playerId) || null;
-  }
-
-  // 🔧 FIX: Improved cache clearing with timeout cleanup
-  clearCache(playerId: string): void {
-    // Clear any pending timeouts
-    const timeout = this.syncTimeouts.get(playerId);
-    if (timeout) {
-      clearTimeout(timeout);
-      this.syncTimeouts.delete(playerId);
-    }
-    
+  clearCache(playerId: string) {
+    const t = this.syncTimeouts.get(playerId); if (t) clearTimeout(t);
+    this.syncTimeouts.delete(playerId);
     this.states.delete(playerId);
     this.locks.delete(playerId);
     this.pendingSyncs.delete(playerId);
   }
 
-  // Force immediate DB sync
-  async forceDatabaseSync(playerId: string): Promise<void> {
+  async forceDatabaseSync(playerId: string) {
     const state = this.states.get(playerId);
-    if (!state) {
-      throw new Error(`Player ${playerId} not in cache`);
-    }
-    
+    if (!state) throw new Error('Player not in cache');
     await this.syncToDatabase(playerId, state);
   }
-
-  // 🔧 FIX: Enhanced health check with directory info
-  async healthCheck(): Promise<{ 
-    mainJsonFiles: number; 
-    backupSnapshots: number;
-    cachedPlayers: number; 
-    pendingSyncs: number; 
-    pendingTimeouts: number;
-    directories: {
-      main: string;
-      backup: string;
-    };
-  }> {
-    try {
-      const mainFiles = await fs.readdir(this.playersDir).catch(() => []);
-      const backupDirs = await fs.readdir(this.snapshotsDir).catch(() => []);
-      
-      let totalBackups = 0;
-      for (const dir of backupDirs) {
-        try {
-          const backups = await fs.readdir(path.join(this.snapshotsDir, dir));
-          totalBackups += backups.filter(f => f.startsWith('backup-')).length;
-        } catch {}
-      }
-      
-      return {
-        mainJsonFiles: mainFiles.filter(f => f.endsWith('.json')).length,
-        backupSnapshots: totalBackups,
-        cachedPlayers: this.states.size,
-        pendingSyncs: this.pendingSyncs.size,
-        pendingTimeouts: this.syncTimeouts.size,
-        directories: {
-          main: this.playersDir,
-          backup: this.snapshotsDir
-        }
-      };
-    } catch {
-      return {
-        mainJsonFiles: 0,
-        backupSnapshots: 0,
-        cachedPlayers: this.states.size,
-        pendingSyncs: this.pendingSyncs.size,
-        pendingTimeouts: this.syncTimeouts.size,
-        directories: {
-          main: this.playersDir,
-          backup: this.snapshotsDir
-        }
-      };
-    }
-  }
-
-  // 🔧 FIX: Cleanup method for graceful shutdown
-  async cleanup(): Promise<void> {
-    console.log('🧹 Cleaning up PlayerStateManager...');
-    
-    // Clear all timeouts
-    for (const [playerId, timeout] of this.syncTimeouts.entries()) {
-      clearTimeout(timeout);
-    }
-    this.syncTimeouts.clear();
-    
-    // Wait for pending syncs with timeout
-    if (this.pendingSyncs.size > 0) {
-      console.log(`⏳ Waiting for ${this.pendingSyncs.size} pending syncs...`);
-      
-      let attempts = 0;
-      while (this.pendingSyncs.size > 0 && attempts < 30) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-        attempts++;
-      }
-      
-      if (this.pendingSyncs.size > 0) {
-        console.warn(`⚠️ ${this.pendingSyncs.size} syncs still pending after cleanup timeout`);
-      } else {
-        console.log('✅ All pending syncs completed');
-      }
-    }
-    
-    // Clear all listeners
-    this.removeAllListeners();
-    
-    console.log('✅ PlayerStateManager cleanup complete');
-  }
 }
 
-// Global singleton instance
 export const playerStateManager = new PlayerStateManager();
-
-// Helper functions for common operations
-export async function getPlayerState(playerId: string): Promise<PlayerState> {
-  return await playerStateManager.loadPlayer(playerId);
-}
-
-export async function updatePlayerState(playerId: string, updates: Partial<PlayerState>): Promise<PlayerState> {
-  return await playerStateManager.updatePlayer(playerId, updates);
-}
-
-export async function selectCharacterForPlayer(playerId: string, characterId: string): Promise<PlayerState> {
-  console.log(`🎭 [SELECT] Player ${playerId} -> Character ${characterId}`);
-  
-  return await playerStateManager.updatePlayer(playerId, {
-    selectedCharacterId: characterId,
-    selectedImageId: null, // Reset to use character's default
-    displayImage: null     // Reset to use character's default
-  });
-}
-
-export async function setDisplayImageForPlayer(playerId: string, imageUrl: string): Promise<PlayerState> {
-  console.log(`🖼️ [DISPLAY] Player ${playerId} -> Image: ${imageUrl}`);
-  
-  return await playerStateManager.updatePlayer(playerId, {
-    displayImage: imageUrl
-  });
-}
-
-export async function purchaseUpgradeForPlayer(playerId: string, upgradeId: string, newLevel: number, cost: number): Promise<PlayerState> {
-  console.log(`🛒 Player ${playerId} purchasing upgrade ${upgradeId} level ${newLevel} for ${cost} points`);
-  
-  const currentState = await playerStateManager.loadPlayer(playerId);
-  
-  if (currentState.points < cost) {
-    throw new Error('Insufficient points');
-  }
-  
-  return await playerStateManager.updatePlayer(playerId, {
-    points: currentState.points - cost,
-    lustPoints: currentState.lustPoints - cost,
-    upgrades: {
-      ...currentState.upgrades,
-      [upgradeId]: newLevel
-    }
-  });
-}
+export default playerStateManager;
