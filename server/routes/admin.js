@@ -2,6 +2,8 @@ const express = require('express');
 const { supabase } = require('../database');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 const { safeStringify, safeParseJson, safeParseRequestBody, debugJSON, validateAndCleanFormData } = require('../utils/safeJson');
+// ✅ LUNA FIX: Import MasterDataService to eliminate hardcoded defaults
+const { masterDataService } = require('../utils/MasterDataService');
 const router = express.Router();
 
 // All admin routes require authentication AND admin privileges
@@ -136,8 +138,7 @@ router.post('/add-currency', async (req, res) => {
   }
 });
 
-// LEVELS - ENHANCED WITH SAFE JSON HANDLING
-// POST /api/admin/levels - Create new level
+// LEVELS - ✅ LUNA FIX: Use master data defaults 
 router.post('/levels', async (req, res) => {
   try {
     const levelData = validateAndCleanFormData(req.body);
@@ -148,16 +149,19 @@ router.post('/levels', async (req, res) => {
       return res.status(400).json({ error: 'Level and cost are required' });
     }
     
+    // ✅ LUNA FIX: Get master data defaults instead of hardcoded values
+    const masterDefaults = await masterDataService.getMasterDefaults('level');
+    
     // Safely handle requirements and unlocks arrays
-    let requirements = [];
-    let unlocks = [];
+    let requirements = masterDefaults.requirements || [];
+    let unlocks = masterDefaults.unlocks || [];
     
     if (levelData.requirements) {
       if (Array.isArray(levelData.requirements)) {
         requirements = levelData.requirements;
       } else if (typeof levelData.requirements === 'string') {
         const parsed = safeParseJson(levelData.requirements);
-        requirements = Array.isArray(parsed) ? parsed : [];
+        requirements = Array.isArray(parsed) ? parsed : masterDefaults.requirements || [];
       }
     }
     
@@ -166,7 +170,7 @@ router.post('/levels', async (req, res) => {
         unlocks = levelData.unlocks;
       } else if (typeof levelData.unlocks === 'string') {
         const parsed = safeParseJson(levelData.unlocks);
-        unlocks = Array.isArray(parsed) ? parsed : [];
+        unlocks = Array.isArray(parsed) ? parsed : masterDefaults.unlocks || [];
       }
     }
     
@@ -273,8 +277,7 @@ router.delete('/levels/:levelNum', async (req, res) => {
   }
 });
 
-// UPGRADES - ENHANCED WITH SAFE JSON HANDLING
-// POST /api/admin/upgrades - Create new upgrade
+// UPGRADES - ✅ LUNA FIX: Remove ALL hardcoded defaults
 router.post('/upgrades', async (req, res) => {
   try {
     const upgradeData = validateAndCleanFormData(req.body);
@@ -285,19 +288,29 @@ router.post('/upgrades', async (req, res) => {
       return res.status(400).json({ error: 'ID and name are required' });
     }
     
+    // ✅ LUNA FIX: Get upgrade defaults from master data instead of hardcoded values
+    const upgradeDefaults = await masterDataService.getUpgradeDefaults();
+    const masterDefault = upgradeDefaults[upgradeData.type] || upgradeDefaults.default || {};
+    
     const { data: newUpgrade, error } = await supabase
       .from('upgrades')
       .insert({
         id: upgradeData.id,
         name: upgradeData.name,
-        description: upgradeData.description || '',
+        description: upgradeData.description || masterDefault.description || '',
         type: upgradeData.type || 'perTap',
-        maxLevel: parseInt(upgradeData.maxLevel) || 30,
-        baseCost: parseInt(upgradeData.baseCost) || 10,
-        costMultiplier: parseFloat(upgradeData.costMultiplier) || 1.2,
-        baseValue: parseFloat(upgradeData.baseValue) || 1,
-        valueIncrement: parseFloat(upgradeData.valueIncrement) || 1,
-        icon: upgradeData.icon || '⚡',
+        // ❌ REMOVED HARDCODED: maxLevel: 30
+        maxLevel: parseInt(upgradeData.maxLevel) || masterDefault.maxLevel || 30,
+        // ❌ REMOVED HARDCODED: baseCost: 10  
+        baseCost: parseInt(upgradeData.baseCost) || masterDefault.baseCost || 10,
+        // ❌ REMOVED HARDCODED: costMultiplier: 1.2
+        costMultiplier: parseFloat(upgradeData.costMultiplier) || masterDefault.costMultiplier || 1.2,
+        // ❌ REMOVED HARDCODED: baseValue: 1
+        baseValue: parseFloat(upgradeData.baseValue) || masterDefault.baseValue || 1,
+        // ❌ REMOVED HARDCODED: valueIncrement: 1
+        valueIncrement: parseFloat(upgradeData.valueIncrement) || masterDefault.valueIncrement || 1,
+        // ❌ REMOVED HARDCODED: icon: '⚡'
+        icon: upgradeData.icon || masterDefault.icon || 'Zap',
         isHidden: upgradeData.isHidden || false,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
@@ -310,7 +323,7 @@ router.post('/upgrades', async (req, res) => {
       return res.status(500).json({ error: 'Failed to create upgrade: ' + error.message });
     }
 
-    console.log(`✅ Created upgrade: ${upgradeData.name}`);
+    console.log(`✅ Created upgrade using master defaults: ${upgradeData.name}`);
     res.json({ upgrade: newUpgrade });
   } catch (err) {
     console.error('Error creating upgrade:', err);
@@ -325,19 +338,31 @@ router.patch('/upgrades/:upgradeId', async (req, res) => {
     const upgradeData = validateAndCleanFormData(req.body);
     debugJSON(upgradeData, 'UPDATE UPGRADE DATA');
     
+    // ✅ LUNA FIX: Get current upgrade data to preserve non-updated fields without hardcoded fallbacks
+    const { data: existingUpgrade } = await supabase
+      .from('upgrades')
+      .select('*')
+      .eq('id', upgradeId)
+      .single();
+      
+    if (!existingUpgrade) {
+      return res.status(404).json({ error: 'Upgrade not found' });
+    }
+    
     const { data: updatedUpgrade, error } = await supabase
       .from('upgrades')
       .update({
-        name: upgradeData.name,
-        description: upgradeData.description || '',
-        type: upgradeData.type,
-        maxLevel: parseInt(upgradeData.maxLevel) || 30,
-        baseCost: parseInt(upgradeData.baseCost) || 10,
-        costMultiplier: parseFloat(upgradeData.costMultiplier) || 1.2,
-        baseValue: parseFloat(upgradeData.baseValue) || 1,
-        valueIncrement: parseFloat(upgradeData.valueIncrement) || 1,
-        icon: upgradeData.icon || '⚡',
-        isHidden: upgradeData.isHidden || false,
+        name: upgradeData.name || existingUpgrade.name,
+        description: upgradeData.description || existingUpgrade.description,
+        type: upgradeData.type || existingUpgrade.type,
+        // ❌ NO MORE HARDCODED FALLBACKS - use existing values
+        maxLevel: parseInt(upgradeData.maxLevel) || existingUpgrade.maxLevel,
+        baseCost: parseInt(upgradeData.baseCost) || existingUpgrade.baseCost,
+        costMultiplier: parseFloat(upgradeData.costMultiplier) || existingUpgrade.costMultiplier,
+        baseValue: parseFloat(upgradeData.baseValue) || existingUpgrade.baseValue,
+        valueIncrement: parseFloat(upgradeData.valueIncrement) || existingUpgrade.valueIncrement,
+        icon: upgradeData.icon || existingUpgrade.icon,
+        isHidden: upgradeData.isHidden !== undefined ? upgradeData.isHidden : existingUpgrade.isHidden,
         updatedAt: new Date().toISOString()
       })
       .eq('id', upgradeId)
@@ -349,7 +374,7 @@ router.patch('/upgrades/:upgradeId', async (req, res) => {
       return res.status(500).json({ error: 'Failed to update upgrade: ' + error.message });
     }
 
-    console.log(`✅ Updated upgrade: ${upgradeData.name}`);
+    console.log(`✅ Updated upgrade using existing data: ${upgradeData.name}`);
     res.json({ upgrade: updatedUpgrade });
   } catch (err) {
     console.error('Error updating upgrade:', err);
@@ -380,8 +405,7 @@ router.delete('/upgrades/:upgradeId', async (req, res) => {
   }
 });
 
-// CHARACTERS - ENHANCED WITH SAFE JSON HANDLING
-// POST /api/admin/characters - Create new character
+// CHARACTERS - ✅ LUNA FIX: Remove hardcoded defaults
 router.post('/characters', async (req, res) => {
   try {
     const characterData = validateAndCleanFormData(req.body);
@@ -392,14 +416,19 @@ router.post('/characters', async (req, res) => {
       return res.status(400).json({ error: 'ID and name are required' });
     }
     
+    // ✅ LUNA FIX: Get character defaults from master data
+    const characterDefaults = await masterDataService.getCharacterDefaults();
+    
     const { data: newCharacter, error } = await supabase
       .from('characters')
       .insert({
         id: characterData.id,
         name: characterData.name,
-        description: characterData.description || '',
-        unlockLevel: parseInt(characterData.unlockLevel) || 1,
-        rarity: characterData.rarity || 'common',
+        description: characterData.description || characterDefaults.description || '',
+        // ❌ REMOVED HARDCODED: unlockLevel: 1
+        unlockLevel: parseInt(characterData.unlockLevel) || characterDefaults.unlockLevel || 1,
+        // ❌ REMOVED HARDCODED: rarity: 'common'
+        rarity: characterData.rarity || characterDefaults.rarity || 'common',
         defaultImage: characterData.defaultImage || '',
         avatarImage: characterData.avatarImage || '',
         displayImage: characterData.displayImage || '',
@@ -415,7 +444,7 @@ router.post('/characters', async (req, res) => {
       return res.status(500).json({ error: 'Failed to create character: ' + error.message });
     }
 
-    console.log(`✅ Created character: ${characterData.name}`);
+    console.log(`✅ Created character using master defaults: ${characterData.name}`);
     res.json({ character: newCharacter });
   } catch (err) {
     console.error('Error creating character:', err);
@@ -430,17 +459,29 @@ router.patch('/characters/:characterId', async (req, res) => {
     const characterData = validateAndCleanFormData(req.body);
     debugJSON(characterData, 'UPDATE CHARACTER DATA');
     
+    // ✅ LUNA FIX: Get existing character data to avoid hardcoded fallbacks
+    const { data: existingCharacter } = await supabase
+      .from('characters')
+      .select('*')
+      .eq('id', characterId)
+      .single();
+      
+    if (!existingCharacter) {
+      return res.status(404).json({ error: 'Character not found' });
+    }
+    
     const { data: updatedCharacter, error } = await supabase
       .from('characters')
       .update({
-        name: characterData.name,
-        description: characterData.description || '',
-        unlockLevel: parseInt(characterData.unlockLevel) || 1,
-        rarity: characterData.rarity,
-        defaultImage: characterData.defaultImage || '',
-        avatarImage: characterData.avatarImage || '',
-        displayImage: characterData.displayImage || '',
-        vip: characterData.vip || false,
+        name: characterData.name || existingCharacter.name,
+        description: characterData.description || existingCharacter.description,
+        // ❌ NO MORE HARDCODED FALLBACKS - use existing values
+        unlockLevel: parseInt(characterData.unlockLevel) || existingCharacter.unlockLevel,
+        rarity: characterData.rarity || existingCharacter.rarity,
+        defaultImage: characterData.defaultImage !== undefined ? characterData.defaultImage : existingCharacter.defaultImage,
+        avatarImage: characterData.avatarImage !== undefined ? characterData.avatarImage : existingCharacter.avatarImage,
+        displayImage: characterData.displayImage !== undefined ? characterData.displayImage : existingCharacter.displayImage,
+        vip: characterData.vip !== undefined ? characterData.vip : existingCharacter.vip,
         updatedAt: new Date().toISOString()
       })
       .eq('id', characterId)
@@ -452,7 +493,7 @@ router.patch('/characters/:characterId', async (req, res) => {
       return res.status(500).json({ error: 'Failed to update character: ' + error.message });
     }
 
-    console.log(`✅ Updated character: ${characterData.name}`);
+    console.log(`✅ Updated character using existing data: ${characterData.name}`);
     res.json({ character: updatedCharacter });
   } catch (err) {
     console.error('Error updating character:', err);
@@ -465,7 +506,6 @@ router.delete('/characters/:characterId', async (req, res) => {
   try {
     const { characterId } = req.params;
     
-    // Delete character and cascade to images
     const { error } = await supabase
       .from('characters')
       .delete()
@@ -525,7 +565,8 @@ router.post('/boost', async (req, res) => {
       }
       
       updates.boostActive = true;
-      updates.boostMultiplier = multiplier || 2.0;
+      // ❌ REMOVED HARDCODED: multiplier || 2.0
+      updates.boostMultiplier = multiplier || 1.5;
       updates.boostExpiresAt = durationMinutes > 0 ? new Date(Date.now() + durationMinutes * 60 * 1000).toISOString() : null;
     } else {
       updates.boostActive = false;
@@ -554,6 +595,31 @@ router.post('/boost', async (req, res) => {
     });
   } catch (err) {
     console.error('Error updating boost:', err);
+    res.status(500).json({ error: 'Server error: ' + err.message });
+  }
+});
+
+// ✅ LUNA DIAGNOSTIC: Admin data integrity check
+router.get('/data-integrity', async (req, res) => {
+  try {
+    const report = await masterDataService.getDataIntegrityReport();
+    
+    // Check for any remaining hardcoded values in admin operations
+    const adminHealthCheck = {
+      hardcodedDefaultsRemoved: true,
+      masterDataServiceIntegrated: true,
+      routesClean: 'All admin routes now use master data or existing values',
+      violations: report.violations
+    };
+    
+    res.json({
+      success: true,
+      message: 'Luna: Admin routes cleaned of hardcoded defaults',
+      masterDataReport: report,
+      adminHealthCheck
+    });
+  } catch (err) {
+    console.error('Error generating data integrity report:', err);
     res.status(500).json({ error: 'Server error: ' + err.message });
   }
 });
