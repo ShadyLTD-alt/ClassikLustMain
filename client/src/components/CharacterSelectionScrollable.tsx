@@ -31,6 +31,7 @@ const CharacterSelectionScrollable: React.FC<CharacterSelectionScrollableProps> 
   const [activeTab, setActiveTab] = useState<'all' | 'unlocked' | 'locked' | 'vip'>('all');
   const [showGallery, setShowGallery] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [imageErrors, setImageErrors] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!isOpen) return;
@@ -40,40 +41,85 @@ const CharacterSelectionScrollable: React.FC<CharacterSelectionScrollableProps> 
     else if (characters.length) setHighlighted(characters[0] as Character);
   }, [isOpen, state?.selectedCharacterId, characters]);
 
-  // 🎯 JSON-FIRST: Use dedicated character selection endpoint
+  // 🎯 JSON-FIRST: Use dedicated character selection endpoint with better error handling
   const persistSelection = async (characterId: string) => {
+    if (saving) return;
     setSaving(true);
+    
     try {
       console.log(`🎭 Selecting character ${characterId}...`);
+      
+      const sessionToken = localStorage.getItem('sessionToken');
+      if (!sessionToken) {
+        throw new Error('No session token found');
+      }
       
       const response = await fetch('/api/player/select-character', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json', 
-          'Authorization': `Bearer ${localStorage.getItem('sessionToken')}` 
+          'Authorization': `Bearer ${sessionToken}` 
         },
-        body: JSON.stringify({ characterId })
+        body: JSON.stringify({ characterId }),
+        // 🔧 FIX: Add abort controller to prevent hanging requests
+        signal: AbortSignal.timeout(10000) // 10 second timeout
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
+        const errorData = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
         throw new Error(errorData.error || `HTTP ${response.status}`);
       }
 
       const result = await response.json();
-      console.log(`✅ Character ${characterId} selected successfully`, result);
+      console.log(`✅ Character ${characterId} selected successfully`);
       
-      // Trigger context refresh (the new JSON-first data will be loaded)
-      window.location.reload(); // Simple refresh to load new state
+      if (onSelect && highlighted) {
+        onSelect(highlighted);
+      }
       
-      onSelect && highlighted && onSelect(highlighted);
       onClose();
+      
+      // 🔧 FIX: Just close the modal - let the game context handle the refresh
+      // The GameContext autosync will pick up the change within 10 seconds
+      
     } catch (error) {
       console.error('🔴 Failed to save character selection:', error);
-      alert(`Failed to select character: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      
+      let errorMessage = 'Unknown error occurred';
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          errorMessage = 'Request timed out. Please try again.';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
+      alert(`Failed to select character: ${errorMessage}`);
     } finally {
       setSaving(false);
     }
+  };
+
+  // Handle image load errors
+  const handleImageError = (imageUrl: string) => {
+    console.warn(`🔴 Failed to load image: ${imageUrl}`);
+    setImageErrors(prev => new Set(prev).add(imageUrl));
+  };
+
+  // Get fallback image URL
+  const getFallbackImageUrl = (character: any): string | null => {
+    const { defaultImage, avatarImage, displayImage } = character;
+    
+    // Try each image in order, skipping ones that failed to load
+    const candidates = [displayImage, defaultImage, avatarImage].filter(Boolean);
+    
+    for (const url of candidates) {
+      if (!imageErrors.has(url)) {
+        return url;
+      }
+    }
+    
+    return null; // All images failed
   };
 
   const getRarityConfig = (rarity: string) => {
@@ -135,16 +181,25 @@ const CharacterSelectionScrollable: React.FC<CharacterSelectionScrollableProps> 
                   const unlocked = state?.unlockedCharacters?.includes(c.id) || c.unlockLevel <= (state?.level || 1);
                   const rare = getRarityConfig(c.rarity);
                   const selected = highlighted?.id === c.id;
+                  const fallbackImage = getFallbackImageUrl(c);
+                  
                   return (
                     <div key={c.id} onClick={() => setHighlighted(c as Character)} className={`relative bg-gray-800/50 border-2 rounded-xl p-2 cursor-pointer transition-all ${selected? `${rare.border} ring-2 ring-purple-400/50 bg-purple-900/30` : unlocked? `${rare.border}` : 'border-gray-600 opacity-60'}`}>
                       <div className="aspect-[2/3] bg-gradient-to-br from-gray-700 to-gray-800 rounded-lg mb-2 flex items-center justify-center overflow-hidden">
                         {!unlocked ? (
                           <div className="text-center"><Lock className="w-6 h-6 text-gray-500 mb-1"/><div className="text-xs text-gray-400 font-semibold">Lv{c.unlockLevel}</div></div>
-                        ) : c.defaultImage ? (
-                          <img src={c.defaultImage} alt={c.name} className="w-full h-full object-cover" onError={(e)=>{(e.target as HTMLImageElement).src='/uploads/placeholder-character.jpg';}}/>
+                        ) : fallbackImage ? (
+                          <img 
+                            src={fallbackImage} 
+                            alt={c.name} 
+                            className="w-full h-full object-cover" 
+                            onError={() => handleImageError(fallbackImage)}
+                            loading="lazy"
+                          />
                         ) : (
                           <div className={`w-full h-full bg-gradient-to-br ${rare.gradient} flex items-center justify-center`}>
                             <Crown className="w-8 h-8 text-white/60"/>
+                            <div className="absolute bottom-1 left-1 text-xs text-white/80 bg-black/50 px-1 rounded">No Image</div>
                           </div>
                         )}
                       </div>
@@ -168,8 +223,25 @@ const CharacterSelectionScrollable: React.FC<CharacterSelectionScrollableProps> 
             </>) : 'Pick a character'}
           </div>
           <div className="flex gap-2">
-            <button onClick={() => setShowGallery(true)} disabled={!highlighted} className="px-3 py-2 rounded bg-gray-700 text-white hover:bg-gray-600 disabled:opacity-50">Open Gallery</button>
-            <button onClick={() => highlighted && isHighlightedUnlocked && persistSelection(highlighted.id)} disabled={!highlighted || !isHighlightedUnlocked || saving} className="px-4 py-2 rounded bg-purple-600 hover:bg-purple-700 text-white disabled:opacity-50">{saving ? 'Saving…' : 'Select'}</button>
+            <button 
+              onClick={() => setShowGallery(true)} 
+              disabled={!highlighted} 
+              className="px-3 py-2 rounded bg-gray-700 text-white hover:bg-gray-600 disabled:opacity-50"
+            >
+              Open Gallery
+            </button>
+            <button 
+              onClick={() => highlighted && isHighlightedUnlocked && persistSelection(highlighted.id)} 
+              disabled={!highlighted || !isHighlightedUnlocked || saving} 
+              className="px-4 py-2 rounded bg-purple-600 hover:bg-purple-700 text-white disabled:opacity-50 min-w-[80px]"
+            >
+              {saving ? (
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
+                  <span>Saving...</span>
+                </div>
+              ) : 'Select'}
+            </button>
           </div>
         </div>
       </div>
@@ -186,7 +258,16 @@ const CharacterSelectionScrollable: React.FC<CharacterSelectionScrollableProps> 
               <div className="p-4 grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
                 {images.filter(img=> img.characterId===highlighted?.id && !img.isHidden).map(img=> (
                   <div key={img.id} className="aspect-square rounded-lg overflow-hidden border border-gray-700">
-                    <img src={img.url} alt="img" className="w-full h-full object-cover"/>
+                    <img 
+                      src={img.url} 
+                      alt="Gallery image" 
+                      className="w-full h-full object-cover"
+                      loading="lazy"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.src = '/uploads/placeholder-character.jpg';
+                      }}
+                    />
                   </div>
                 ))}
                 {images.filter(img=> img.characterId===highlighted?.id && !img.isHidden).length===0 && (
