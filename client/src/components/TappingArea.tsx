@@ -68,7 +68,7 @@ const TappingArea: React.FC<TappingAreaProps> = ({ className = '', onTap }) => {
   // Handle tap with proper energy management
   const handleTap = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
     const currentEnergy = gameData?.energy || 0;
-    const maxEnergy = gameData?.maxEnergy || 1000;
+    const energyMax = gameData?.energyMax || 1000;
     const currentLP = gameData?.lustPoints || 0;
     
     // Check if player has enough energy
@@ -271,7 +271,7 @@ const TappingArea: React.FC<TappingAreaProps> = ({ className = '', onTap }) => {
       {/* Debug info (dev only) */}
       {process.env.NODE_ENV === 'development' && (
         <div className="absolute top-2 left-2 text-xs text-white/50 bg-black/50 p-2 rounded">
-          <div>Energy: {gameData?.energy || 0}/{gameData?.maxEnergy || 1000}</div>
+          <div>Energy: {gameData?.energy || 0}/{gameData?.energyMax || 1000}</div>
           <div>LP: {(gameData?.lustPoints || 0).toLocaleString()}</div>
           <div>Combo: {comboCount}x</div>
           <div>Save Status: {debouncedSave.status().saving ? 'Saving...' : debouncedSave.status().pendingChanges ? 'Pending' : 'Saved'}</div>

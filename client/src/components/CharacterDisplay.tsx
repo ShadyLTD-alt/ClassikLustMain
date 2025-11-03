@@ -123,7 +123,7 @@ export default function CharacterDisplay() {
       {/* Tap Value Info for Admin Debug */}
       {state.isAdmin && (
         <div className="mt-4 text-xs text-gray-400 text-center space-y-1">
-          <div>Tap Value: +{state.lastTapValue || calculateTapValue()} | Energy: {state.energy}/{state.maxEnergy}</div>
+          <div>Tap Value: +{state.lastTapValue || calculateTapValue()} | Energy: {state.energy}/{state.energyMax}</div>
           <div className="text-purple-400">🌙 LunaBug: {(window as any).LunaBug ? 'Online' : 'Offline'}</div>
         </div>
       )}

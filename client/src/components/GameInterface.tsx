@@ -177,7 +177,7 @@ export default function GameInterface() {
                 <Zap className="w-5 h-5 text-green-400 mr-2" />
                 <span className="text-green-400 font-semibold text-sm">ENERGY</span>
               </div>
-              <div className="text-2xl font-bold text-green-300">{state.energy} / {state.maxEnergy}</div>
+              <div className="text-2xl font-bold text-green-300">{state.energy} / {state.energyMax}</div>
               <Progress value={energyPercentage} className="mt-2 h-2 bg-gray-700" />
               <div className="text-xs text-green-400 mt-1">+{state.energyRegenRate}/s</div>
             </CardContent>

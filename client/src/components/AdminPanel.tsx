@@ -907,7 +907,7 @@ export default function AdminPanel() {
                                   <div className="text-sm text-gray-400 space-y-1">
                                     <div>Level {player.level} • {Math.floor(player.lustPoints || player.points || 0).toLocaleString()} LP</div>
                                     <div className="flex gap-4 text-xs">
-                                      <span>Energy: {player.energy}/{player.maxEnergy}</span>
+                                      <span>Energy: {player.energy}/{player.energyMax}</span>
                                       <span>LG: {player.lustGems || 0}</span>
                                       {player.boostActive && <span className="text-orange-400">Boost: {player.boostMultiplier}x</span>}
                                     </div>
