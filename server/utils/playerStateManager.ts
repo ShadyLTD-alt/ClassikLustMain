@@ -5,6 +5,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { storage } from '../storage';
 import { EventEmitter } from 'events';
+import logger from '../logger';
 
 interface PlayerState {
   id: string;
@@ -51,17 +52,21 @@ class PlayerStateManager extends EventEmitter {
     super();
     this.setMaxListeners(50);
     this.playersRoot = path.join(process.cwd(), 'main-gamedata', 'player-data');
-    this.backupsDir = path.join(process.cwd(), 'game-backups', 'player-snapshots'); // 🔧 MOVED to game-backups
+    this.backupsDir = path.join(process.cwd(), 'game-backups', 'player-snapshots');
     this.ensureDirectories();
   }
 
   private async ensureDirectories() {
-    await fs.mkdir(this.playersRoot, { recursive: true });
-    await fs.mkdir(this.backupsDir, { recursive: true });
-    console.log('📁 Player directories ensured:', {
-      primary: this.playersRoot,
-      backups: this.backupsDir // 🔧 Updated log
-    });
+    try {
+      await fs.mkdir(this.playersRoot, { recursive: true });
+      await fs.mkdir(this.backupsDir, { recursive: true });
+      console.log('📁 Player directories ensured:', {
+        primary: this.playersRoot,
+        backups: this.backupsDir
+      });
+    } catch (error) {
+      console.error('❌ Failed to create player directories:', error);
+    }
   }
 
   private getLock(playerId: string): AsyncLock {
@@ -114,7 +119,11 @@ class PlayerStateManager extends EventEmitter {
   async loadPlayer(playerId: string): Promise<PlayerState> {
     const lock = this.getLock(playerId);
     return await lock.acquire(playerId, async () => {
-      if (this.states.has(playerId)) return this.states.get(playerId)!;
+      if (this.states.has(playerId)) {
+        const cached = this.states.get(playerId)!;
+        console.log(`💼 Using cached state for player ${cached.username || playerId}`);
+        return cached;
+      }
 
       console.log(`📂 Loading player ${playerId} from telegramId_username folder...`);
       let state = await this.loadFromMainJson(playerId);
@@ -123,12 +132,17 @@ class PlayerStateManager extends EventEmitter {
         console.log(`📂 No telegramId_username JSON found for ${playerId}, loading from DB...`);
         state = await this.loadFromDatabase(playerId);
         if (state) {
+          console.log(`💾 Creating new JSON for player ${state.username}...`);
           await this.saveMainJson(playerId, state);
           await this.createBackupSnapshot(playerId, state);
         }
       }
       
-      if (!state) throw new Error(`Player ${playerId} not found in JSON or DB`);
+      if (!state) {
+        console.error(`❌ Player ${playerId} not found in JSON or DB`);
+        throw new Error(`Player ${playerId} not found in JSON or DB`);
+      }
+      
       this.states.set(playerId, state);
       
       const folder = this.getFolderName(state.telegramId, state.username);
@@ -153,55 +167,132 @@ class PlayerStateManager extends EventEmitter {
       const filename = this.getJsonFileName(newState.telegramId, newState.username);
       console.log(`💾 Updating player ${newState.username || playerId} in: ${folder}/${filename}`);
       
+      // DEBUG: Log what's being updated
+      const updatedFields = Object.keys(updates).join(', ');
+      console.log(`🔄 [UPDATE] Fields: ${updatedFields}`);
+      
       await this.saveMainJson(playerId, newState);
       this.states.set(playerId, newState);
-      this.queueDatabaseSync(playerId, newState);
-      if (Math.random() < 0.1) this.createBackupSnapshot(playerId, newState);
+      
+      // 🔧 FIXED: Force immediate DB sync for critical fields
+      const criticalFields = ['selectedCharacterId', 'displayImage', 'points', 'level'];
+      const hasCriticalUpdate = Object.keys(updates).some(key => criticalFields.includes(key));
+      
+      if (hasCriticalUpdate) {
+        console.log(`⚡ [CRITICAL UPDATE] Forcing immediate DB sync for: ${updatedFields}`);
+        // Don't await - let it run in background but start immediately
+        this.syncToDatabase(playerId, newState).catch(err => {
+          console.error(`🔴 Critical DB sync failed for ${playerId}:`, err);
+          logger.error('Critical DB sync failed', { playerId, error: err.message });
+        });
+      } else {
+        // Regular delayed sync for non-critical updates
+        this.queueDatabaseSync(playerId, newState);
+      }
+      
+      // Create backup snapshot occasionally
+      if (Math.random() < 0.1) {
+        this.createBackupSnapshot(playerId, newState).catch(err => {
+          console.error(`🔴 Backup snapshot failed for ${playerId}:`, err);
+        });
+      }
+      
       return newState;
     });
   }
 
   // 🔧 FIXED: Save to telegramId_username folder with player_username.json
   private async saveMainJson(playerId: string, state: PlayerState): Promise<void> {
-    const filePath = this.getJsonPath(state.telegramId, state.username);
-    const dir = path.dirname(filePath);
-    const lockPath = `${filePath}.lock`;
-    
-    const folder = this.getFolderName(state.telegramId, state.username);
-    const filename = this.getJsonFileName(state.telegramId, state.username);
-    console.log(`💾 Saving to: ${folder}/${filename}`);
-    
-    await fs.mkdir(dir, { recursive: true });
-    const release = await lockfile.lock(filePath, { 
-      lockfilePath: lockPath, 
-      retries: 3, 
-      minTimeout: 50, 
-      maxTimeout: 500, 
-      realpath: false 
-    });
-    
     try {
-      const tmp = `${filePath}.tmp`;
-      await fs.writeFile(tmp, JSON.stringify(state, null, 2), 'utf8');
-      await fs.rename(tmp, filePath);
-      console.log(`✅ Player JSON saved: ${folder}/${filename}`);
-    } finally {
-      await release();
+      const filePath = this.getJsonPath(state.telegramId, state.username);
+      const dir = path.dirname(filePath);
+      const lockPath = `${filePath}.lock`;
+      
+      const folder = this.getFolderName(state.telegramId, state.username);
+      const filename = this.getJsonFileName(state.telegramId, state.username);
+      console.log(`💾 Saving to: ${folder}/${filename}`);
+      
+      await fs.mkdir(dir, { recursive: true });
+      
+      // Try to acquire lock, but don't fail if it's not available
+      let release: (() => Promise<void>) | null = null;
+      try {
+        release = await lockfile.lock(filePath, { 
+          lockfilePath: lockPath, 
+          retries: 2, 
+          minTimeout: 50, 
+          maxTimeout: 200, 
+          realpath: false 
+        });
+      } catch (lockError) {
+        console.warn(`⚠️ Failed to acquire lock for ${filename}, proceeding anyway:`, lockError);
+      }
+      
+      try {
+        const tmp = `${filePath}.tmp`;
+        await fs.writeFile(tmp, JSON.stringify(state, null, 2), 'utf8');
+        await fs.rename(tmp, filePath);
+        console.log(`✅ Player JSON saved: ${folder}/${filename}`);
+      } finally {
+        if (release) {
+          try {
+            await release();
+          } catch (releaseError) {
+            console.warn(`⚠️ Failed to release lock for ${filename}:`, releaseError);
+          }
+        }
+      }
+    } catch (error) {
+      console.error(`🔴 Failed to save JSON for player ${state.username || playerId}:`, error);
+      logger.error('Player JSON save failed', { 
+        playerId, 
+        telegramId: state.telegramId, 
+        username: state.username, 
+        error: error instanceof Error ? error.message : 'Unknown' 
+      });
+      throw error;
     }
   }
 
-  // 🔧 FIXED: Load from telegramId_username folder
+  // 🔧 FIXED: Load from telegramId_username folder with better error handling
   private async loadFromMainJson(playerId: string): Promise<PlayerState | null> {
     try {
       const player = await storage.getPlayer(playerId);
-      if (!player) return null;
+      if (!player) {
+        console.log(`🔴 Player ${playerId} not found in database`);
+        return null;
+      }
       
       const filePath = this.getJsonPath(player.telegramId, player.username);
-      const data = await fs.readFile(filePath, 'utf8');
-      const state = JSON.parse(data);
-      
       const folder = this.getFolderName(player.telegramId, player.username);
       const filename = this.getJsonFileName(player.telegramId, player.username);
+      
+      console.log(`📂 Attempting to load: ${folder}/${filename}`);
+      
+      const data = await fs.readFile(filePath, 'utf8');
+      
+      // 🔧 FIXED: Validate JSON before parsing
+      if (!data || data.trim() === '') {
+        console.log(`⚠️ JSON file is empty: ${folder}/${filename}`);
+        return null;
+      }
+      
+      let state: any;
+      try {
+        state = JSON.parse(data);
+      } catch (parseError) {
+        console.error(`🔴 JSON parse error in ${folder}/${filename}:`, parseError);
+        
+        // Backup corrupted file
+        const backupPath = `${filePath}.corrupted.${Date.now()}`;
+        try {
+          await fs.copyFile(filePath, backupPath);
+          console.log(`💾 Corrupted file backed up to: ${backupPath}`);
+        } catch {}
+        
+        return null; // Will trigger DB reload
+      }
+      
       console.log(`📂 Loaded from: ${folder}/${filename}`);
       
       return {
@@ -213,8 +304,11 @@ class PlayerStateManager extends EventEmitter {
         updatedAt: new Date(state.updatedAt || Date.now())
       };
     } catch (err: any) {
-      if (err.code === 'ENOENT') return null;
-      console.error('Failed to load player JSON from telegramId_username folder:', err);
+      if (err.code === 'ENOENT') {
+        console.log(`📂 JSON file doesn't exist yet for player ${playerId}`);
+        return null;
+      }
+      console.error(`🔴 Failed to load player JSON from telegramId_username folder:`, err);
       return null;
     }
   }
@@ -224,7 +318,10 @@ class PlayerStateManager extends EventEmitter {
       console.log(`🗃️ Loading player ${playerId} from database...`);
       
       const player = await storage.getPlayer(playerId);
-      if (!player) return null;
+      if (!player) {
+        console.log(`🔴 Player ${playerId} not found in database`);
+        return null;
+      }
       
       const upgrades = await storage.getPlayerUpgrades(playerId);
       const upgradesMap = upgrades.reduce((acc, u) => { 
@@ -267,7 +364,8 @@ class PlayerStateManager extends EventEmitter {
       console.log(`✅ Player ${player.username || player.telegramId} loaded from database`);
       return state;
     } catch (e) {
-      console.error('Failed to load from DB:', e);
+      console.error(`🔴 Failed to load from DB:`, e);
+      logger.error('Database load failed', { playerId, error: e instanceof Error ? e.message : 'Unknown' });
       return null;
     }
   }
@@ -280,11 +378,14 @@ class PlayerStateManager extends EventEmitter {
     }
     
     this.pendingSyncs.add(playerId);
+    console.log(`🕒 [DB SYNC] Queued sync for player ${state.username || playerId} (${this.pendingSyncs.size} total queued)`);
+    
     const timeout = setTimeout(async () => {
       try { 
         await this.syncToDatabase(playerId, state); 
       } catch (e) { 
         console.error(`🔴 DB sync failed for ${playerId}:`, e);
+        logger.error('DB sync failed', { playerId, error: e instanceof Error ? e.message : 'Unknown' });
         this.emit('syncError', { playerId, error: e }); 
       } finally { 
         this.pendingSyncs.delete(playerId); 
@@ -295,64 +396,107 @@ class PlayerStateManager extends EventEmitter {
     this.syncTimeouts.set(playerId, timeout);
   }
 
+  // 🔧 FIXED: Enhanced database sync with detailed logging
   private async syncToDatabase(playerId: string, state: PlayerState) {
     const cached = this.states.get(playerId);
-    if (!cached) return;
-    
-    const currentHash = this.hashState(cached);
-    if (currentHash === state.lastSync.hash) return;
-    
-    console.log(`🔄 Syncing player ${state.username || playerId} to database...`);
-    
-    await storage.updatePlayer(playerId, {
-      points: state.points,
-      lustPoints: state.lustPoints,
-      lustGems: state.lustGems,
-      energy: state.energy,
-      energyMax: state.energyMax,
-      energyRegenRate: state.energyRegenRate,
-      level: state.level,
-      selectedCharacterId: state.selectedCharacterId,
-      selectedImageId: state.selectedImageId,
-      displayImage: state.displayImage,
-      unlockedCharacters: state.unlockedCharacters,
-      unlockedImages: state.unlockedImages,
-      passiveIncomeRate: state.passiveIncomeRate,
-      isAdmin: state.isAdmin,
-      boostActive: state.boostActive,
-      boostMultiplier: state.boostMultiplier,
-      boostExpiresAt: state.boostExpiresAt,
-      totalTapsToday: state.totalTapsToday,
-      totalTapsAllTime: state.totalTapsAllTime,
-      lastDailyReset: state.lastDailyReset,
-      lastWeeklyReset: state.lastWeeklyReset
-    });
-
-    for (const [id, lvl] of Object.entries(state.upgrades)) {
-      await storage.setPlayerUpgrade(playerId, id, lvl);
+    if (!cached) {
+      console.log(`⚠️ [DB SYNC] No cached state for player ${playerId}, skipping sync`);
+      return;
     }
     
-    cached.lastSync = { timestamp: Date.now(), hash: currentHash };
-    console.log(`✅ Player ${state.username || playerId} synced to database`);
+    const currentHash = this.hashState(cached);
+    if (currentHash === state.lastSync.hash) {
+      console.log(`⏭️ [DB SYNC] No changes for player ${cached.username || playerId}, skipping sync`);
+      return;
+    }
+    
+    console.log(`🔄 [DB SYNC] Starting sync for player ${state.username || playerId}...`);
+    console.log(`🔄 [DB SYNC] Hash change: ${state.lastSync.hash} → ${currentHash}`);
+    
+    try {
+      // 🔧 FIXED: Sync player basic data
+      await storage.updatePlayer(playerId, {
+        points: Math.round(cached.points),
+        lustPoints: Math.round(cached.lustPoints),
+        lustGems: Math.round(cached.lustGems),
+        energy: Math.round(cached.energy),
+        energyMax: Math.round(cached.energyMax),
+        energyRegenRate: Math.round(cached.energyRegenRate),
+        level: cached.level,
+        selectedCharacterId: cached.selectedCharacterId,
+        selectedImageId: cached.selectedImageId,
+        displayImage: cached.displayImage,
+        unlockedCharacters: cached.unlockedCharacters,
+        unlockedImages: cached.unlockedImages,
+        passiveIncomeRate: Math.round(cached.passiveIncomeRate),
+        isAdmin: cached.isAdmin,
+        boostActive: cached.boostActive,
+        boostMultiplier: cached.boostMultiplier,
+        boostExpiresAt: cached.boostExpiresAt,
+        totalTapsToday: cached.totalTapsToday,
+        totalTapsAllTime: cached.totalTapsAllTime,
+        lastDailyReset: cached.lastDailyReset,
+        lastWeeklyReset: cached.lastWeeklyReset,
+        lastLogin: new Date() // Update last login time
+      });
+      
+      console.log(`✅ [DB SYNC] Player data synced for ${cached.username || playerId}`);
+
+      // 🔧 FIXED: Sync upgrade data with better error handling
+      console.log(`🔄 [DB SYNC] Syncing ${Object.keys(cached.upgrades).length} upgrades...`);
+      
+      for (const [upgradeId, level] of Object.entries(cached.upgrades)) {
+        try {
+          if (level > 0) {
+            await storage.setPlayerUpgrade(playerId, upgradeId, level);
+            console.log(`✅ [DB SYNC] Upgrade ${upgradeId}: level ${level}`);
+          }
+        } catch (upgradeError) {
+          console.error(`🔴 [DB SYNC] Failed to sync upgrade ${upgradeId}:`, upgradeError);
+          // Don't throw, continue with other upgrades
+        }
+      }
+      
+      cached.lastSync = { timestamp: Date.now(), hash: currentHash };
+      console.log(`✅ [DB SYNC] Complete for player ${cached.username || playerId}`);
+      
+    } catch (error) {
+      console.error(`🔴 [DB SYNC] Failed for player ${cached.username || playerId}:`, error);
+      logger.error('Database sync failed', { 
+        playerId, 
+        username: cached.username, 
+        error: error instanceof Error ? error.message : 'Unknown' 
+      });
+      throw error;
+    }
   }
 
   // 🔧 MOVED: Backup snapshots now go to game-backups/player-snapshots
   private async createBackupSnapshot(playerId: string, state: PlayerState) {
-    const dir = path.join(this.backupsDir, playerId); // 🔧 Now uses game-backups
-    await fs.mkdir(dir, { recursive: true });
-    const backup = path.join(dir, `backup-${Date.now()}.json`);
-    await fs.writeFile(backup, JSON.stringify(state, null, 2), 'utf8');
-    
-    console.log(`💾 Backup snapshot saved: game-backups/player-snapshots/${playerId}/`);
-    
     try {
-      const files = await fs.readdir(dir);
-      const backups = files.filter(f => f.startsWith('backup-') && f.endsWith('.json')).sort();
-      while (backups.length > 5) {
-        const f = backups.shift();
-        if (f) await fs.rm(path.join(dir, f));
-      }
-    } catch {}
+      const dir = path.join(this.backupsDir, playerId);
+      await fs.mkdir(dir, { recursive: true });
+      const backup = path.join(dir, `backup-${Date.now()}.json`);
+      await fs.writeFile(backup, JSON.stringify(state, null, 2), 'utf8');
+      
+      console.log(`💾 Backup snapshot saved: game-backups/player-snapshots/${playerId}/`);
+      
+      // Clean old backups (keep only 5)
+      try {
+        const files = await fs.readdir(dir);
+        const backups = files.filter(f => f.startsWith('backup-') && f.endsWith('.json')).sort();
+        while (backups.length > 5) {
+          const f = backups.shift();
+          if (f) {
+            await fs.rm(path.join(dir, f));
+            console.log(`🧹 Cleaned old backup: ${f}`);
+          }
+        }
+      } catch {}
+    } catch (error) {
+      console.error(`🔴 Failed to create backup snapshot for ${playerId}:`, error);
+      // Don't throw - backup failure shouldn't break the main operation
+    }
   }
 
   getCachedState(playerId: string): PlayerState | null { 
@@ -368,40 +512,45 @@ class PlayerStateManager extends EventEmitter {
     this.states.delete(playerId);
     this.locks.delete(playerId);
     this.pendingSyncs.delete(playerId);
+    console.log(`🧹 Cache cleared for player ${playerId}`);
   }
 
   async forceDatabaseSync(playerId: string) {
     const state = this.states.get(playerId);
-    if (!state) throw new Error('Player not in cache');
+    if (!state) throw new Error(`Player ${playerId} not in cache`);
+    console.log(`⚡ [FORCE SYNC] Forcing immediate sync for ${state.username || playerId}`);
     await this.syncToDatabase(playerId, state);
   }
 
   async healthCheck() {
     try {
       const mainDirs = await fs.readdir(this.playersRoot).catch(() => []);
-      const backupDirs = await fs.readdir(this.backupsDir).catch(() => []); // 🔧 Updated path
+      const backupDirs = await fs.readdir(this.backupsDir).catch(() => []);
       
       let totalJsonFiles = 0;
       let totalBackups = 0;
+      let playerFolderDetails: Array<{folder: string, files: string[]}> = [];
       
       // Count JSON files in telegramId_username folders
       for (const playerFolder of mainDirs) {
         try {
           const playerDir = path.join(this.playersRoot, playerFolder);
           const files = await fs.readdir(playerDir);
-          totalJsonFiles += files.filter(f => f.startsWith('player_') && f.endsWith('.json')).length;
+          const playerJsons = files.filter(f => f.startsWith('player_') && f.endsWith('.json'));
+          totalJsonFiles += playerJsons.length;
+          playerFolderDetails.push({ folder: playerFolder, files: playerJsons });
         } catch {}
       }
       
       // Count backup files in game-backups
       for (const dir of backupDirs) {
         try {
-          const backups = await fs.readdir(path.join(this.backupsDir, dir)); // 🔧 Updated path
+          const backups = await fs.readdir(path.join(this.backupsDir, dir));
           totalBackups += backups.filter(f => f.startsWith('backup-')).length;
         } catch {}
       }
       
-      return {
+      const health = {
         playerFolders: mainDirs.length,
         playerJsonFiles: totalJsonFiles,
         backupSnapshots: totalBackups,
@@ -410,11 +559,16 @@ class PlayerStateManager extends EventEmitter {
         pendingTimeouts: this.syncTimeouts.size,
         directories: {
           main: this.playersRoot,
-          backups: this.backupsDir // 🔧 Updated to show game-backups path
+          backups: this.backupsDir
         },
-        namingConvention: 'telegramId_username/player_username.json'
+        namingConvention: 'telegramId_username/player_username.json',
+        playerFolderDetails: playerFolderDetails.slice(0, 10) // Show first 10
       };
-    } catch {
+      
+      console.log('📊 [HEALTH] Player state system health:', health);
+      return health;
+    } catch (error) {
+      console.error('🔴 Health check failed:', error);
       return {
         playerFolders: 0,
         playerJsonFiles: 0,
@@ -426,7 +580,8 @@ class PlayerStateManager extends EventEmitter {
           main: this.playersRoot,
           backups: this.backupsDir
         },
-        namingConvention: 'telegramId_username/player_username.json'
+        namingConvention: 'telegramId_username/player_username.json',
+        error: 'Health check failed'
       };
     }
   }
@@ -457,26 +612,51 @@ class PlayerStateManager extends EventEmitter {
     let moved = 0;
     let errors = 0;
     
+    console.log('📦 [MIGRATION] Starting player file migration...');
+    
     try {
       const playerDirs = await fs.readdir(this.playersRoot).catch(() => []);
+      console.log(`📦 [MIGRATION] Found ${playerDirs.length} player directories to check`);
       
       for (const dirName of playerDirs) {
         try {
           // Skip if it already follows new naming convention (has underscore)
-          if (dirName.includes('_') || !dirName.startsWith('player-')) continue;
+          if (dirName.includes('_')) {
+            console.log(`⏭️ [MIGRATION] Skipping already migrated: ${dirName}`);
+            continue;
+          }
+          
+          if (!dirName.startsWith('player-')) {
+            console.log(`⏭️ [MIGRATION] Skipping non-player directory: ${dirName}`);
+            continue;
+          }
           
           const oldDir = path.join(this.playersRoot, dirName);
           const files = await fs.readdir(oldDir).catch(() => []);
           
           const playerJsonFile = files.find(f => f === 'player.json');
-          if (!playerJsonFile) continue;
+          if (!playerJsonFile) {
+            console.log(`⏭️ [MIGRATION] No player.json in ${dirName}`);
+            continue;
+          }
           
           // Load the JSON to get telegramId and username
           const jsonPath = path.join(oldDir, playerJsonFile);
           const data = await fs.readFile(jsonPath, 'utf8');
-          const state = JSON.parse(data);
           
-          if (!state.telegramId) continue;
+          let state: any;
+          try {
+            state = JSON.parse(data);
+          } catch (parseError) {
+            console.error(`❌ [MIGRATION] JSON parse error in ${dirName}:`, parseError);
+            errors++;
+            continue;
+          }
+          
+          if (!state.telegramId) {
+            console.log(`⏭️ [MIGRATION] No telegramId in ${dirName}, skipping`);
+            continue;
+          }
           
           // Create new structure
           const newFolderName = this.getFolderName(state.telegramId, state.username);
@@ -487,7 +667,7 @@ class PlayerStateManager extends EventEmitter {
           // Only move if it doesn't exist in new location
           try {
             await fs.access(newJsonPath);
-            console.log(`⚠️ Target already exists, skipping: ${newFolderName}/${newJsonName}`);
+            console.log(`⚠️ [MIGRATION] Target already exists, skipping: ${newFolderName}/${newJsonName}`);
             continue;
           } catch {
             // File doesn't exist, proceed with migration
@@ -496,24 +676,25 @@ class PlayerStateManager extends EventEmitter {
           await fs.mkdir(newDir, { recursive: true });
           await fs.copyFile(jsonPath, newJsonPath);
           
-          console.log(`📦 Migrated: ${dirName}/player.json → ${newFolderName}/${newJsonName}`);
+          console.log(`📦 [MIGRATION] Migrated: ${dirName}/player.json → ${newFolderName}/${newJsonName}`);
           moved++;
           
           // Remove old directory after successful copy
           await fs.rm(oldDir, { recursive: true });
           
         } catch (error) {
-          console.error(`❌ Migration error for ${dirName}:`, error);
+          console.error(`❌ [MIGRATION] Migration error for ${dirName}:`, error);
           errors++;
         }
       }
       
       // 🔧 BONUS: Also migrate old backup files to game-backups
-      console.log('📦 Also migrating backup files to game-backups...');
+      console.log('📦 [MIGRATION] Also migrating backup files to game-backups...');
       
       const oldSnapshotsDir = path.join(process.cwd(), 'uploads', 'snapshots', 'players');
       try {
         const oldBackupDirs = await fs.readdir(oldSnapshotsDir).catch(() => []);
+        console.log(`📦 [MIGRATION] Found ${oldBackupDirs.length} backup directories to migrate`);
         
         for (const playerBackupDir of oldBackupDirs) {
           try {
@@ -528,6 +709,7 @@ class PlayerStateManager extends EventEmitter {
             await fs.mkdir(newBackupPath, { recursive: true });
             
             // Copy all backup files
+            let backupsMoved = 0;
             for (const backupFile of backupFiles.filter(f => f.startsWith('backup-'))) {
               const oldFilePath = path.join(oldBackupPath, backupFile);
               const newFilePath = path.join(newBackupPath, backupFile);
@@ -537,27 +719,32 @@ class PlayerStateManager extends EventEmitter {
                 await fs.access(newFilePath);
               } catch {
                 await fs.copyFile(oldFilePath, newFilePath);
-                console.log(`📦 Migrated backup: ${playerBackupDir}/${backupFile}`);
+                console.log(`📦 [MIGRATION] Migrated backup: ${playerBackupDir}/${backupFile}`);
+                backupsMoved++;
               }
             }
             
             // Remove old backup directory after successful copy
-            await fs.rm(oldBackupPath, { recursive: true });
+            if (backupsMoved > 0) {
+              await fs.rm(oldBackupPath, { recursive: true });
+            }
             
           } catch (error) {
-            console.error(`❌ Backup migration error for ${playerBackupDir}:`, error);
+            console.error(`❌ [MIGRATION] Backup migration error for ${playerBackupDir}:`, error);
             errors++;
           }
         }
       } catch {
         // Old snapshots directory doesn't exist, that's fine
+        console.log('📦 [MIGRATION] No old snapshots directory found, skipping backup migration');
       }
       
     } catch (error) {
-      console.error('❌ Migration scan error:', error);
+      console.error('❌ [MIGRATION] Migration scan error:', error);
       errors++;
     }
     
+    console.log(`📦 [MIGRATION] Complete: ${moved} moved, ${errors} errors`);
     return { moved, errors };
   }
 }
@@ -590,10 +777,7 @@ export async function selectCharacterForPlayer(playerId: string, characterId: st
     displayImage: null
   });
   
-  const folder = playerStateManager['getFolderName'](updatedState.telegramId, updatedState.username);
-  const filename = playerStateManager['getJsonFileName'](updatedState.telegramId, updatedState.username);
   console.log(`✅ [CHARACTER SELECT] Success! Player ${playerId} now using character ${characterId}`);
-  console.log(`📁 [CHARACTER SELECT] Saved to: ${folder}/${filename}`);
   
   return updatedState;
 }
@@ -615,10 +799,7 @@ export async function setDisplayImageForPlayer(playerId: string, imageUrl: strin
     displayImage: imageUrl
   });
   
-  const folder = playerStateManager['getFolderName'](updatedState.telegramId, updatedState.username);
-  const filename = playerStateManager['getJsonFileName'](updatedState.telegramId, updatedState.username);
   console.log(`✅ [DISPLAY IMAGE] Success! Player ${playerId} display image updated`);
-  console.log(`📁 [DISPLAY IMAGE] Saved to: ${folder}/${filename}`);
   
   return updatedState;
 }
@@ -634,8 +815,8 @@ export async function purchaseUpgradeForPlayer(playerId: string, upgradeId: stri
   }
   
   const updatedState = await playerStateManager.updatePlayer(playerId, {
-    points: currentState.points - cost,
-    lustPoints: currentState.lustPoints - cost,
+    points: Math.round(currentState.points - cost),
+    lustPoints: Math.round(currentState.lustPoints - cost),
     upgrades: {
       ...currentState.upgrades,
       [upgradeId]: newLevel
