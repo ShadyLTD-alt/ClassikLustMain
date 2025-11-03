@@ -1,8 +1,3 @@
-/**
- * Snapshot Manager for Luna
- * - Writes snapshots under LunaBug/snapshots/
- * - Provides throttled logging to avoid console spam
- */
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -12,11 +7,18 @@ const __dirname = path.dirname(__filename);
 
 const SNAPSHOT_DIR = path.join(__dirname, '../../LunaBug/snapshots');
 
-async function ensureDir(dir: string) {
-  try { await fs.mkdir(dir, { recursive: true }); } catch {}
-}
+async function ensureDir(dir) { try { await fs.mkdir(dir, { recursive: true }); } catch {} }
 
-export async function writeSnapshot(fileName: string, data: any) {
+let lastWrite = 0;
+let minIntervalMs = parseInt(process.env.LUNA_SNAPSHOT_INTERVAL_MS || '15000', 10); // 15s default
+
+export function setSnapshotInterval(ms) { minIntervalMs = ms; }
+
+export async function writeSnapshot(fileName, data) {
+  const now = Date.now();
+  if (now - lastWrite < minIntervalMs) return null; // throttle snapshot writes
+  lastWrite = now;
+
   await ensureDir(SNAPSHOT_DIR);
   const file = path.join(SNAPSHOT_DIR, fileName);
   const content = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
@@ -24,17 +26,10 @@ export async function writeSnapshot(fileName: string, data: any) {
   return file;
 }
 
-// Throttled logger to avoid spam
-let lastLogTime = 0;
-const MIN_INTERVAL_MS = 5000; // log at most once every 5s per category
-
-export function throttledInfo(tag: string, payload?: any) {
-  const now = Date.now();
-  if (now - lastLogTime < MIN_INTERVAL_MS) return; // skip
-  lastLogTime = now;
-  try {
-    const base = `[Luna] ${tag}`;
-    if (payload) console.log(base, payload);
-    else console.log(base);
-  } catch {}
+let lastLog = 0; const LOG_INTERVAL = 10000; // 10s
+export function throttledInfo(tag, payload) {
+  const now2 = Date.now();
+  if (now2 - lastLog < LOG_INTERVAL) return;
+  lastLog = now2;
+  try { console.log(`[Luna] ${tag}`, payload || ''); } catch {}
 }
