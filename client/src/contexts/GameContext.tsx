@@ -128,14 +128,15 @@ const calculateBaseEnergyValues = (upgrades: UpgradeConfig[], playerUpgrades: Re
     }
   });
   
-  console.log('🔧 Luna Energy calculation:', {
-    energyUpgrades: energyUpgrades.map(u => ({ id: u.id, level: playerUpgrades[u.id] || 0, value: calculateUpgradeValue(u, playerUpgrades[u.id] || 0) })),
-    regenUpgrades: regenUpgrades.map(u => ({ id: u.id, level: playerUpgrades[u.id] || 0, value: calculateUpgradeValue(u, playerUpgrades[u.id] || 0) })),
-    baseMaxEnergy,
-    baseEnergyRegen
-  });
-  
   return { baseMaxEnergy, baseEnergyRegen };
+};
+
+// 🔧 URL normalization helper - ensures leading slash
+const normalizeImageUrl = (url: string | null): string | null => {
+  if (!url) return null;
+  if (url.startsWith('http')) return url; // External URL
+  if (url.startsWith('/')) return url;   // Already has leading slash
+  return `/${url}`; // Add missing leading slash
 };
 
 export function GameProvider({ children }: { children: React.ReactNode }) {
@@ -149,6 +150,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [pendingPurchases, setPendingPurchases] = useState<Set<string>>(new Set());
   const [isInitialized, setIsInitialized] = useState(false);
   const [loadingError, setLoadingError] = useState<string | null>(null);
+  const [loadingAttempts, setLoadingAttempts] = useState(0); // 🔧 Track loading attempts
 
   // Calculate tap value (shared with CharacterDisplay) - NOW WITH BOOST
   const calculateTapValue = useCallback(() => {
@@ -180,10 +182,20 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
   }, [state.boostActive, state.boostExpiresAt]);
 
-  // 🎯 JSON-FIRST: Enhanced data loading with better error handling
+  // 🎯 JSON-FIRST: Enhanced data loading with request deduplication
   useEffect(() => {
+    let mounted = true;
+    let loadingTimeout: NodeJS.Timeout;
+    
     const loadAllData = async () => {
-      console.log('🔍 [GAME CONTEXT] Starting data load...');
+      // 🔧 Prevent excessive loading attempts
+      if (loadingAttempts >= 3) {
+        console.log('❌ [GAME CONTEXT] Max loading attempts reached, stopping');
+        return;
+      }
+      
+      setLoadingAttempts(prev => prev + 1);
+      console.log(`🔍 [GAME CONTEXT] Starting data load attempt ${loadingAttempts + 1}...`);
       
       const sessionToken = localStorage.getItem('sessionToken');
       if (!sessionToken) {
@@ -201,8 +213,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         // 🔍 STEP 1: Test session token with auth/me (better endpoint for debugging)
         console.log('🔍 [GAME CONTEXT] Testing session token...');
         const authRes = await fetch('/api/auth/me', {
-          headers: { 'Authorization': `Bearer ${sessionToken}` }
+          headers: { 'Authorization': `Bearer ${sessionToken}` },
+          signal: AbortSignal.timeout(10000)
         });
+
+        if (!mounted) return; // Component unmounted during fetch
 
         if (!authRes.ok) {
           console.error(`❌ [GAME CONTEXT] Session invalid: ${authRes.status}`);
@@ -231,33 +246,52 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           telegramId: playerFromAuth.telegramId,
           level: playerFromAuth.level,
           selectedCharacterId: playerFromAuth.selectedCharacterId,
+          displayImage: playerFromAuth.displayImage,
           points: playerFromAuth.points
         });
 
-        // 🔍 STEP 2: Load game config data (still from memory/JSON)
+        if (!mounted) return; // Component unmounted
+
+        // 🔍 STEP 2: Load game config data (with timeout and error handling)
         console.log('🔍 [GAME CONTEXT] Loading game configuration data...');
-        const [upgradesRes, charactersRes, levelsRes, mediaRes] = await Promise.all([
+        const [upgradesRes, charactersRes, levelsRes, mediaRes] = await Promise.allSettled([
           fetch('/api/upgrades', {
-            headers: { 'Authorization': `Bearer ${sessionToken}` }
+            headers: { 'Authorization': `Bearer ${sessionToken}` },
+            signal: AbortSignal.timeout(8000)
           }),
           fetch('/api/characters', {
-            headers: { 'Authorization': `Bearer ${sessionToken}` }
+            headers: { 'Authorization': `Bearer ${sessionToken}` },
+            signal: AbortSignal.timeout(8000)
           }),
           fetch('/api/levels', {
-            headers: { 'Authorization': `Bearer ${sessionToken}` }
+            headers: { 'Authorization': `Bearer ${sessionToken}` },
+            signal: AbortSignal.timeout(8000)
           }),
           fetch('/api/media', {
-            headers: { 'Authorization': `Bearer ${sessionToken}` }
+            headers: { 'Authorization': `Bearer ${sessionToken}` },
+            signal: AbortSignal.timeout(8000)
           })
         ]);
 
-        // Parse config responses with error handling
-        const [upgradesData, charactersData, levelsData, mediaData] = await Promise.all([
-          upgradesRes.ok ? upgradesRes.json().catch(e => { console.error('Upgrades parse error:', e); return null; }) : null,
-          charactersRes.ok ? charactersRes.json().catch(e => { console.error('Characters parse error:', e); return null; }) : null,
-          levelsRes.ok ? levelsRes.json().catch(e => { console.error('Levels parse error:', e); return null; }) : null,
-          mediaRes.ok ? mediaRes.json().catch(e => { console.error('Media parse error:', e); return null; }) : null
-        ]);
+        if (!mounted) return; // Component unmounted
+
+        // Parse config responses with detailed error handling
+        let upgradesData = null, charactersData = null, levelsData = null, mediaData = null;
+        
+        if (upgradesRes.status === 'fulfilled' && upgradesRes.value.ok) {
+          upgradesData = await upgradesRes.value.json().catch(e => { console.error('Upgrades parse error:', e); return null; });
+        }
+        if (charactersRes.status === 'fulfilled' && charactersRes.value.ok) {
+          charactersData = await charactersRes.value.json().catch(e => { console.error('Characters parse error:', e); return null; });
+        }
+        if (levelsRes.status === 'fulfilled' && levelsRes.value.ok) {
+          levelsData = await levelsRes.value.json().catch(e => { console.error('Levels parse error:', e); return null; });
+        }
+        if (mediaRes.status === 'fulfilled' && mediaRes.value.ok) {
+          mediaData = await mediaRes.value.json().catch(e => { console.error('Media parse error:', e); return null; });
+        }
+
+        if (!mounted) return; // Component unmounted
 
         // Set config data first
         if (upgradesData?.upgrades) {
@@ -285,7 +319,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           const imageConfigs: ImageConfig[] = mediaData.media.map((media: any) => ({
             id: media.id,
             characterId: media.characterId,
-            url: media.url,
+            url: normalizeImageUrl(media.url), // 🔧 FIX: Normalize URL with leading slash
             unlockLevel: media.unlockLevel,
             categories: media.categories || [],
             poses: media.poses || [],
@@ -323,7 +357,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
               level: player.level || 1,
               selectedCharacterId: player.selectedCharacterId || (charactersData?.characters?.[0]?.id || 'shadow'),
               selectedImageId: player.selectedImageId || null,
-              displayImage: player.displayImage || null,
+              displayImage: normalizeImageUrl(player.displayImage), // 🔧 FIX: Normalize display image URL
               upgrades: playerUpgrades,
               unlockedCharacters: Array.isArray(player.unlockedCharacters) ? player.unlockedCharacters : ['shadow'],
               unlockedImages: Array.isArray(player.unlockedImages) ? player.unlockedImages : [],
@@ -347,6 +381,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
               points: newState.points,
               level: newState.level,
               selectedCharacter: newState.selectedCharacterId,
+              displayImage: newState.displayImage,
               energyMax: newState.energyMax,
               upgradesCount: Object.keys(newState.upgrades).length
             });
@@ -360,15 +395,34 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         setLoadingError(null);
         console.log('✅ [GAME CONTEXT] Complete - All game data loaded successfully');
       } catch (error) {
+        if (!mounted) return;
         console.error('❌ [GAME CONTEXT] Failed to load game data:', error);
         setLoadingError(error instanceof Error ? error.message : 'Unknown error');
+        
+        // 🔧 Retry loading after delay if it's a network error
+        if (loadingAttempts < 3 && (error instanceof TypeError || error instanceof Error && error.message.includes('fetch'))) {
+          console.log(`🔄 [GAME CONTEXT] Retrying load in 3 seconds... (attempt ${loadingAttempts + 1}/3)`);
+          loadingTimeout = setTimeout(() => {
+            if (mounted) {
+              setLoadingAttempts(prev => prev + 1);
+              loadAllData();
+            }
+          }, 3000);
+        }
       } finally {
-        setIsInitialized(true);
+        if (mounted) {
+          setIsInitialized(true);
+        }
       }
     };
 
     loadAllData();
-  }, []);
+    
+    return () => {
+      mounted = false;
+      if (loadingTimeout) clearTimeout(loadingTimeout);
+    };
+  }, []); // 🔧 Empty dependency array prevents re-runs
 
   // Recalculate passive income, max energy, and regen when upgrades change
   useEffect(() => {
@@ -384,26 +438,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
       // Calculate energy values from upgrades
       const { baseMaxEnergy, baseEnergyRegen } = calculateBaseEnergyValues(upgrades, prev.upgrades);
-      
-      console.log('🔄 [GAME CONTEXT] Luna upgrade recalculation:', {
-        currentUpgrades: prev.upgrades,
-        newPassiveRate,
-        calculatedMaxEnergy: baseMaxEnergy,
-        calculatedEnergyRegen: baseEnergyRegen,
-        previousMaxEnergy: prev.energyMax
-      });
 
       // Only update if values changed
       if (newPassiveRate !== prev.passiveIncomeRate || 
           baseMaxEnergy !== prev.energyMax || 
           baseEnergyRegen !== prev.energyRegenRate) {
-        
-        console.log('✅ [GAME CONTEXT] Luna updating calculated energy values:', {
-          oldMaxEnergy: prev.energyMax,
-          newMaxEnergy: baseMaxEnergy,
-          oldRegen: prev.energyRegenRate,
-          newRegen: baseEnergyRegen
-        });
         
         return {
           ...prev,
@@ -422,7 +461,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     applyTheme(theme);
   }, [theme]);
 
-  // 🎯 JSON-FIRST: Enhanced autosync with better error handling
+  // 🎯 JSON-FIRST: Optimized autosync - less frequent, smarter batching
   useEffect(() => {
     if (!isInitialized || !state.username) return;
     
@@ -440,16 +479,19 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           newLustPoints = newPoints; // Keep in sync
         }
 
-        if (newEnergy === prev.energy && newPoints === prev.points) {
+        const energyChanged = newEnergy !== prev.energy;
+        const pointsChanged = newPoints !== prev.points;
+
+        if (!energyChanged && !pointsChanged) {
           return prev;
         }
 
-        // 🎯 JSON-FIRST: Enhanced sync every 10 seconds with error handling
+        // 🔧 REDUCED: Only sync every 30 seconds instead of 10 (reduces spam)
         syncCounter++;
-        if (syncCounter >= 10) {
+        if (syncCounter >= 30) {
           syncCounter = 0;
           
-          console.log(`🔄 [GAME CONTEXT] Auto-syncing for ${prev.username}...`);
+          console.log(`🔄 [GAME CONTEXT] Auto-syncing for ${prev.username}... (energy: ${energyChanged}, points: ${pointsChanged})`);
           
           fetch('/api/player/me', {
             method: 'PATCH',
@@ -460,11 +502,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
             body: JSON.stringify({
               energy: Math.round(newEnergy),
               points: Math.round(newPoints),
-              lustPoints: Math.round(newLustPoints),
-              // Always include critical fields to prevent overwrites
-              selectedCharacterId: prev.selectedCharacterId,
-              displayImage: prev.displayImage,
-              level: prev.level
+              lustPoints: Math.round(newLustPoints)
+              // 🔧 REMOVED: Don't include unchanged fields to reduce overwrites
             })
           })
           .then(response => {
@@ -484,7 +523,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [isInitialized, state.username]);
+  }, [isInitialized, state.username]); // 🔧 Don't include sessionToken to prevent re-creation
 
   const tap = useCallback(async () => {
     setState(prev => {
@@ -510,7 +549,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         });
       }
 
-      // 🎯 JSON-FIRST: Sync tap to JSON system
+      // 🎯 JSON-FIRST: Immediate sync for taps (critical user action)
       fetch('/api/player/me', {
         method: 'PATCH',
         headers: {
@@ -571,6 +610,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           setState(prev => ({ ...prev, energyMax: baseMaxEnergy, energyRegenRate: baseEnergyRegen, energy: Math.min(prev.energy, baseMaxEnergy) }));
         }
         break;
+      case 'UPDATE_DISPLAY_IMAGE': // 🆕 NEW: Handle display image updates from external components
+        setState(prev => ({ ...prev, displayImage: normalizeImageUrl(action.payload) }));
+        break;
       default:
         break;
     }
@@ -601,7 +643,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`
         },
-        body: JSON.stringify({ upgradeId, level: newLevel })
+        body: JSON.stringify({ upgradeId, level: newLevel }),
+        signal: AbortSignal.timeout(10000)
       });
 
       if (!response.ok) {
@@ -643,7 +686,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
   }, [state.upgrades, state.points, state.username, upgrades, pendingPurchases]);
 
-  // 🎯 JSON-FIRST: Enhanced character selection with detailed logging
+  // 🎯 JSON-FIRST: Enhanced character selection with state update
   const selectCharacter = useCallback(async (characterId: string): Promise<boolean> => {
     if (!state.unlockedCharacters.includes(characterId)) {
       console.log(`❌ [SELECT CHARACTER] Character ${characterId} not unlocked for ${state.username}`);
@@ -672,12 +715,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       const result = await response.json();
       const updatedPlayer = result.player;
       
-      // Update local state from JSON response
+      // 🔧 IMMEDIATE: Update local state for instant UI feedback
       setState(prev => ({
         ...prev,
         selectedCharacterId: updatedPlayer.selectedCharacterId,
         selectedImageId: updatedPlayer.selectedImageId,
-        displayImage: updatedPlayer.displayImage
+        displayImage: normalizeImageUrl(updatedPlayer.displayImage) // 🔧 FIX: Normalize URL
       }));
 
       console.log(`✅ [SELECT CHARACTER] ${state.username} character selection successful: ${characterId}`);
@@ -693,7 +736,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setState(prev => ({ 
       ...prev, 
       selectedImageId: imageId,
-      displayImage: selectedImg?.url || prev.displayImage
+      displayImage: normalizeImageUrl(selectedImg?.url || prev.displayImage) // 🔧 FIX: Normalize URL
     }));
   }, [images]);
 
@@ -734,11 +777,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const addImage = useCallback((image: ImageConfig) => {
-    setImages(prev => [...prev, image]);
+    setImages(prev => [...prev, { ...image, url: normalizeImageUrl(image.url) }]); // 🔧 FIX: Normalize URL
   }, []);
 
   const updateImage = useCallback((image: ImageConfig) => {
-    setImages(prev => prev.map(img => img.id === image.id ? image : img));
+    setImages(prev => prev.map(img => img.id === image.id ? { ...image, url: normalizeImageUrl(image.url) } : img)); // 🔧 FIX: Normalize URL
   }, []);
 
   const removeImage = useCallback((imageId: string) => {
@@ -784,20 +827,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setLevelConfigs([]);
     setTheme(DEFAULT_THEME);
     setLoadingError(null);
+    setLoadingAttempts(0); // 🔧 Reset attempts
   }, []);
-
-  // 🔍 Debug logging for state changes
-  useEffect(() => {
-    if (isInitialized && state.username) {
-      console.log(`🔍 [GAME CONTEXT] State update for ${state.username}:`, {
-        points: state.points,
-        energy: `${state.energy}/${state.energyMax}`,
-        selectedCharacter: state.selectedCharacterId,
-        displayImage: state.displayImage ? 'set' : 'null',
-        upgradesCount: Object.keys(state.upgrades).length
-      });
-    }
-  }, [state.points, state.energy, state.selectedCharacterId, state.displayImage, state.username, isInitialized]);
 
   return (
     <GameContext.Provider value={{
@@ -834,11 +865,14 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       {/* 🔍 Debug info overlay in development */}
       {process.env.NODE_ENV === 'development' && loadingError && (
         <div className="fixed bottom-4 right-4 bg-red-900/90 text-white p-3 rounded-lg border border-red-500 max-w-md text-sm z-50">
-          <div className="font-semibold">Debug Info:</div>
+          <div className="font-semibold">🔍 Debug Info:</div>
           <div>Loading Error: {loadingError}</div>
           <div>Initialized: {isInitialized ? '✅' : '❌'}</div>
           <div>Username: {state.username || 'None'}</div>
           <div>Session: {localStorage.getItem('sessionToken') ? 'Present' : 'Missing'}</div>
+          <div>Attempts: {loadingAttempts}/3</div>
+          <div>Selected Character: {state.selectedCharacterId || 'None'}</div>
+          <div>Display Image: {state.displayImage ? 'Set' : 'None'}</div>
         </div>
       )}
     </GameContext.Provider>
