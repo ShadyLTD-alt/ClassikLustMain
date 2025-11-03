@@ -14,6 +14,6 @@ export function quietApiLogger(req: Request, res: Response, next: NextFunction) 
       win[key] = now;
     }
     return originalJson(body);
-  } as any;
+  } 
   next();
 }
