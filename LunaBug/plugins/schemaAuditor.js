@@ -123,11 +123,278 @@ class SchemaAuditor {
   }
 
   generateMissingFieldsSql(missingFields) {
-    let sql = 'ALTER TABLE players\\n';\n    
-    missingFields.forEach(field => {\n      switch (field) {\n        case 'lustGems':\n          sql += 'ADD COLUMN IF NOT EXISTS lustGems INTEGER DEFAULT 0,\\n';\n          break;\n        case 'boostActive':\n          sql += 'ADD COLUMN IF NOT EXISTS boostActive BOOLEAN DEFAULT false,\\n';\n          break;\n        case 'boostMultiplier':\n          sql += 'ADD COLUMN IF NOT EXISTS boostMultiplier NUMERIC DEFAULT 1.00,\\n';\n          break;\n        case 'boostExpiresAt':\n          sql += 'ADD COLUMN IF NOT EXISTS boostExpiresAt TIMESTAMP WITH TIME ZONE,\\n';\n          break;\n        case 'boostEnergy':\n          sql += 'ADD COLUMN IF NOT EXISTS boostEnergy INTEGER DEFAULT 0,\\n';\n          break;\n        case 'totalTapsToday':\n          sql += 'ADD COLUMN IF NOT EXISTS totalTapsToday INTEGER DEFAULT 0,\\n';\n          break;\n        case 'totalTapsAllTime':\n          sql += 'ADD COLUMN IF NOT EXISTS totalTapsAllTime INTEGER DEFAULT 0,\\n';\n          break;\n        case 'lastDailyReset':\n          sql += 'ADD COLUMN IF NOT EXISTS lastDailyReset TIMESTAMP WITH TIME ZONE DEFAULT NOW(),\\n';\n          break;\n        case 'lastWeeklyReset':\n          sql += 'ADD COLUMN IF NOT EXISTS lastWeeklyReset TIMESTAMP WITH TIME ZONE DEFAULT NOW(),\\n';\n          break;\n      }\n    });\n    \n    // Remove trailing comma\n    sql = sql.replace(/,\\n$/, ';\\n');\n    return sql;\n  }
+    let sql = 'ALTER TABLE players';
+    
+    missingFields.forEach((field, index) => {
+      if (index > 0) sql += ',';
+      sql += ' ADD COLUMN IF NOT EXISTS ';
+      
+      switch (field) {
+        case 'lustGems':
+          sql += 'lustGems INTEGER DEFAULT 0';
+          break;
+        case 'boostActive':
+          sql += 'boostActive BOOLEAN DEFAULT false';
+          break;
+        case 'boostMultiplier':
+          sql += 'boostMultiplier NUMERIC DEFAULT 1.00';
+          break;
+        case 'boostExpiresAt':
+          sql += 'boostExpiresAt TIMESTAMP WITH TIME ZONE';
+          break;
+        case 'boostEnergy':
+          sql += 'boostEnergy INTEGER DEFAULT 0';
+          break;
+        case 'totalTapsToday':
+          sql += 'totalTapsToday INTEGER DEFAULT 0';
+          break;
+        case 'totalTapsAllTime':
+          sql += 'totalTapsAllTime INTEGER DEFAULT 0';
+          break;
+        case 'lastDailyReset':
+          sql += 'lastDailyReset TIMESTAMP WITH TIME ZONE DEFAULT NOW()';
+          break;
+        case 'lastWeeklyReset':
+          sql += 'lastWeeklyReset TIMESTAMP WITH TIME ZONE DEFAULT NOW()';
+          break;
+        default:
+          sql += field + ' TEXT';
+      }
+    });
+    
+    sql += ';';
+    return sql;
+  }
 
-  // 🤖 AUTO-FIX FUNCTIONALITY\n  async attemptAutoFix(issue) {\n    console.log(`🔧 Luna: Attempting auto-fix for ${issue.type}...`);\n    \n    try {\n      switch (issue.type) {\n        case 'MISSING_FIELDS':\n          return await this.autoFixMissingFields(issue);\n        case 'ENERGY_SYNC_BUG':\n          return await this.autoFixEnergySync(issue);\n        default:\n          return { success: false, message: 'Auto-fix not available for this issue type' };\n      }\n    } catch (error) {\n      return { success: false, message: error.message };\n    }\n  }
+  // 🤖 AUTO-FIX FUNCTIONALITY
+  async attemptAutoFix(issue) {
+    console.log(`🔧 Luna: Attempting auto-fix for ${issue.type}...`);
+    
+    try {
+      switch (issue.type) {
+        case 'MISSING_FIELDS':
+          return await this.autoFixMissingFields(issue);
+        case 'ENERGY_SYNC_BUG':
+          return await this.autoFixEnergySync(issue);
+        default:
+          return { success: false, message: 'Auto-fix not available for this issue type' };
+      }
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
 
-  async autoFixMissingFields(issue) {\n    // In a real implementation, this would execute the SQL\n    // For now, just log what Luna would do\n    console.log('🔧 Luna would execute SQL:', issue.sqlFix);\n    \n    // Simulate success\n    await new Promise(resolve => setTimeout(resolve, 1000));\n    \n    return {\n      success: true,\n      message: `Added ${issue.fields.length} missing fields to players table`,\n      details: issue.fields\n    };\n  }
+  async autoFixMissingFields(issue) {
+    // In a real implementation, this would execute the SQL
+    // For now, just log what Luna would do
+    console.log('🔧 Luna would execute SQL:', issue.sqlFix);
+    
+    // Simulate success
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    return {
+      success: true,
+      message: `Added ${issue.fields.length} missing fields to players table`,
+      details: issue.fields
+    };
+  }
 
-  async autoFixEnergySync(issue) {\n    console.log('🔧 Luna would update GameContext energy sync logic');\n    \n    // Simulate updating code\n    await new Promise(resolve => setTimeout(resolve, 1500));\n    \n    return {\n      success: true,\n      message: 'Updated energy sync in GameContext.tsx',\n      details: 'Added maxEnergy to database sync operations'\n    };\n  }\n\n  // 💬 CHAT INTERFACE METHODS\n  async sendIssueAlert(issue) {\n    const alertMessage = this.formatIssueAlert(issue);\n    \n    if (this.lunaBug?.chat) {\n      // Send to chat with action buttons\n      await this.lunaBug.chat.sendAlert({\n        type: 'SCHEMA_ISSUE',\n        severity: issue.severity,\n        message: alertMessage,\n        actions: issue.autoFixAvailable ? ['auto_fix', 'manual_steps', 'ignore'] : ['manual_steps', 'ignore'],\n        issueId: issue.type + '_' + Date.now()\n      });\n    } else {\n      // Fallback to console\n      console.log('🚨 LUNA ALERT:', alertMessage);\n    }\n  }\n\n  formatIssueAlert(issue) {\n    let message = `🚨 **Schema Issue Detected**\\n\\n`;\n    message += `**Type:** ${issue.type}\\n`;\n    message += `**Severity:** ${issue.severity}\\n`;\n    message += `**Description:** ${issue.description}\\n\\n`;\n    \n    if (issue.fields) {\n      message += `**Missing Fields:** ${issue.fields.join(', ')}\\n`;\n    }\n    \n    if (issue.autoFixAvailable) {\n      message += `\\n🤖 **I can auto-fix this for you!**\\n`;\n      message += `Would you like me to handle it automatically?`;\n    } else {\n      message += `\\n📋 **Manual fix required**\\n`;\n      message += `I'll provide step-by-step instructions.`;\n    }\n    \n    return message;\n  }\n\n  // 🎯 HANDLE USER RESPONSES\n  async handleUserChoice(issueId, choice) {\n    const issue = this.detectedIssues.get(issueId);\n    if (!issue) {\n      return { error: 'Issue not found' };\n    }\n    \n    switch (choice) {\n      case 'auto_fix':\n        console.log('🤖 Luna: User chose auto-fix');\n        const result = await this.attemptAutoFix(issue);\n        \n        if (result.success) {\n          await this.sendSuccessMessage(result);\n          this.detectedIssues.delete(issueId);\n        } else {\n          await this.sendErrorMessage(result);\n        }\n        return result;\n        \n      case 'manual_steps':\n        console.log('📋 Luna: User chose manual fix');\n        await this.sendManualInstructions(issue);\n        return { success: true, message: 'Manual instructions provided' };\n        \n      case 'ignore':\n        console.log('🙈 Luna: User chose to ignore issue');\n        this.detectedIssues.delete(issueId);\n        return { success: true, message: 'Issue ignored' };\n        \n      default:\n        return { error: 'Invalid choice' };\n    }\n  }\n\n  async sendSuccessMessage(result) {\n    const message = `✅ **Auto-fix completed!**\\n\\n${result.message}`;\n    \n    if (this.lunaBug?.chat) {\n      await this.lunaBug.chat.sendMessage(message);\n    } else {\n      console.log('✅ LUNA SUCCESS:', message);\n    }\n  }\n\n  async sendErrorMessage(result) {\n    const message = `❌ **Auto-fix failed**\\n\\n${result.message}\\n\\nWould you like manual instructions instead?`;\n    \n    if (this.lunaBug?.chat) {\n      await this.lunaBug.chat.sendMessage(message, { actions: ['manual_steps'] });\n    } else {\n      console.log('❌ LUNA ERROR:', message);\n    }\n  }\n\n  async sendManualInstructions(issue) {\n    let instructions = `📋 **Manual Fix Instructions**\\n\\n`;\n    instructions += `**Issue:** ${issue.description}\\n\\n`;\n    \n    if (issue.sqlFix) {\n      instructions += `**SQL to run in Supabase:**\\n\\`\\`\\`sql\\n${issue.sqlFix}\\`\\`\\`\\n\\n`;\n    }\n    \n    if (issue.codeFix) {\n      instructions += `**Code changes needed:**\\n${issue.codeFix}\\n\\n`;\n    }\n    \n    instructions += `Let me know when you've applied the fix and I'll verify it worked! 🎯`;\n    \n    if (this.lunaBug?.chat) {\n      await this.lunaBug.chat.sendMessage(instructions);\n    } else {\n      console.log('📋 LUNA MANUAL:', instructions);\n    }\n  }\n\n  // 🚀 START MONITORING\n  async startMonitoring() {\n    console.log('👁️ Luna: Starting schema monitoring...');\n    \n    // Run initial audit\n    const issues = await this.auditSchema();\n    \n    if (issues.length > 0) {\n      console.log(`🚨 Luna: Found ${issues.length} schema issues`);\n      \n      for (const issue of issues) {\n        const issueId = issue.type + '_' + Date.now();\n        this.detectedIssues.set(issueId, { ...issue, id: issueId });\n        await this.sendIssueAlert({ ...issue, id: issueId });\n        \n        // Small delay between alerts\n        await new Promise(resolve => setTimeout(resolve, 1000));\n      }\n    } else {\n      console.log('✅ Luna: No schema issues detected');\n    }\n    \n    // Set up periodic monitoring (every 5 minutes)\n    setInterval(async () => {\n      const newIssues = await this.auditSchema();\n      \n      for (const issue of newIssues) {\n        const issueKey = issue.type + '_' + issue.table;\n        if (!this.hasRecentIssue(issueKey)) {\n          const issueId = issueKey + '_' + Date.now();\n          this.detectedIssues.set(issueId, { ...issue, id: issueId });\n          await this.sendIssueAlert({ ...issue, id: issueId });\n        }\n      }\n    }, 5 * 60 * 1000); // 5 minutes\n  }\n\n  hasRecentIssue(issueKey) {\n    // Check if we've alerted about this issue recently\n    for (const [id, issue] of this.detectedIssues) {\n      if (id.startsWith(issueKey)) {\n        return true;\n      }\n    }\n    return false;\n  }\n\n  // 🎮 STEVEN'S CONTROL PANEL\n  getStatus() {\n    return {\n      monitoring: true,\n      autoFixEnabled: this.autoFixEnabled,\n      activeIssues: this.detectedIssues.size,\n      lastAudit: new Date().toISOString()\n    };\n  }\n\n  toggleAutoFix() {\n    this.autoFixEnabled = !this.autoFixEnabled;\n    console.log(`🤖 Luna auto-fix: ${this.autoFixEnabled ? 'ENABLED' : 'DISABLED'}`);\n    return this.autoFixEnabled;\n  }\n\n  // 📊 REPORT CURRENT ISSUES\n  getActiveIssues() {\n    return Array.from(this.detectedIssues.values());\n  }\n}\n\nmodule.exports = SchemaAuditor;", "sha": "", "_tool_input_summary": "Creating Luna's Schema Auditor plugin that can detect database schema mismatches, missing fields, and offer auto-fix or manual instructions", "_requires_user_approval": true}
+  async autoFixEnergySync(issue) {
+    console.log('🔧 Luna would update GameContext energy sync logic');
+    
+    // Simulate updating code
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    
+    return {
+      success: true,
+      message: 'Updated energy sync in GameContext.tsx',
+      details: 'Added maxEnergy to database sync operations'
+    };
+  }
+
+  // 💬 CHAT INTERFACE METHODS
+  async sendIssueAlert(issue) {
+    const alertMessage = this.formatIssueAlert(issue);
+    
+    if (this.lunaBug?.chat) {
+      // Send to chat with action buttons
+      await this.lunaBug.chat.sendAlert({
+        type: 'SCHEMA_ISSUE',
+        severity: issue.severity,
+        message: alertMessage,
+        actions: issue.autoFixAvailable ? ['auto_fix', 'manual_steps', 'ignore'] : ['manual_steps', 'ignore'],
+        issueId: issue.type + '_' + Date.now()
+      });
+    } else {
+      // Fallback to console
+      console.log('🚨 LUNA ALERT:', alertMessage);
+    }
+  }
+
+  formatIssueAlert(issue) {
+    let message = '🚨 **Schema Issue Detected**' + String.fromCharCode(10) + String.fromCharCode(10);
+    message += '**Type:** ' + issue.type + String.fromCharCode(10);
+    message += '**Severity:** ' + issue.severity + String.fromCharCode(10);
+    message += '**Description:** ' + issue.description + String.fromCharCode(10) + String.fromCharCode(10);
+    
+    if (issue.fields) {
+      message += '**Missing Fields:** ' + issue.fields.join(', ') + String.fromCharCode(10);
+    }
+    
+    if (issue.autoFixAvailable) {
+      message += String.fromCharCode(10) + '🤖 **I can auto-fix this for you!**' + String.fromCharCode(10);
+      message += 'Would you like me to handle it automatically?';
+    } else {
+      message += String.fromCharCode(10) + '📋 **Manual fix required**' + String.fromCharCode(10);
+      message += 'I will provide step-by-step instructions.';
+    }
+    
+    return message;
+  }
+
+  // 🎯 HANDLE USER RESPONSES
+  async handleUserChoice(issueId, choice) {
+    const issue = this.detectedIssues.get(issueId);
+    if (!issue) {
+      return { error: 'Issue not found' };
+    }
+    
+    switch (choice) {
+      case 'auto_fix':
+        console.log('🤖 Luna: User chose auto-fix');
+        const result = await this.attemptAutoFix(issue);
+        
+        if (result.success) {
+          await this.sendSuccessMessage(result);
+          this.detectedIssues.delete(issueId);
+        } else {
+          await this.sendErrorMessage(result);
+        }
+        return result;
+        
+      case 'manual_steps':
+        console.log('📋 Luna: User chose manual fix');
+        await this.sendManualInstructions(issue);
+        return { success: true, message: 'Manual instructions provided' };
+        
+      case 'ignore':
+        console.log('🙈 Luna: User chose to ignore issue');
+        this.detectedIssues.delete(issueId);
+        return { success: true, message: 'Issue ignored' };
+        
+      default:
+        return { error: 'Invalid choice' };
+    }
+  }
+
+  async sendSuccessMessage(result) {
+    const message = '✅ **Auto-fix completed!**' + String.fromCharCode(10) + String.fromCharCode(10) + result.message;
+    
+    if (this.lunaBug?.chat) {
+      await this.lunaBug.chat.sendMessage(message);
+    } else {
+      console.log('✅ LUNA SUCCESS:', message);
+    }
+  }
+
+  async sendErrorMessage(result) {
+    const message = '❌ **Auto-fix failed**' + String.fromCharCode(10) + String.fromCharCode(10) + result.message + String.fromCharCode(10) + String.fromCharCode(10) + 'Would you like manual instructions instead?';
+    
+    if (this.lunaBug?.chat) {
+      await this.lunaBug.chat.sendMessage(message, { actions: ['manual_steps'] });
+    } else {
+      console.log('❌ LUNA ERROR:', message);
+    }
+  }
+
+  async sendManualInstructions(issue) {
+    let instructions = '📋 **Manual Fix Instructions**' + String.fromCharCode(10) + String.fromCharCode(10);
+    instructions += '**Issue:** ' + issue.description + String.fromCharCode(10) + String.fromCharCode(10);
+    
+    if (issue.sqlFix) {
+      instructions += '**SQL to run in Supabase:**' + String.fromCharCode(10) + '```sql' + String.fromCharCode(10) + issue.sqlFix + '```' + String.fromCharCode(10) + String.fromCharCode(10);
+    }
+    
+    if (issue.codeFix) {
+      instructions += '**Code changes needed:**' + String.fromCharCode(10) + issue.codeFix + String.fromCharCode(10) + String.fromCharCode(10);
+    }
+    
+    instructions += 'Let me know when you have applied the fix and I will verify it worked! 🎯';
+    
+    if (this.lunaBug?.chat) {
+      await this.lunaBug.chat.sendMessage(instructions);
+    } else {
+      console.log('📋 LUNA MANUAL:', instructions);
+    }
+  }
+
+  // 🚀 START MONITORING
+  async startMonitoring() {
+    console.log('👁️ Luna: Starting schema monitoring...');
+    
+    // Run initial audit
+    const issues = await this.auditSchema();
+    
+    if (issues.length > 0) {
+      console.log(`🚨 Luna: Found ${issues.length} schema issues`);
+      
+      for (const issue of issues) {
+        const issueId = issue.type + '_' + Date.now();
+        this.detectedIssues.set(issueId, { ...issue, id: issueId });
+        await this.sendIssueAlert({ ...issue, id: issueId });
+        
+        // Small delay between alerts
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    } else {
+      console.log('✅ Luna: No schema issues detected');
+    }
+    
+    // Set up periodic monitoring (every 5 minutes)
+    setInterval(async () => {
+      const newIssues = await this.auditSchema();
+      
+      for (const issue of newIssues) {
+        const issueKey = issue.type + '_' + issue.table;
+        if (!this.hasRecentIssue(issueKey)) {
+          const issueId = issueKey + '_' + Date.now();
+          this.detectedIssues.set(issueId, { ...issue, id: issueId });
+          await this.sendIssueAlert({ ...issue, id: issueId });
+        }
+      }
+    }, 5 * 60 * 1000); // 5 minutes
+  }
+
+  hasRecentIssue(issueKey) {
+    // Check if we've alerted about this issue recently
+    for (const [id, issue] of this.detectedIssues) {
+      if (id.startsWith(issueKey)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // 🎮 STEVEN'S CONTROL PANEL
+  getStatus() {
+    return {
+      monitoring: true,
+      autoFixEnabled: this.autoFixEnabled,
+      activeIssues: this.detectedIssues.size,
+      lastAudit: new Date().toISOString()
+    };
+  }
+
+  toggleAutoFix() {
+    this.autoFixEnabled = !this.autoFixEnabled;
+    console.log(`🤖 Luna auto-fix: ${this.autoFixEnabled ? 'ENABLED' : 'DISABLED'}`);
+    return this.autoFixEnabled;
+  }
+
+  // 📊 REPORT CURRENT ISSUES
+  getActiveIssues() {
+    return Array.from(this.detectedIssues.values());
+  }
+}
+
+module.exports = SchemaAuditor;
