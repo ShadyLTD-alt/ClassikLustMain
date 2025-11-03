@@ -26,7 +26,7 @@ const CharacterSelectionScrollable: React.FC<CharacterSelectionScrollableProps> 
   onClose, 
   onSelect 
 }) => {
-  const { state, characters, images, selectCharacter } = useGame(); // 🔧 Use GameContext selectCharacter
+  const { state, characters, images, selectCharacter, dispatch } = useGame(); // 🔧 Get dispatch for immediate updates
   const [highlighted, setHighlighted] = useState<Character | null>(null);
   const [activeTab, setActiveTab] = useState<'all' | 'unlocked' | 'locked' | 'vip'>('all');
   const [showGallery, setShowGallery] = useState(false);
@@ -151,15 +151,13 @@ const CharacterSelectionScrollable: React.FC<CharacterSelectionScrollableProps> 
       const result = await response.json();
       console.log(`✅ [DISPLAY IMAGE] Display image set successfully:`, normalizedUrl);
       
-      // 🔧 Update GameContext immediately for instant UI feedback
+      // 🔧 IMMEDIATE: Update GameContext immediately for instant UI feedback
       if (result.player?.displayImage) {
-        // Dispatch to GameContext to update display image
-        const { dispatch } = useGame();
         dispatch({ type: 'UPDATE_DISPLAY_IMAGE', payload: result.player.displayImage });
       }
 
       if (showFeedback) {
-        console.log('✅ [DISPLAY IMAGE] Display image updated successfully');
+        console.log('✅ [DISPLAY IMAGE] Display image updated successfully in GameContext');
         // Show brief success indicator
         setTimeout(() => setSettingDisplayImage(null), 1000);
       } else {
@@ -249,6 +247,10 @@ const CharacterSelectionScrollable: React.FC<CharacterSelectionScrollableProps> 
             <div>
               <h2 className="text-xl font-bold text-white">Character Selection</h2>
               <div className="text-sm text-gray-400">@{state?.username || 'Player'} • Level {state?.level || 1}</div>
+              {/* 🔍 DEBUG: Show current selected character */}
+              {process.env.NODE_ENV === 'development' && state?.selectedCharacterId && (
+                <div className="text-xs text-purple-400">Current: {state.selectedCharacterId}</div>
+              )}
             </div>
             <div className="flex bg-gray-800 rounded-lg p-1 ml-6">
               {['all','unlocked','locked','vip'].map(tab => (
@@ -268,10 +270,15 @@ const CharacterSelectionScrollable: React.FC<CharacterSelectionScrollableProps> 
                   const unlocked = state?.unlockedCharacters?.includes(c.id) || c.unlockLevel <= (state?.level || 1);
                   const rare = getRarityConfig(c.rarity);
                   const selected = highlighted?.id === c.id;
+                  const isCurrentlySelected = state?.selectedCharacterId === c.id; // 🔧 Track actual game state
                   const fallbackImage = getFallbackImageUrl(c);
                   
                   return (
-                    <div key={c.id} onClick={() => setHighlighted(c as Character)} className={`relative bg-gray-800/50 border-2 rounded-xl p-2 cursor-pointer transition-all ${selected? `${rare.border} ring-2 ring-purple-400/50 bg-purple-900/30` : unlocked? `${rare.border}` : 'border-gray-600 opacity-60'}`}>
+                    <div key={c.id} onClick={() => setHighlighted(c as Character)} className={`relative bg-gray-800/50 border-2 rounded-xl p-2 cursor-pointer transition-all ${
+                      isCurrentlySelected ? 'border-green-400 ring-2 ring-green-400/50 bg-green-900/20' :
+                      selected ? `${rare.border} ring-2 ring-purple-400/50 bg-purple-900/30` : 
+                      unlocked ? `${rare.border}` : 'border-gray-600 opacity-60'
+                    }`}>
                       <div className="aspect-[2/3] bg-gradient-to-br from-gray-700 to-gray-800 rounded-lg mb-2 flex items-center justify-center overflow-hidden">
                         {!unlocked ? (
                           <div className="text-center"><Lock className="w-6 h-6 text-gray-500 mb-1"/><div className="text-xs text-gray-400 font-semibold">Lv{c.unlockLevel}</div></div>
@@ -293,6 +300,10 @@ const CharacterSelectionScrollable: React.FC<CharacterSelectionScrollableProps> 
                       <div className="text-center">
                         <h3 className="text-white font-bold mb-1 text-xs">{c.name}</h3>
                         <div className="text-gray-500 text-xs">{getImageCount(c.id)} imgs</div>
+                        {/* 🔧 Active indicator */}
+                        {isCurrentlySelected && (
+                          <div className="text-xs text-green-400 font-semibold">✅ Active</div>
+                        )}
                       </div>
                     </div>
                   );
@@ -307,6 +318,10 @@ const CharacterSelectionScrollable: React.FC<CharacterSelectionScrollableProps> 
           <div className="text-gray-400 text-sm">
             {highlighted ? (<>
               Selected: <strong className="text-purple-400">{highlighted.name}</strong> • Gallery: <strong>{getImageCount(highlighted.id)} images</strong>
+              {/* 🔍 DEBUG: Show if this character is currently active */}
+              {state?.selectedCharacterId === highlighted.id && (
+                <span className="text-green-400 ml-2">✅ Currently Active</span>
+              )}
             </>) : 'Pick a character'}
           </div>
           <div className="flex gap-2">
@@ -319,7 +334,7 @@ const CharacterSelectionScrollable: React.FC<CharacterSelectionScrollableProps> 
             </button>
             <button 
               onClick={() => highlighted && isHighlightedUnlocked && persistSelection(highlighted.id)} 
-              disabled={!highlighted || !isHighlightedUnlocked || saving} 
+              disabled={!highlighted || !isHighlightedUnlocked || saving || state?.selectedCharacterId === highlighted?.id} 
               className="px-4 py-2 rounded bg-purple-600 hover:bg-purple-700 text-white disabled:opacity-50 min-w-[80px]"
             >
               {saving ? (
@@ -327,7 +342,7 @@ const CharacterSelectionScrollable: React.FC<CharacterSelectionScrollableProps> 
                   <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
                   <span>Saving...</span>
                 </div>
-              ) : 'Select'}
+              ) : state?.selectedCharacterId === highlighted?.id ? 'Selected' : 'Select'}
             </button>
           </div>
         </div>
@@ -408,6 +423,7 @@ const CharacterSelectionScrollable: React.FC<CharacterSelectionScrollableProps> 
                           onClick={(e) => {
                             e.stopPropagation();
                             if (img.url) {
+                              console.log(`🖼️ [GALLERY] Setting display image from gallery: ${img.url}`);
                               updateDisplayImage(img.url);
                             }
                           }}
