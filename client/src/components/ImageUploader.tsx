@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Upload, X, Image as ImageIcon, Edit, Plus, Database, RefreshCw, CheckCircle, Trash2, Save } from 'lucide-react';
+import { Upload, X, Image as ImageIcon, Edit, Plus, Database, RefreshCw, CheckCircle, Trash2, Save, ArrowLeftRight } from 'lucide-react';
 import { useGame } from '@/contexts/GameContext';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -33,7 +33,7 @@ export default function ImageUploader({ adminMode = false }: { adminMode?: boole
 
   const [availablePoses, setAvailablePoses] = useState<string[]>(() => {
     const saved = localStorage.getItem('availablePoses');
-    return saved ? JSON.parse(saved) : ['sitting','standing','casual','formal','bikini','dress','playful','seductive','cute','elegant'];
+    return saved ? JSON.parse(saved) : ['sitting','standing','casual','formal','bikini','dress','playful','seductive','cute','elegant','dancing','sleeping','workout','bathing','reading'];
   });
 
   const [imageDataArrays, setImageDataArrays] = useState({
@@ -127,15 +127,20 @@ export default function ImageUploader({ adminMode = false }: { adminMode?: boole
   const handleEditImage = async () => {
     if (!editingImage) return;
     
+    console.log('🖼️ [EDIT IMAGE] Updating image:', editingImage.id);
+    console.log('🎭 [EDIT IMAGE] Character reassignment:', editingImage.characterId);
+    console.log('🎪 [EDIT IMAGE] Poses:', editingImage.poses);
+    
     const sessionToken = localStorage.getItem('sessionToken');
     if (!sessionToken) return toast({ title: '❌ Authentication required', variant: 'destructive' });
     
     try {
       const updateData = {
+        characterId: editingImage.characterId, // 🆕 Now supports character reassignment
         imageType: editingImage.imageType,
         unlockLevel: editingImage.unlockLevel,
         categories: editingImage.categories,
-        poses: editingImage.poses,
+        poses: editingImage.poses, // 🆕 Enhanced poses support
         isHidden: editingImage.isHidden,
         chatEnable: editingImage.chatEnable,
         chatSendPercent: editingImage.chatSendPercent
@@ -156,9 +161,13 @@ export default function ImageUploader({ adminMode = false }: { adminMode?: boole
       }
       
       updateImage(editingImage);
-      toast({ title: '✅ Image updated', description: 'Changes saved successfully' });
+      toast({ 
+        title: '✅ Image updated', 
+        description: `Changes saved${editingImage.characterId !== selectedCharacterId ? ' (reassigned character)' : ''}` 
+      });
       setEditingImage(null);
     } catch (e: any) {
+      console.error('🔴 [EDIT IMAGE] Failed:', e);
       toast({ title: '❌ Update failed', description: e.message, variant: 'destructive' });
     }
   };
@@ -196,6 +205,25 @@ export default function ImageUploader({ adminMode = false }: { adminMode?: boole
   const handleAddPose = (pose: string) => {
     if (!selectedPoses.includes(pose)) {
       setSelectedPoses(prev => [...prev, pose]);
+    }
+  };
+
+  // 🆕 Editing poses helpers
+  const handleEditingRemovePose = (poseToRemove: string) => {
+    if (editingImage) {
+      setEditingImage({
+        ...editingImage,
+        poses: editingImage.poses?.filter(p => p !== poseToRemove) || []
+      });
+    }
+  };
+
+  const handleEditingAddPose = (pose: string) => {
+    if (editingImage && !editingImage.poses?.includes(pose)) {
+      setEditingImage({
+        ...editingImage,
+        poses: [...(editingImage.poses || []), pose]
+      });
     }
   };
 
@@ -240,35 +268,42 @@ export default function ImageUploader({ adminMode = false }: { adminMode?: boole
         </div>
       </div>
 
-      {/* RESTORED: Poses Section - Exactly like in the screenshot */}
+      {/* 🆕 ENHANCED: Poses Section with chip-style editor */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm flex items-center gap-2">
-            😊 Poses
+            🎪 Poses & Categories
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-3">
+          <div className="space-y-4">
             {/* Add Pose Input */}
             <div className="flex gap-2">
               <Input
                 value={newPoseInput}
                 onChange={(e) => setNewPoseInput(e.target.value)}
-                placeholder="Add a pose (e.g., sitting, bikini)"
+                placeholder="Add a new pose (e.g., dancing, reading, workout)"
                 className="flex-1"
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && newPoseInput.trim()) {
-                    addNewPoseToMasterArray(newPoseInput);
-                    handleAddPose(newPoseInput.trim().toLowerCase());
+                    const cleanPose = newPoseInput.trim().toLowerCase();
+                    addNewPoseToMasterArray(cleanPose);
+                    handleAddPose(cleanPose);
                     setNewPoseInput('');
+                    e.preventDefault();
+                  }
+                  if (e.key === 'Backspace' && newPoseInput === '' && selectedPoses.length > 0) {
+                    // Backspace to remove last pose when input is empty
+                    handleRemovePose(selectedPoses[selectedPoses.length - 1]);
                   }
                 }}
               />
               <Button 
                 onClick={() => {
                   if (newPoseInput.trim()) {
-                    addNewPoseToMasterArray(newPoseInput);
-                    handleAddPose(newPoseInput.trim().toLowerCase());
+                    const cleanPose = newPoseInput.trim().toLowerCase();
+                    addNewPoseToMasterArray(cleanPose);
+                    handleAddPose(cleanPose);
                     setNewPoseInput('');
                   }
                 }}
@@ -280,31 +315,37 @@ export default function ImageUploader({ adminMode = false }: { adminMode?: boole
               </Button>
             </div>
 
-            {/* Available Poses Pills */}
-            <div className="flex flex-wrap gap-2">
-              {availablePoses.map(pose => (
-                <Badge
-                  key={pose}
-                  variant={selectedPoses.includes(pose) ? "default" : "outline"}
-                  className="cursor-pointer hover:bg-primary/80"
-                  onClick={() => selectedPoses.includes(pose) ? handleRemovePose(pose) : handleAddPose(pose)}
-                >
-                  {pose}
-                </Badge>
-              ))}
+            {/* Available Poses - Chip-style Pills */}
+            <div>
+              <Label className="text-xs text-muted-foreground mb-2 block">Available Poses (click to add/remove)</Label>
+              <div className="flex flex-wrap gap-2">
+                {availablePoses.map(pose => (
+                  <Badge
+                    key={pose}
+                    variant={selectedPoses.includes(pose) ? "default" : "outline"}
+                    className="cursor-pointer hover:bg-primary/80 transition-colors"
+                    onClick={() => selectedPoses.includes(pose) ? handleRemovePose(pose) : handleAddPose(pose)}
+                  >
+                    {pose}
+                  </Badge>
+                ))}
+              </div>
             </div>
 
-            {/* Selected Poses Display */}
+            {/* Selected Poses Display - Chip-style with X to remove */}
             {selectedPoses.length > 0 && (
               <div>
-                <Label className="text-xs text-muted-foreground">Selected Poses ({selectedPoses.length})</Label>
-                <div className="flex flex-wrap gap-1 mt-1">
+                <Label className="text-xs text-muted-foreground">Selected Poses ({selectedPoses.length}) - Click X to remove</Label>
+                <div className="flex flex-wrap gap-1 mt-2">
                   {selectedPoses.map(pose => (
-                    <Badge key={pose} variant="secondary" className="text-xs">
+                    <Badge key={pose} variant="secondary" className="text-xs group hover:bg-destructive/80 transition-colors">
                       {pose} 
                       <X 
-                        className="w-3 h-3 ml-1 cursor-pointer hover:text-destructive" 
-                        onClick={() => handleRemovePose(pose)}
+                        className="w-3 h-3 ml-1 cursor-pointer opacity-70 group-hover:opacity-100" 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRemovePose(pose);
+                        }}
                       />
                     </Badge>
                   ))}
@@ -380,13 +421,16 @@ export default function ImageUploader({ adminMode = false }: { adminMode?: boole
         </div>
       )}
 
-      {/* Edit Panel */}
+      {/* 🆕 ENHANCED: Edit Panel with character reassignment and poses */}
       {editingImage && (
         <Card className="border-blue-500 bg-blue-950/20">
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
               <Edit className="w-5 h-5" />
               Editing Image
+              <Badge variant="outline" className="ml-auto">
+                {characters.find(c => c.id === editingImage.characterId)?.name || 'Unknown Character'}
+              </Badge>
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -399,6 +443,29 @@ export default function ImageUploader({ adminMode = false }: { adminMode?: boole
                 />
               </div>
               <div className="flex-1 space-y-3">
+                {/* 🆕 Character Reassignment Dropdown */}
+                <div>
+                  <Label className="flex items-center gap-2">
+                    <ArrowLeftRight className="w-4 h-4" />
+                    Reassign to Character
+                  </Label>
+                  <Select 
+                    value={editingImage.characterId} 
+                    onValueChange={(characterId) => setEditingImage({...editingImage, characterId})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select character" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {characters.map(char => (
+                        <SelectItem key={char.id} value={char.id}>
+                          {char.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label>Image Type</Label>
@@ -449,6 +516,53 @@ export default function ImageUploader({ adminMode = false }: { adminMode?: boole
               </div>
             </div>
             
+            {/* 🆕 POSES EDITING SECTION */}
+            <div>
+              <Label className="text-sm font-medium flex items-center gap-2 mb-3">
+                🎪 Edit Poses
+              </Label>
+              
+              {/* Available poses for editing */}
+              <div className="space-y-3">
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-2 block">Available Poses (click to add)</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {availablePoses.map(pose => (
+                      <Badge
+                        key={pose}
+                        variant={editingImage.poses?.includes(pose) ? "default" : "outline"}
+                        className="cursor-pointer hover:bg-primary/80 transition-colors text-xs"
+                        onClick={() => editingImage.poses?.includes(pose) ? handleEditingRemovePose(pose) : handleEditingAddPose(pose)}
+                      >
+                        {pose}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+                
+                {/* Currently assigned poses */}
+                {editingImage.poses && editingImage.poses.length > 0 && (
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Current Poses ({editingImage.poses.length}) - Click X to remove</Label>
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {editingImage.poses.map(pose => (
+                        <Badge key={pose} variant="secondary" className="text-xs group hover:bg-destructive/80 transition-colors">
+                          {pose} 
+                          <X 
+                            className="w-3 h-3 ml-1 cursor-pointer opacity-70 group-hover:opacity-100" 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEditingRemovePose(pose);
+                            }}
+                          />
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+            
             <div className="flex gap-2">
               <Button onClick={handleEditImage} className="bg-blue-600 hover:bg-blue-700">
                 <Save className="w-4 h-4 mr-2" />Save Changes
@@ -490,6 +604,13 @@ export default function ImageUploader({ adminMode = false }: { adminMode?: boole
                     {image.unlockLevel > 1 && (
                       <Badge variant="secondary" className="absolute top-1 right-1 text-xs bg-black/70">
                         Lv{image.unlockLevel}
+                      </Badge>
+                    )}
+                    
+                    {/* Poses badge if available */}
+                    {image.poses && image.poses.length > 0 && (
+                      <Badge className="absolute bottom-1 left-1 text-xs bg-purple-600/90 text-white">
+                        {image.poses.length} poses
                       </Badge>
                     )}
                     
