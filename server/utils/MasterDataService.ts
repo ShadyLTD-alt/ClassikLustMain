@@ -2,12 +2,13 @@
  * Luna's Enhanced Master Data Service  
  * Single Source of Truth for all game data creation
  * Eliminates hardcoded defaults throughout the codebase
- * Phase 2: Enhanced with admin route support
+ * Phase 2: Enhanced with admin route support - CRASH FIXED
  */
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import logger from '../logger';
+// ❌ LUNA FIX: Remove logger import causing crash
+// import logger from './logger';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -69,7 +70,8 @@ class MasterDataService {
   private initialized = false;
 
   constructor() {
-    logger.info('🎯 Luna: Initializing Enhanced Master Data Service');
+    // ✅ LUNA FIX: Use console.log instead of logger to prevent crashes
+    console.log('🎯 Luna: Initializing Enhanced Master Data Service');
   }
 
   /**
@@ -79,7 +81,7 @@ class MasterDataService {
   private async loadMasterData(): Promise<void> {
     if (this.initialized) return;
 
-    logger.info('📂 Luna: Loading master data files...');
+    console.log('📂 Luna: Loading master data files...');
     
     try {
       // Load player defaults with corrected field names
@@ -89,12 +91,12 @@ class MasterDataService {
         
         // ✅ Luna Validation: Ensure correct field names
         if ('maxEnergy' in this.masterData.defaultPlayerState) {
-          logger.warn('⚠️ Luna: Found maxEnergy instead of energyMax in master data - auto-correcting');
+          console.warn('⚠️ Luna: Found maxEnergy instead of energyMax in master data - auto-correcting');
           (this.masterData.defaultPlayerState as any).energyMax = (this.masterData.defaultPlayerState as any).maxEnergy;
           delete (this.masterData.defaultPlayerState as any).maxEnergy;
         }
         
-        logger.info('✅ Player defaults loaded with correct field naming');
+        console.log('✅ Player defaults loaded with correct field naming');
       }
 
       // Load upgrades (already has correct energyRegen)
@@ -105,31 +107,31 @@ class MasterDataService {
         // ✅ Luna Validation: Check for energyRegen consistency
         const energyRegenUpgrade = this.masterData.upgrades.find(u => u.id === 'energyRegen');
         if (energyRegenUpgrade) {
-          logger.info('✅ energyRegen upgrade found in master data');
+          console.log('✅ energyRegen upgrade found in master data');
         }
         
-        logger.info(`✅ Loaded ${this.masterData.upgrades.length} upgrades`);
+        console.log(`✅ Loaded ${this.masterData.upgrades.length} upgrades`);
       }
 
       // Load characters
       if (fs.existsSync(this.masterPaths.characters)) {
         const characterMaster = JSON.parse(fs.readFileSync(this.masterPaths.characters, 'utf8'));
         this.masterData.characters = characterMaster.characters || [];
-        logger.info(`✅ Loaded ${this.masterData.characters.length} characters`);
+        console.log(`✅ Loaded ${this.masterData.characters.length} characters`);
       }
 
       // Load levels
       if (fs.existsSync(this.masterPaths.levels)) {
         const levelsMaster = JSON.parse(fs.readFileSync(this.masterPaths.levels, 'utf8'));
         this.masterData.levels = levelsMaster.levels || [];
-        logger.info(`✅ Loaded ${this.masterData.levels.length} levels`);
+        console.log(`✅ Loaded ${this.masterData.levels.length} levels`);
       }
 
       this.initialized = true;
-      logger.info('✅ Luna: All master data loaded successfully');
+      console.log('✅ Luna: All master data loaded successfully');
       
     } catch (error) {
-      logger.error('❌ Luna: Failed to load master data:', error);
+      console.error('❌ Luna: Failed to load master data:', error);
       throw new Error('Master data initialization failed');
     }
   }
@@ -156,7 +158,7 @@ class MasterDataService {
   }> {
     await this.loadMasterData();
     
-    logger.info(`🎮 Luna: Creating new player data for ${username} (${telegramId})`);
+    console.log(`🎮 Luna: Creating new player data for ${username} (${telegramId})`);
     
     const defaults = this.masterData.defaultPlayerState;
     
@@ -177,7 +179,7 @@ class MasterDataService {
       totalTapsAllTime: defaults.totalTapsAllTime || 0
     };
 
-    logger.info('✅ Luna: Player data created using enhanced master defaults');
+    console.log('✅ Luna: Player data created using enhanced master defaults');
     return playerData;
   }
 
@@ -214,7 +216,7 @@ class MasterDataService {
       }
     });
     
-    logger.info('✅ Luna: Provided upgrade defaults without hardcoded values');
+    console.log('✅ Luna: Provided upgrade defaults without hardcoded values');
     return defaults;
   }
 
@@ -237,7 +239,7 @@ class MasterDataService {
       description: template.description || 'Character description'
     };
     
-    logger.info('✅ Luna: Provided character defaults from master data template');
+    console.log('✅ Luna: Provided character defaults from master data template');
     return defaults;
   }
 
@@ -279,7 +281,7 @@ class MasterDataService {
                        this.masterData.characters[0];
     
     if (!defaultChar) {
-      logger.warn('⚠️ No default character found, using fallback');
+      console.warn('⚠️ No default character found, using fallback');
       return { id: 'shadow', name: 'Shadow' };
     }
     
@@ -341,7 +343,7 @@ class MasterDataService {
       ]
     };
     
-    logger.info('✅ Luna: Codebase violation scan prepared');
+    console.log('✅ Luna: Codebase violation scan prepared');
     return analysisResults;
   }
 
@@ -383,7 +385,7 @@ class MasterDataService {
 // Export singleton instance
 export const masterDataService = new MasterDataService();
 
-// ✅ LUNA PHASE 2: Also export for CommonJS (admin.js compatibility)
+// ✅ LUNA PHASE 2: Also export for CommonJS (admin.js compatibility) - FIXED
 module.exports = { masterDataService };
 
 export default masterDataService;
