@@ -45,22 +45,22 @@ class PlayerStateManager extends EventEmitter {
   private pendingSyncs = new Set<string>();
   private syncTimeouts = new Map<string, NodeJS.Timeout>();
   private readonly playersRoot: string; // main-gamedata/player-data
-  private readonly snapshotsDir: string; // uploads/snapshots/players
+  private readonly backupsDir: string; // game-backups/player-snapshots
 
   constructor() {
     super();
     this.setMaxListeners(50);
     this.playersRoot = path.join(process.cwd(), 'main-gamedata', 'player-data');
-    this.snapshotsDir = path.join(process.cwd(), 'uploads', 'snapshots', 'players');
+    this.backupsDir = path.join(process.cwd(), 'game-backups', 'player-snapshots'); // 🔧 MOVED to game-backups
     this.ensureDirectories();
   }
 
   private async ensureDirectories() {
     await fs.mkdir(this.playersRoot, { recursive: true });
-    await fs.mkdir(this.snapshotsDir, { recursive: true });
+    await fs.mkdir(this.backupsDir, { recursive: true });
     console.log('📁 Player directories ensured:', {
       primary: this.playersRoot,
-      backup: this.snapshotsDir
+      backups: this.backupsDir // 🔧 Updated log
     });
   }
 
@@ -336,11 +336,14 @@ class PlayerStateManager extends EventEmitter {
     console.log(`✅ Player ${state.username || playerId} synced to database`);
   }
 
+  // 🔧 MOVED: Backup snapshots now go to game-backups/player-snapshots
   private async createBackupSnapshot(playerId: string, state: PlayerState) {
-    const dir = path.join(this.snapshotsDir, playerId);
+    const dir = path.join(this.backupsDir, playerId); // 🔧 Now uses game-backups
     await fs.mkdir(dir, { recursive: true });
     const backup = path.join(dir, `backup-${Date.now()}.json`);
     await fs.writeFile(backup, JSON.stringify(state, null, 2), 'utf8');
+    
+    console.log(`💾 Backup snapshot saved: game-backups/player-snapshots/${playerId}/`);
     
     try {
       const files = await fs.readdir(dir);
@@ -376,7 +379,7 @@ class PlayerStateManager extends EventEmitter {
   async healthCheck() {
     try {
       const mainDirs = await fs.readdir(this.playersRoot).catch(() => []);
-      const backupDirs = await fs.readdir(this.snapshotsDir).catch(() => []);
+      const backupDirs = await fs.readdir(this.backupsDir).catch(() => []); // 🔧 Updated path
       
       let totalJsonFiles = 0;
       let totalBackups = 0;
@@ -390,10 +393,10 @@ class PlayerStateManager extends EventEmitter {
         } catch {}
       }
       
-      // Count backup files
+      // Count backup files in game-backups
       for (const dir of backupDirs) {
         try {
-          const backups = await fs.readdir(path.join(this.snapshotsDir, dir));
+          const backups = await fs.readdir(path.join(this.backupsDir, dir)); // 🔧 Updated path
           totalBackups += backups.filter(f => f.startsWith('backup-')).length;
         } catch {}
       }
@@ -407,7 +410,7 @@ class PlayerStateManager extends EventEmitter {
         pendingTimeouts: this.syncTimeouts.size,
         directories: {
           main: this.playersRoot,
-          backup: this.snapshotsDir
+          backups: this.backupsDir // 🔧 Updated to show game-backups path
         },
         namingConvention: 'telegramId_username/player_username.json'
       };
@@ -421,7 +424,7 @@ class PlayerStateManager extends EventEmitter {
         pendingTimeouts: this.syncTimeouts.size,
         directories: {
           main: this.playersRoot,
-          backup: this.snapshotsDir
+          backups: this.backupsDir
         },
         namingConvention: 'telegramId_username/player_username.json'
       };
@@ -504,6 +507,52 @@ class PlayerStateManager extends EventEmitter {
           errors++;
         }
       }
+      
+      // 🔧 BONUS: Also migrate old backup files to game-backups
+      console.log('📦 Also migrating backup files to game-backups...');
+      
+      const oldSnapshotsDir = path.join(process.cwd(), 'uploads', 'snapshots', 'players');
+      try {
+        const oldBackupDirs = await fs.readdir(oldSnapshotsDir).catch(() => []);
+        
+        for (const playerBackupDir of oldBackupDirs) {
+          try {
+            const oldBackupPath = path.join(oldSnapshotsDir, playerBackupDir);
+            const newBackupPath = path.join(this.backupsDir, playerBackupDir);
+            
+            // Check if old backup directory exists and has files
+            const backupFiles = await fs.readdir(oldBackupPath).catch(() => []);
+            if (backupFiles.length === 0) continue;
+            
+            // Create new backup directory
+            await fs.mkdir(newBackupPath, { recursive: true });
+            
+            // Copy all backup files
+            for (const backupFile of backupFiles.filter(f => f.startsWith('backup-'))) {
+              const oldFilePath = path.join(oldBackupPath, backupFile);
+              const newFilePath = path.join(newBackupPath, backupFile);
+              
+              // Only copy if target doesn't exist
+              try {
+                await fs.access(newFilePath);
+              } catch {
+                await fs.copyFile(oldFilePath, newFilePath);
+                console.log(`📦 Migrated backup: ${playerBackupDir}/${backupFile}`);
+              }
+            }
+            
+            // Remove old backup directory after successful copy
+            await fs.rm(oldBackupPath, { recursive: true });
+            
+          } catch (error) {
+            console.error(`❌ Backup migration error for ${playerBackupDir}:`, error);
+            errors++;
+          }
+        }
+      } catch {
+        // Old snapshots directory doesn't exist, that's fine
+      }
+      
     } catch (error) {
       console.error('❌ Migration scan error:', error);
       errors++;
