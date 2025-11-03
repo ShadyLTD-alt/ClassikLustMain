@@ -68,7 +68,7 @@
       "id": "energyRegen",
       "name": "Energy Regeneration",
       "description": "Energy recovery rate",
-      "type": "energyMax",
+      "type": "energyRegen",
       "icon": "Battery",
       "maxLevel": 30,
       "baseCost": 300,
