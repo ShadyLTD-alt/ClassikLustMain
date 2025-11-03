@@ -65,13 +65,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Health check endpoint - MUST BE FIRST
   logger.info('✅ Setting up /api/health route...');
-  app.get("/api/health", (req, res) => {
-    res.json({ 
-      status: 'ok', 
-      timestamp: new Date().toISOString(),
-      env: process.env.NODE_ENV || 'development',
-      port: process.env.PORT || '5000'
-    });
+  app.get("/api/health", async (req, res) => {
+    try {
+      const playerStateHealth = await playerStateManager.healthCheck();
+      res.json({ 
+        status: 'ok', 
+        timestamp: new Date().toISOString(),
+        env: process.env.NODE_ENV || 'development',
+        port: process.env.PORT || '5000',
+        jsonFirst: {
+          active: true,
+          ...playerStateHealth
+        }
+      });
+    } catch (error) {
+      res.status(500).json({ 
+        status: 'error', 
+        timestamp: new Date().toISOString(),
+        error: error instanceof Error ? error.message : 'Health check failed'
+      });
+    }
   });
 
   // 🌙 LUNABUG ROUTES - Now using ESM compatible .mjs file!
@@ -380,7 +393,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const playerState = await getPlayerState(req.player!.id);
       res.json({ player: playerState });
-      console.log(`📤 Player ${req.player!.id} data served from JSON`);
+      console.log(`📤 Player ${req.player!.username || req.player!.id} data served from JSON`);
     } catch (error) {
       logger.error('Player fetch error', { error: error instanceof Error ? error.message : 'Unknown' });
       res.status(500).json({ error: 'Failed to fetch player data' });
@@ -415,14 +428,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.json({ player: updatedState });
       }
       
-      console.log(`💾 Player ${req.player!.id} updated via JSON-first system`);
+      console.log(`💾 Player ${req.player!.username || req.player!.id} updated via JSON-first system`);
     } catch (error) {
       logger.error('Player update error', { error: error instanceof Error ? error.message : 'Unknown' });
       res.status(500).json({ error: 'Failed to update player' });
     }
   });
 
-  // 🎯 JSON-FIRST: Character selection (dedicated endpoint)
+  // 🎯 JSON-FIRST: Character selection (dedicated endpoint) 🎭
   app.post("/api/player/select-character", requireAuth, async (req, res) => {
     try {
       const { characterId } = req.body;
@@ -440,7 +453,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const updatedState = await selectCharacterForPlayer(req.player!.id, characterId);
       
       res.json({ success: true, player: updatedState });
-      console.log(`🎭 Player ${req.player!.id} selected character ${characterId} via JSON-first`);
+      console.log(`🎭 Player ${req.player!.username || req.player!.id} selected character ${characterId} via JSON-first`);
     } catch (error) {
       logger.error('Character selection error', { error: error instanceof Error ? error.message : 'Unknown' });
       res.status(500).json({ error: 'Failed to select character' });
@@ -467,7 +480,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const updatedState = await purchaseUpgradeForPlayer(req.player!.id, upgradeId, level, cost);
       
       res.json({ success: true, player: updatedState });
-      console.log(`🛒 Player ${req.player!.id} purchased upgrade ${upgradeId} level ${level} via JSON-first`);
+      console.log(`🛒 Player ${req.player!.username || req.player!.id} purchased upgrade ${upgradeId} level ${level} via JSON-first`);
     } catch (error) {
       logger.error('Upgrade purchase error', { error: error instanceof Error ? error.message : 'Unknown' });
       res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to purchase upgrade' });
@@ -501,6 +514,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       logger.error('Master data report error', { error: error instanceof Error ? error.message : 'Unknown' });
       res.status(500).json({ error: 'Failed to generate master data report' });
+    }
+  });
+
+  // 🎯 JSON-FIRST: Admin endpoint to force DB sync for a player
+  app.post("/api/admin/sync-player", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const { playerId } = req.body;
+      
+      if (!playerId) {
+        return res.status(400).json({ error: 'Player ID is required' });
+      }
+
+      await playerStateManager.forceDatabaseSync(playerId);
+      
+      res.json({ 
+        success: true, 
+        message: `Player ${playerId} force-synced to database`
+      });
+    } catch (error) {
+      logger.error('Force sync error', { error: error instanceof Error ? error.message : 'Unknown' });
+      res.status(500).json({ error: 'Failed to force sync player' });
+    }
+  });
+
+  // 🎯 JSON-FIRST: Admin endpoint to view system health
+  app.get("/api/admin/system-health", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const playerHealth = await playerStateManager.healthCheck();
+      const masterDataReport = await masterDataService.getDataIntegrityReport();
+      
+      res.json({ 
+        success: true,
+        system: {
+          timestamp: new Date().toISOString(),
+          jsonFirst: {
+            active: true,
+            ...playerHealth
+          },
+          masterData: masterDataReport,
+          uptime: process.uptime(),
+          memory: process.memoryUsage(),
+          env: process.env.NODE_ENV
+        }
+      });
+    } catch (error) {
+      logger.error('System health error', { error: error instanceof Error ? error.message : 'Unknown' });
+      res.status(500).json({ error: 'Failed to get system health' });
     }
   });
   
