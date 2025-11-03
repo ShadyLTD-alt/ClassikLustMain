@@ -92,6 +92,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // 🔧 MIGRATION: Auto-migrate old player files to new telegramId_username structure
+  app.post("/api/admin/migrate-player-files", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      console.log('📦 Starting player file migration to telegramId_username structure...');
+      
+      const result = await playerStateManager.migrateOldPlayerFiles();
+      
+      console.log(`✅ Migration complete: ${result.moved} moved, ${result.errors} errors`);
+      
+      res.json({
+        success: true,
+        migration: {
+          moved: result.moved,
+          errors: result.errors,
+          message: `Migration complete: ${result.moved} files moved to telegramId_username structure`
+        }
+      });
+    } catch (error) {
+      logger.error('Player file migration error', { error: error instanceof Error ? error.message : 'Unknown' });
+      res.status(500).json({ error: 'Failed to migrate player files' });
+    }
+  });
+
   // 🌙 LUNA LEARNING ENDPOINT
   app.get("/api/luna/learning-report", requireAuth, requireAdmin, async (req, res) => {
     try {
@@ -282,7 +305,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/auth/me", requireAuth, async (req, res) => {
     try {
-      // 🎯 JSON-FIRST: Load from per-player folder JSON
+      // 🎯 JSON-FIRST: Load from telegramId_username folder JSON
       const playerState = await getPlayerState(req.player!.id);
       res.json({ success: true, player: playerState });
     } catch (error) {
@@ -311,7 +334,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const playerData = await masterDataService.createNewPlayerData(devTelegramId, sanitizedUsername);
         player = await storage.createPlayer(playerData);
         await savePlayerDataToJSON(player);
-        console.log(`🎮 Created new dev player: ${sanitizedUsername}`);
+        console.log(`🎮 Created new dev player: ${sanitizedUsername} (${devTelegramId}_${sanitizedUsername})`);
       } else {
         await storage.updatePlayer(player.id, { lastLogin: new Date() });
         await savePlayerDataToJSON(player);
@@ -361,7 +384,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const playerData = await masterDataService.createNewPlayerData(telegramId, username);
         player = await storage.createPlayer(playerData);
         await savePlayerDataToJSON(player);
-        console.log(`🎮 Created new Telegram player: ${username}`);
+        console.log(`🎮 Created new Telegram player: ${username} (${telegramId}_${username})`);
       } else {
         await storage.updatePlayer(player.id, { lastLogin: new Date() });
         await savePlayerDataToJSON(player);
@@ -513,7 +536,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // 🎯 JSON-FIRST: Get player data (from per-player folder)
+  // 🎯 JSON-FIRST: Get player data (from telegramId_username folder)
   app.get("/api/player/me", requireAuth, async (req, res) => {
     try {
       const playerState = await getPlayerState(req.player!.id);
@@ -524,7 +547,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // 🎯 JSON-FIRST: Update player data (immediate per-player JSON + async DB)
+  // 🎯 JSON-FIRST: Update player data (immediate telegramId_username JSON + async DB)
   app.patch("/api/player/me", requireAuth, async (req, res) => {
     try {
       const updates = req.body;
@@ -558,7 +581,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // 🎭 FIXED: Character selection with per-player folder JSON
+  // 🎭 FIXED: Character selection with telegramId_username folder JSON
   app.post("/api/player/select-character", requireAuth, async (req, res) => {
     try {
       const { characterId } = req.body;
@@ -585,7 +608,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const updatedState = await selectCharacterForPlayer(req.player!.id, characterId);
       
       console.log(`✅ [CHARACTER SELECT] SUCCESS: ${characterId} selected for ${updatedState.username}`);
-      console.log(`📁 [CHARACTER SELECT] Saved to per-player folder: main-gamedata/player-data/player-${updatedState.username || updatedState.telegramId}/player.json`);
       
       res.json({ success: true, player: updatedState });
     } catch (error) {
@@ -595,7 +617,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // 🖼️ FIXED: Set display image with per-player folder JSON
+  // 🖼️ FIXED: Set display image with telegramId_username folder JSON
   app.post("/api/player/set-display-image", requireAuth, async (req, res) => {
     try {
       const { imageUrl } = req.body;
@@ -617,7 +639,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const updatedState = await setDisplayImageForPlayer(req.player!.id, imageUrl);
       
       console.log(`✅ [DISPLAY IMAGE] SUCCESS: ${imageUrl} set for ${updatedState.username}`);
-      console.log(`📁 [DISPLAY IMAGE] Saved to per-player folder: main-gamedata/player-data/player-${updatedState.username || updatedState.telegramId}/player.json`);
       
       res.json({ success: true, player: updatedState });
     } catch (error) {
@@ -733,8 +754,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
   
   console.log('✅ All routes registered successfully');
-  console.log('🎯 JSON-FIRST: Player system using per-player folders: main-gamedata/player-data/player-{username}/player.json');
+  console.log('🎯 JSON-FIRST: Player system using telegramId_username folders: main-gamedata/player-data/{telegramId}_{username}/player_{username}.json');
   console.log('📁 Master-data templates available for admin create flows');
   console.log('🌙 Luna Learning System active for error prevention');
+  console.log('📦 Migration endpoint available: POST /api/admin/migrate-player-files');
   return httpServer;
 }
