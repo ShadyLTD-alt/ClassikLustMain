@@ -9,7 +9,7 @@ export const players = pgTable("players", {
   username: text("username").notNull(),
   points: integer("points").default(0).notNull(),
   energy: integer("energy").default(1000).notNull(),
-  maxEnergy: integer("maxEnergy").default(1000).notNull(),
+  energyMax: integer("energyMax").default(1000).notNull(),
   level: integer("level").default(1).notNull(),
   experience: integer("experience").default(0).notNull(),
   passiveIncomeRate: integer("passiveIncomeRate").default(0).notNull(),

@@ -6,7 +6,7 @@ interface GameState {
   lustPoints: number;        // NEW: alias for points but separate for clarity
   lustGems: number;          // NEW: premium currency
   energy: number;
-  maxEnergy: number;
+  energyMax: number;
   level: number;
   selectedCharacterId: string;
   selectedImageId: string | null;
@@ -69,7 +69,7 @@ const INITIAL_STATE: GameState = {
   lustPoints: 0,           
   lustGems: 0,             
   energy: 0,               // Will be set from DB
-  maxEnergy: 0,            // Will be calculated from upgrades!
+  energyMax: 0,            // Will be calculated from upgrades!
   level: 1,
   selectedCharacterId: 'aria',
   selectedImageId: null,

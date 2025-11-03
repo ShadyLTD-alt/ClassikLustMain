@@ -3,107 +3,30 @@
     {
       "level": 1,
       "experienceRequired": 0,
+      "cost": 0,
       "requirements": [],
-      "unlocks": [
-        "Character unlock: Shadow"
-      ]
+      "unlocks": []
     },
     {
       "level": 2,
-      "experienceRequired": 100,
-      "requirements": [
-        {
-          "0": "R",
-          "1": "e",
-          "2": "a",
-          "3": "c",
-          "4": "h",
-          "5": " ",
-          "6": "1",
-          "7": "0",
-          "8": "0",
-          "9": " ",
-          "10": "t",
-          "11": "o",
-          "12": "t",
-          "13": "a",
-          "14": "l",
-          "15": " ",
-          "16": "p",
-          "17": "o",
-          "18": "i",
-          "19": "n",
-          "20": "t",
-          "21": "s",
-          "minLevel": 3,
-          "upgradeId": "perHour"
-        }
-      ],
-      "unlocks": [
-        "New Character!"
-      ]
+      "experienceRequired": 0,
+      "cost": 0,
+      "requirements": [],
+      "unlocks": []
     },
     {
       "level": 3,
-      "experienceRequired": 250,
-      "requirements": [
-        {
-          "0": "R",
-          "1": "e",
-          "2": "a",
-          "3": "c",
-          "4": "h",
-          "5": " ",
-          "6": "2",
-          "7": "5",
-          "8": "0",
-          "9": " ",
-          "10": "t",
-          "11": "o",
-          "12": "t",
-          "13": "a",
-          "14": "l",
-          "15": " ",
-          "16": "p",
-          "17": "o",
-          "18": "i",
-          "19": "n",
-          "20": "t",
-          "21": "s",
-          "minLevel": 5,
-          "upgradeId": "perTap"
-        },
-        {
-          "0": "N",
-          "1": "e",
-          "2": "w",
-          "3": " ",
-          "4": "r",
-          "5": "e",
-          "6": "q",
-          "7": "u",
-          "8": "i",
-          "9": "r",
-          "10": "e",
-          "11": "m",
-          "12": "e",
-          "13": "n",
-          "14": "t",
-          "minLevel": 8,
-          "upgradeId": "perTap"
-        }
-      ],
+      "experienceRequired": 0,
+      "cost": 0,
+      "requirements": [],
       "unlocks": []
     },
     {
       "level": 4,
-      "experienceRequired": 500,
-      "requirements": [
-        "Reach 500 total points"
-      ],
-      "unlocks": [
-        "Upgrade: Energy Maximum"
-      ]
+      "experienceRequired": 0,
+      "cost": 0,
+      "requirements": [],
+      "unlocks": []
     },
     {
       "level": 5,
