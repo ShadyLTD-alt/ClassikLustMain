@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Upload, X, Image as ImageIcon, Edit, Plus, Database, RefreshCw, CheckCircle } from 'lucide-react';
+import { Upload, X, Image as ImageIcon, Edit, Plus, Database, RefreshCw, CheckCircle, Trash2, Save } from 'lucide-react';
 import { useGame } from '@/contexts/GameContext';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -124,6 +124,71 @@ export default function ImageUploader({ adminMode = false }: { adminMode?: boole
     }
   };
 
+  const handleEditImage = async () => {
+    if (!editingImage) return;
+    
+    const sessionToken = localStorage.getItem('sessionToken');
+    if (!sessionToken) return toast({ title: '❌ Authentication required', variant: 'destructive' });
+    
+    try {
+      const updateData = {
+        imageType: editingImage.imageType,
+        unlockLevel: editingImage.unlockLevel,
+        categories: editingImage.categories,
+        poses: editingImage.poses,
+        isHidden: editingImage.isHidden,
+        chatEnable: editingImage.chatEnable,
+        chatSendPercent: editingImage.chatSendPercent
+      };
+      
+      const res = await fetch(`/api/media/${editingImage.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${sessionToken}`
+        },
+        body: JSON.stringify(updateData)
+      });
+      
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(`Failed to update image: ${errorText}`);
+      }
+      
+      updateImage(editingImage);
+      toast({ title: '✅ Image updated', description: 'Changes saved successfully' });
+      setEditingImage(null);
+    } catch (e: any) {
+      toast({ title: '❌ Update failed', description: e.message, variant: 'destructive' });
+    }
+  };
+
+  const handleDeleteImage = async (imageId: string) => {
+    if (!confirm('Delete this image? This action cannot be undone.')) return;
+    
+    const sessionToken = localStorage.getItem('sessionToken');
+    if (!sessionToken) return toast({ title: '❌ Authentication required', variant: 'destructive' });
+    
+    try {
+      const res = await fetch(`/api/media/${imageId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${sessionToken}`
+        }
+      });
+      
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(`Failed to delete image: ${errorText}`);
+      }
+      
+      removeImage(imageId);
+      toast({ title: '✅ Image deleted', description: 'Image removed successfully' });
+    } catch (e: any) {
+      toast({ title: '❌ Delete failed', description: e.message, variant: 'destructive' });
+    }
+  };
+
   // FIXED: Inline render (no Dialog wrapper) - prevents double menu
   return (
     <div className="space-y-6">
@@ -230,6 +295,85 @@ export default function ImageUploader({ adminMode = false }: { adminMode?: boole
         </div>
       )}
 
+      {/* Edit Panel */}
+      {editingImage && (
+        <Card className="border-blue-500 bg-blue-950/20">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Edit className="w-5 h-5" />
+              Editing Image
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex gap-4">
+              <div className="w-24 h-24 rounded-lg overflow-hidden border flex-shrink-0">
+                <img 
+                  src={editingImage.url?.startsWith('http') ? editingImage.url : `${location.origin}${editingImage.url}`} 
+                  alt="Editing" 
+                  className="w-full h-full object-cover" 
+                />
+              </div>
+              <div className="flex-1 space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Image Type</Label>
+                    <Select value={editingImage.imageType || 'character'} onValueChange={(v:any)=> setEditingImage({...editingImage, imageType: v})}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="character">Character</SelectItem>
+                        <SelectItem value="avatar">Avatar</SelectItem>
+                        <SelectItem value="vip">VIP</SelectItem>
+                        <SelectItem value="background">Background</SelectItem>
+                        <SelectItem value="other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Level Required</Label>
+                    <Input type="number" min="1" value={editingImage.unlockLevel} onChange={(e)=> setEditingImage({...editingImage, unlockLevel: parseInt(e.target.value)||1})} />
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-3">
+                  {['nsfw','vip','event','random'].map(category => (
+                    <div key={category} className="flex items-center space-x-2">
+                      <Checkbox 
+                        checked={editingImage.categories?.[category as keyof typeof editingImage.categories] || false} 
+                        onCheckedChange={(c)=> setEditingImage({
+                          ...editingImage, 
+                          categories: {...(editingImage.categories || {}), [category]: !!c}
+                        })} 
+                      />
+                      <Label className="capitalize">{category}</Label>
+                    </div>
+                  ))}
+                  <div className="flex items-center space-x-2">
+                    <Checkbox checked={editingImage.isHidden} onCheckedChange={(c)=> setEditingImage({...editingImage, isHidden: !!c})} />
+                    <Label>Hide from Gallery</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox checked={editingImage.chatEnable} onCheckedChange={(c)=> setEditingImage({...editingImage, chatEnable: !!c})} />
+                    <Label>Enable for Chat</Label>
+                  </div>
+                </div>
+                
+                <div>
+                  <Label>Chat Send Percent</Label>
+                  <Input type="number" min="0" max="100" value={editingImage.chatSendPercent || 0} onChange={(e)=> setEditingImage({...editingImage, chatSendPercent: parseInt(e.target.value)||0})} />
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex gap-2">
+              <Button onClick={handleEditImage} className="bg-blue-600 hover:bg-blue-700">
+                <Save className="w-4 h-4 mr-2" />Save Changes
+              </Button>
+              <Button variant="outline" onClick={() => setEditingImage(null)}>Cancel</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
@@ -243,23 +387,68 @@ export default function ImageUploader({ adminMode = false }: { adminMode?: boole
               {characterImages.map(image => {
                 const isSelected = state.selectedImageId===image.id; 
                 const isUnlocked = state.level>=image.unlockLevel;
+                const imgSrc = image.url?.startsWith('http') ? image.url : `${location.origin}${image.url}`;
+                
                 return (
                   <div 
                     key={image.id} 
-                    style={{ contentVisibility: 'auto' }} 
-                    className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all duration-200 ${
-                      isSelected ? 'border-primary ring-2 ring-primary/50':'border-card-border'
-                    } ${
-                      isUnlocked ? 'hover:border-primary/70 hover:scale-105 cursor-pointer transform-gpu':'opacity-50 cursor-not-allowed'
-                    }`} 
-                    onClick={()=> isUnlocked && !adminMode && selectImage(image.id)}
+                    className="relative aspect-square rounded-lg overflow-hidden border-2 transition-all duration-200 group hover:border-primary/70 cursor-pointer"
                   >
-                    <img src={image.url} alt="Character" className={`w-full h-full object-cover ${!isUnlocked && 'blur-sm'}`} loading="lazy" />
+                    <img src={imgSrc} alt="Character" className="w-full h-full object-cover bg-gray-800" loading="lazy" />
+                    
+                    {/* Badges */}
                     {image.imageType && (
-                      <Badge className="absolute top-1 left-1 text-xs">{image.imageType}</Badge>
+                      <Badge className="absolute top-1 left-1 text-xs bg-black/70 text-white">
+                        {image.imageType}
+                      </Badge>
                     )}
                     {image.unlockLevel > 1 && (
-                      <Badge variant="secondary" className="absolute top-1 right-1 text-xs">Lv{image.unlockLevel}</Badge>
+                      <Badge variant="secondary" className="absolute top-1 right-1 text-xs bg-black/70">
+                        Lv{image.unlockLevel}
+                      </Badge>
+                    )}
+                    
+                    {/* Edit/Delete Overlay */}
+                    {adminMode && (
+                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center gap-2">
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingImage({...image});
+                          }}
+                          className="bg-blue-600/90 hover:bg-blue-700 border-blue-400"
+                        >
+                          <Edit className="w-3 h-3" />
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="destructive"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteImage(image.id);
+                          }}
+                          className="bg-red-600/90 hover:bg-red-700"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    )}
+                    
+                    {/* Selection indicator for non-admin */}
+                    {!adminMode && isSelected && (
+                      <div className="absolute inset-0 border-2 border-primary bg-primary/10"></div>
+                    )}
+                    
+                    {/* Lock overlay for locked images */}
+                    {!isUnlocked && (
+                      <div className="absolute inset-0 bg-black/70 flex items-center justify-center">
+                        <div className="text-center text-white">
+                          <div className="text-2xl mb-1">🔒</div>
+                          <div className="text-xs">Level {image.unlockLevel}</div>
+                        </div>
+                      </div>
                     )}
                   </div>
                 );
