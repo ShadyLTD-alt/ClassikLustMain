@@ -30,6 +30,9 @@ interface GameState {
   totalTapsAllTime: number;
   lastDailyReset: Date;
   lastWeeklyReset: Date;
+  // SESSION INFO
+  username?: string;
+  telegramId?: string;
 }
 
 interface GameContextType {
@@ -94,7 +97,10 @@ const createInitialState = (): GameState => ({
   totalTapsToday: 0,
   totalTapsAllTime: 0,
   lastDailyReset: new Date(),
-  lastWeeklyReset: new Date()
+  lastWeeklyReset: new Date(),
+  // SESSION INFO
+  username: '',
+  telegramId: ''
 });
 
 // CALCULATE BASE VALUES FROM UPGRADES - FIXED CALCULATION!
@@ -142,6 +148,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = useState<ThemeConfig>(DEFAULT_THEME);
   const [pendingPurchases, setPendingPurchases] = useState<Set<string>>(new Set());
   const [isInitialized, setIsInitialized] = useState(false);
+  const [loadingError, setLoadingError] = useState<string | null>(null);
 
   // Calculate tap value (shared with CharacterDisplay) - NOW WITH BOOST
   const calculateTapValue = useCallback(() => {
@@ -173,36 +180,62 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
   }, [state.boostActive, state.boostExpiresAt]);
 
-  // 🎯 JSON-FIRST: Enhanced data loading from JSON-first system
+  // 🎯 JSON-FIRST: Enhanced data loading with better error handling
   useEffect(() => {
     const loadAllData = async () => {
+      console.log('🔍 [GAME CONTEXT] Starting data load...');
+      
       const sessionToken = localStorage.getItem('sessionToken');
       if (!sessionToken) {
-        console.log('❌ No session token, using empty state');
+        console.log('❌ [GAME CONTEXT] No session token, using empty state');
+        setLoadingError('No session token found');
         setIsInitialized(true);
         return;
       }
+      
+      console.log(`🔍 [GAME CONTEXT] Using session token: ${sessionToken.slice(0, 8)}...`);
 
       try {
-        console.log('🎯 JSON-FIRST: Loading game data from new system...');
+        console.log('🎯 [GAME CONTEXT] Loading from JSON-first system...');
 
-        // STEP 1: Load player data from JSON-first API (immediate JSON response)
-        console.log('📥 Loading player data from JSON snapshots...');
-        const playerRes = await fetch('/api/player/me', {
+        // 🔍 STEP 1: Test session token with auth/me (better endpoint for debugging)
+        console.log('🔍 [GAME CONTEXT] Testing session token...');
+        const authRes = await fetch('/api/auth/me', {
           headers: { 'Authorization': `Bearer ${sessionToken}` }
         });
 
-        if (!playerRes.ok) {
-          console.error('❌ Failed to load player data');
+        if (!authRes.ok) {
+          console.error(`❌ [GAME CONTEXT] Session invalid: ${authRes.status}`);
+          const errorText = await authRes.text().catch(() => 'Unknown error');
+          console.error(`❌ [GAME CONTEXT] Auth error details:`, errorText);
+          
+          // Clear invalid session
+          localStorage.removeItem('sessionToken');
+          setLoadingError(`Session expired (${authRes.status})`);
           setIsInitialized(true);
           return;
         }
 
-        const playerData = await playerRes.json();
-        console.log('🎯 Player data loaded from JSON-first system:', playerData.player?.username);
+        const authData = await authRes.json();
+        if (!authData.success || !authData.player) {
+          console.error('❌ [GAME CONTEXT] Invalid auth response format');
+          setLoadingError('Invalid authentication response');
+          setIsInitialized(true);
+          return;
+        }
+        
+        const playerFromAuth = authData.player;
+        console.log(`✅ [GAME CONTEXT] Session valid for: ${playerFromAuth.username}`);
+        console.log(`🔍 [GAME CONTEXT] Player data from auth:`, {
+          username: playerFromAuth.username,
+          telegramId: playerFromAuth.telegramId,
+          level: playerFromAuth.level,
+          selectedCharacterId: playerFromAuth.selectedCharacterId,
+          points: playerFromAuth.points
+        });
 
-        // STEP 2: Load game config data (still from memory/JSON)
-        console.log('📥 Loading game configuration data...');
+        // 🔍 STEP 2: Load game config data (still from memory/JSON)
+        console.log('🔍 [GAME CONTEXT] Loading game configuration data...');
         const [upgradesRes, charactersRes, levelsRes, mediaRes] = await Promise.all([
           fetch('/api/upgrades', {
             headers: { 'Authorization': `Bearer ${sessionToken}` }
@@ -218,28 +251,34 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           })
         ]);
 
-        // Parse config responses
+        // Parse config responses with error handling
         const [upgradesData, charactersData, levelsData, mediaData] = await Promise.all([
-          upgradesRes.ok ? upgradesRes.json() : null,
-          charactersRes.ok ? charactersRes.json() : null,
-          levelsRes.ok ? levelsRes.json() : null,
-          mediaRes.ok ? mediaRes.json() : null
+          upgradesRes.ok ? upgradesRes.json().catch(e => { console.error('Upgrades parse error:', e); return null; }) : null,
+          charactersRes.ok ? charactersRes.json().catch(e => { console.error('Characters parse error:', e); return null; }) : null,
+          levelsRes.ok ? levelsRes.json().catch(e => { console.error('Levels parse error:', e); return null; }) : null,
+          mediaRes.ok ? mediaRes.json().catch(e => { console.error('Media parse error:', e); return null; }) : null
         ]);
 
         // Set config data first
         if (upgradesData?.upgrades) {
           setUpgrades(upgradesData.upgrades);
-          console.log('✅ Loaded upgrades:', upgradesData.upgrades.length);
+          console.log('✅ [GAME CONTEXT] Loaded upgrades:', upgradesData.upgrades.length);
+        } else {
+          console.warn('⚠️ [GAME CONTEXT] Failed to load upgrades');
         }
 
         if (charactersData?.characters) {
           setCharacters(charactersData.characters);
-          console.log('✅ Loaded characters:', charactersData.characters.length);
+          console.log('✅ [GAME CONTEXT] Loaded characters:', charactersData.characters.length);
+        } else {
+          console.warn('⚠️ [GAME CONTEXT] Failed to load characters');
         }
 
         if (levelsData?.levels) {
           setLevelConfigs(levelsData.levels);
-          console.log('✅ Loaded levels:', levelsData.levels.length);
+          console.log('✅ [GAME CONTEXT] Loaded levels:', levelsData.levels.length);
+        } else {
+          console.warn('⚠️ [GAME CONTEXT] Failed to load levels');
         }
 
         if (mediaData?.media) {
@@ -253,55 +292,76 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
             isHidden: media.isHidden || false
           }));
           setImages(imageConfigs);
-          console.log('✅ Loaded media:', imageConfigs.length);
+          console.log('✅ [GAME CONTEXT] Loaded media:', imageConfigs.length);
+        } else {
+          console.warn('⚠️ [GAME CONTEXT] Failed to load media');
         }
 
-        // STEP 3: Set player state from JSON-first system
-        if (playerData?.player && upgradesData?.upgrades) {
-          const player = playerData.player;
+        // 🔍 STEP 3: Set player state from auth data (which comes from JSON-first system)
+        if (upgradesData?.upgrades) {
+          const player = playerFromAuth; // Use auth data (which loaded from JSON-first)
           const playerUpgrades = player.upgrades || {};
           
           // Calculate REAL energy values from upgrades
           const { baseMaxEnergy, baseEnergyRegen } = calculateBaseEnergyValues(upgradesData.upgrades, playerUpgrades);
           
-          console.log('🔧 Luna calculated energy from upgrades:', { baseMaxEnergy, baseEnergyRegen });
+          console.log('🔧 [GAME CONTEXT] Luna calculated energy from upgrades:', { baseMaxEnergy, baseEnergyRegen });
           
           // ✅ LUNA JSON-FIRST: Set player state from JSON snapshot data
-          setState(prev => ({
-            ...prev,
-            points: typeof player.points === 'string' ? parseFloat(player.points) : (player.points || 0),
-            lustPoints: typeof player.lustPoints === 'string' ? parseFloat(player.lustPoints) : (player.lustPoints || player.points || 0),
-            lustGems: player.lustGems || 0,
-            energy: Math.min(player.energy || baseMaxEnergy, baseMaxEnergy),
-            energyMax: baseMaxEnergy,              // CALCULATED, NOT HARDCODED!
-            level: player.level || 1,
-            selectedCharacterId: player.selectedCharacterId || (charactersData?.characters?.[0]?.id || 'shadow'),
-            selectedImageId: player.selectedImageId || null,
-            displayImage: player.displayImage || null,
-            upgrades: playerUpgrades,
-            unlockedCharacters: Array.isArray(player.unlockedCharacters) ? player.unlockedCharacters : ['shadow'],
-            passiveIncomeRate: player.passiveIncomeRate || 0,
-            energyRegenRate: baseEnergyRegen,      // CALCULATED, NOT HARDCODED!
-            isAdmin: player.isAdmin || false,
-            // NEW BOOST FIELDS - From JSON
-            boostActive: player.boostActive || false,
-            boostMultiplier: player.boostMultiplier || 1.0,
-            boostExpiresAt: player.boostExpiresAt ? new Date(player.boostExpiresAt) : null,
-            boostEnergy: player.boostEnergy || 0,
-            // NEW TRACKING FIELDS - From JSON
-            totalTapsToday: player.totalTapsToday || 0,
-            totalTapsAllTime: player.totalTapsAllTime || 0,
-            lastDailyReset: player.lastDailyReset ? new Date(player.lastDailyReset) : new Date(),
-            lastWeeklyReset: player.lastWeeklyReset ? new Date(player.lastWeeklyReset) : new Date()
-          }));
+          setState(prev => {
+            const newState = {
+              ...prev,
+              // Player identity
+              username: player.username,
+              telegramId: player.telegramId,
+              // Game state from JSON
+              points: typeof player.points === 'string' ? parseFloat(player.points) : (player.points || 0),
+              lustPoints: typeof player.lustPoints === 'string' ? parseFloat(player.lustPoints) : (player.lustPoints || player.points || 0),
+              lustGems: player.lustGems || 0,
+              energy: Math.min(player.energy || baseMaxEnergy, baseMaxEnergy),
+              energyMax: baseMaxEnergy,              // CALCULATED, NOT HARDCODED!
+              level: player.level || 1,
+              selectedCharacterId: player.selectedCharacterId || (charactersData?.characters?.[0]?.id || 'shadow'),
+              selectedImageId: player.selectedImageId || null,
+              displayImage: player.displayImage || null,
+              upgrades: playerUpgrades,
+              unlockedCharacters: Array.isArray(player.unlockedCharacters) ? player.unlockedCharacters : ['shadow'],
+              unlockedImages: Array.isArray(player.unlockedImages) ? player.unlockedImages : [],
+              passiveIncomeRate: player.passiveIncomeRate || 0,
+              energyRegenRate: baseEnergyRegen,      // CALCULATED, NOT HARDCODED!
+              isAdmin: player.isAdmin || false,
+              // NEW BOOST FIELDS - From JSON
+              boostActive: player.boostActive || false,
+              boostMultiplier: player.boostMultiplier || 1.0,
+              boostExpiresAt: player.boostExpiresAt ? new Date(player.boostExpiresAt) : null,
+              boostEnergy: player.boostEnergy || 0,
+              // NEW TRACKING FIELDS - From JSON
+              totalTapsToday: player.totalTapsToday || 0,
+              totalTapsAllTime: player.totalTapsAllTime || 0,
+              lastDailyReset: player.lastDailyReset ? new Date(player.lastDailyReset) : new Date(),
+              lastWeeklyReset: player.lastWeeklyReset ? new Date(player.lastWeeklyReset) : new Date()
+            };
+            
+            console.log('🎯 [GAME CONTEXT] JSON-FIRST player state loaded:', {
+              username: newState.username,
+              points: newState.points,
+              level: newState.level,
+              selectedCharacter: newState.selectedCharacterId,
+              energyMax: newState.energyMax,
+              upgradesCount: Object.keys(newState.upgrades).length
+            });
+            
+            return newState;
+          });
           
-          console.log('🎯 JSON-FIRST: Player data loaded from JSON snapshots:', player.username);
-          console.log('⚡ Final energyMax:', baseMaxEnergy);
+          console.log('✅ [GAME CONTEXT] All data loaded from JSON-first system');
         }
 
-        console.log('✅ All game data loaded successfully');
+        setLoadingError(null);
+        console.log('✅ [GAME CONTEXT] Complete - All game data loaded successfully');
       } catch (error) {
-        console.error('❌ Failed to load game data:', error);
+        console.error('❌ [GAME CONTEXT] Failed to load game data:', error);
+        setLoadingError(error instanceof Error ? error.message : 'Unknown error');
       } finally {
         setIsInitialized(true);
       }
@@ -312,7 +372,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   // Recalculate passive income, max energy, and regen when upgrades change
   useEffect(() => {
-    if (!isInitialized) return;
+    if (!isInitialized || upgrades.length === 0) return;
 
     setState(prev => {
       const perHourUpgrades = upgrades.filter(u => u.type === 'perHour');
@@ -325,7 +385,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       // Calculate energy values from upgrades
       const { baseMaxEnergy, baseEnergyRegen } = calculateBaseEnergyValues(upgrades, prev.upgrades);
       
-      console.log('🔄 Luna upgrade recalculation:', {
+      console.log('🔄 [GAME CONTEXT] Luna upgrade recalculation:', {
         currentUpgrades: prev.upgrades,
         newPassiveRate,
         calculatedMaxEnergy: baseMaxEnergy,
@@ -338,7 +398,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           baseMaxEnergy !== prev.energyMax || 
           baseEnergyRegen !== prev.energyRegenRate) {
         
-        console.log('✅ Luna updating calculated energy values:', {
+        console.log('✅ [GAME CONTEXT] Luna updating calculated energy values:', {
           oldMaxEnergy: prev.energyMax,
           newMaxEnergy: baseMaxEnergy,
           oldRegen: prev.energyRegenRate,
@@ -362,8 +422,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     applyTheme(theme);
   }, [theme]);
 
-  // 🎯 JSON-FIRST: Simplified autosync - only essential fields
+  // 🎯 JSON-FIRST: Enhanced autosync with better error handling
   useEffect(() => {
+    if (!isInitialized || !state.username) return;
+    
     let syncCounter = 0;
     const interval = setInterval(() => {
       setState(prev => {
@@ -382,26 +444,39 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           return prev;
         }
 
-        // 🎯 JSON-FIRST: Minimal sync payload every 10 seconds
+        // 🎯 JSON-FIRST: Enhanced sync every 10 seconds with error handling
         syncCounter++;
         if (syncCounter >= 10) {
           syncCounter = 0;
+          
+          console.log(`🔄 [GAME CONTEXT] Auto-syncing for ${prev.username}...`);
+          
           fetch('/api/player/me', {
             method: 'PATCH',
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`
+              'Authorization': `Bearer ${sessionToken}`
             },
             body: JSON.stringify({
-              energy: newEnergy,
-              points: newPoints,
-              lustPoints: newLustPoints,
-              // Always include these to prevent overwrites
+              energy: Math.round(newEnergy),
+              points: Math.round(newPoints),
+              lustPoints: Math.round(newLustPoints),
+              // Always include critical fields to prevent overwrites
               selectedCharacterId: prev.selectedCharacterId,
               displayImage: prev.displayImage,
-              passiveIncomeRate: prev.passiveIncomeRate
+              level: prev.level
             })
-          }).catch(err => console.error('JSON-first sync failed:', err));
+          })
+          .then(response => {
+            if (response.ok) {
+              console.log(`✅ [GAME CONTEXT] Auto-sync successful for ${prev.username}`);
+            } else {
+              console.error(`❌ [GAME CONTEXT] Auto-sync failed: ${response.status}`);
+            }
+          })
+          .catch(err => {
+            console.error('❌ [GAME CONTEXT] Auto-sync error:', err);
+          });
         }
 
         return { ...prev, energy: newEnergy, points: newPoints, lustPoints: newLustPoints };
@@ -409,7 +484,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [isInitialized, state.username]);
 
   const tap = useCallback(async () => {
     setState(prev => {
@@ -443,13 +518,19 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`
         },
         body: JSON.stringify({
-          points: newPoints,
-          lustPoints: newLustPoints,
-          energy: newEnergy,
+          points: Math.round(newPoints),
+          lustPoints: Math.round(newLustPoints),
+          energy: Math.round(newEnergy),
           totalTapsToday: newTotalTapsToday,
           totalTapsAllTime: newTotalTapsAllTime
         })
-      }).catch(err => console.error('Failed to sync tap to JSON system:', err));
+      })
+      .then(response => {
+        if (!response.ok) {
+          console.error(`❌ [TAP] Sync failed: ${response.status}`);
+        }
+      })
+      .catch(err => console.error('❌ [TAP] Sync error:', err));
 
       return {
         ...prev,
@@ -486,7 +567,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         // Force recalculate energy from upgrades
         if (upgrades.length > 0) {
           const { baseMaxEnergy, baseEnergyRegen } = calculateBaseEnergyValues(upgrades, state.upgrades);
-          console.log('🔄 Luna force recalculating energy:', { baseMaxEnergy, baseEnergyRegen });
+          console.log('🔄 [GAME CONTEXT] Luna force recalculating energy:', { baseMaxEnergy, baseEnergyRegen });
           setState(prev => ({ ...prev, energyMax: baseMaxEnergy, energyRegenRate: baseEnergyRegen, energy: Math.min(prev.energy, baseMaxEnergy) }));
         }
         break;
@@ -495,7 +576,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
   }, [upgrades, state.upgrades]);
 
-  // 🎯 JSON-FIRST: Use new dedicated purchase endpoint
+  // 🎯 JSON-FIRST: Enhanced purchase with better error handling
   const purchaseUpgrade = useCallback(async (upgradeId: string): Promise<boolean> => {
     if (pendingPurchases.has(upgradeId)) return false;
     
@@ -512,7 +593,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setPendingPurchases(prev => new Set(prev).add(upgradeId));
 
     try {
-      console.log(`🎯 JSON-FIRST: Purchasing upgrade ${upgradeId} level ${newLevel}`);
+      console.log(`🎯 [UPGRADE] ${state.username} purchasing upgrade ${upgradeId} level ${newLevel}`);
       
       const response = await fetch('/api/player/upgrades', {
         method: 'POST',
@@ -525,7 +606,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Failed to purchase upgrade');
+        throw new Error(errorData.error || `HTTP ${response.status}`);
       }
 
       const result = await response.json();
@@ -535,6 +616,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       setState(prev => {
         const newUpgrades = updatedPlayer.upgrades || prev.upgrades;
         const { baseMaxEnergy, baseEnergyRegen } = calculateBaseEnergyValues(upgrades, newUpgrades);
+        
+        console.log(`✅ [UPGRADE] ${prev.username} upgrade ${upgradeId} purchased successfully`);
         
         return {
           ...prev,
@@ -547,10 +630,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         };
       });
 
-      console.log(`✅ JSON-FIRST upgrade purchase successful`);
       return true;
     } catch (err) {
-      console.error('🔴 Failed to purchase upgrade via JSON-first:', err);
+      console.error(`🔴 [UPGRADE] Purchase failed for ${state.username}:`, err);
       return false;
     } finally {
       setPendingPurchases(prev => {
@@ -559,17 +641,17 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         return next;
       });
     }
-  }, [state.upgrades, state.points, upgrades, pendingPurchases]);
+  }, [state.upgrades, state.points, state.username, upgrades, pendingPurchases]);
 
-  // 🎯 JSON-FIRST: Character selection via dedicated endpoint
+  // 🎯 JSON-FIRST: Enhanced character selection with detailed logging
   const selectCharacter = useCallback(async (characterId: string): Promise<boolean> => {
     if (!state.unlockedCharacters.includes(characterId)) {
-      console.log('❌ Character not unlocked:', characterId);
+      console.log(`❌ [SELECT CHARACTER] Character ${characterId} not unlocked for ${state.username}`);
       return false;
     }
 
     try {
-      console.log(`🎯 JSON-FIRST: Selecting character ${characterId}`);
+      console.log(`🎭 [SELECT CHARACTER] ${state.username} selecting character ${characterId}`);
       
       const response = await fetch('/api/player/select-character', {
         method: 'POST',
@@ -577,12 +659,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`
         },
-        body: JSON.stringify({ characterId })
+        body: JSON.stringify({ characterId }),
+        signal: AbortSignal.timeout(10000)
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        console.error('❌ Failed to save character selection:', errorData);
+        console.error(`❌ [SELECT CHARACTER] Failed to save character selection:`, errorData);
         return false;
       }
 
@@ -597,13 +680,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         displayImage: updatedPlayer.displayImage
       }));
 
-      console.log(`✅ JSON-FIRST character selection successful:`, characterId);
+      console.log(`✅ [SELECT CHARACTER] ${state.username} character selection successful: ${characterId}`);
       return true;
     } catch (error) {
-      console.error('🔴 Error selecting character via JSON-first:', error);
+      console.error(`🔴 [SELECT CHARACTER] Error for ${state.username}:`, error);
       return false;
     }
-  }, [state.unlockedCharacters]);
+  }, [state.unlockedCharacters, state.username]);
 
   const selectImage = useCallback((imageId: string) => {
     const selectedImg = images.find(img => img.id === imageId);
@@ -700,7 +783,21 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setImages([]);
     setLevelConfigs([]);
     setTheme(DEFAULT_THEME);
+    setLoadingError(null);
   }, []);
+
+  // 🔍 Debug logging for state changes
+  useEffect(() => {
+    if (isInitialized && state.username) {
+      console.log(`🔍 [GAME CONTEXT] State update for ${state.username}:`, {
+        points: state.points,
+        energy: `${state.energy}/${state.energyMax}`,
+        selectedCharacter: state.selectedCharacterId,
+        displayImage: state.displayImage ? 'set' : 'null',
+        upgradesCount: Object.keys(state.upgrades).length
+      });
+    }
+  }, [state.points, state.energy, state.selectedCharacterId, state.displayImage, state.username, isInitialized]);
 
   return (
     <GameContext.Provider value={{
@@ -733,6 +830,17 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       calculateTapValue
     }}>
       {children}
+      
+      {/* 🔍 Debug info overlay in development */}
+      {process.env.NODE_ENV === 'development' && loadingError && (
+        <div className="fixed bottom-4 right-4 bg-red-900/90 text-white p-3 rounded-lg border border-red-500 max-w-md text-sm z-50">
+          <div className="font-semibold">Debug Info:</div>
+          <div>Loading Error: {loadingError}</div>
+          <div>Initialized: {isInitialized ? '✅' : '❌'}</div>
+          <div>Username: {state.username || 'None'}</div>
+          <div>Session: {localStorage.getItem('sessionToken') ? 'Present' : 'Missing'}</div>
+        </div>
+      )}
     </GameContext.Provider>
   );
 }
