@@ -109,24 +109,30 @@ export default function ImageUploader({ adminMode = false }: { adminMode?: boole
     formData.append('chatEnable', String(chatEnable));
     formData.append('chatSendPercent', String(chatSendPercent));
 
-    const res = await fetch('/api/upload', { method:'POST', headers:{ 'Authorization': `Bearer ${sessionToken}` }, body: formData });
-    if (!res.ok) { const t = await res.text(); return toast({ title: '❌ Upload failed', description: t, variant:'destructive' }); }
-    const data = await res.json();
+    try {
+      const res = await fetch('/api/upload', { method:'POST', headers:{ 'Authorization': `Bearer ${sessionToken}` }, body: formData });
+      if (!res.ok) { const t = await res.text(); return toast({ title: '❌ Upload failed', description: t, variant:'destructive' }); }
+      const data = await res.json();
 
-    const newImage: ImageConfig = { id: data.media?.id || `img-${Date.now()}`, characterId: selectedCharacterId, url: data.url, unlockLevel: unlockLevel || 1, isAvatar: imageType==='avatar', isDisplay: imageType==='character', imageType, categories: { ...categories }, poses: [...selectedPoses], isHidden, chatEnable, chatSendPercent, uploadedAt: new Date().toISOString(), arrayVersion: imageDataArrays.poses.available.length, metadata: { originalFileName: selectedFile.name, fileSize: selectedFile.size, fileType: selectedFile.type } };
-    addImage(newImage);
-    if (imageType==='character') selectImage(newImage.id);
-    setSelectedFile(null); setPreviewUrl(null); setUnlockLevel(1); setImageType('character'); setCategories({ nsfw:false, vip:false, event:false, random:false }); setSelectedPoses([]); setIsHidden(false); setChatEnable(false); setChatSendPercent(0);
-    toast({ title: '✅ Image uploaded successfully!', description: `Added to ${selectedChar.name}` });
+      const newImage: ImageConfig = { id: data.media?.id || `img-${Date.now()}`, characterId: selectedCharacterId, url: data.url, unlockLevel: unlockLevel || 1, isAvatar: imageType==='avatar', isDisplay: imageType==='character', imageType, categories: { ...categories }, poses: [...selectedPoses], isHidden, chatEnable, chatSendPercent, uploadedAt: new Date().toISOString(), arrayVersion: imageDataArrays.poses.available.length, metadata: { originalFileName: selectedFile.name, fileSize: selectedFile.size, fileType: selectedFile.type } };
+      addImage(newImage);
+      if (imageType==='character') selectImage(newImage.id);
+      setSelectedFile(null); setPreviewUrl(null); setUnlockLevel(1); setImageType('character'); setCategories({ nsfw:false, vip:false, event:false, random:false }); setSelectedPoses([]); setIsHidden(false); setChatEnable(false); setChatSendPercent(0);
+      toast({ title: '✅ Image uploaded successfully!', description: `Added to ${selectedChar.name}` });
+    } catch (e: any) {
+      toast({ title: '❌ Upload error', description: e.message, variant: 'destructive' });
+    }
   };
 
   // FIXED: Inline render (no Dialog wrapper) - prevents double menu
   return (
-    <div className="space-y-4">
-      <h2 className="text-xl font-bold text-center">📷 Enhanced Image Uploader</h2>
-      <p className="text-sm text-gray-400 text-center">Select character, image type, level required, then upload with metadata</p>
+    <div className="space-y-6">
+      <div className="text-center">
+        <h2 className="text-2xl font-bold text-purple-400 mb-2">📷 Enhanced Image Uploader</h2>
+        <p className="text-sm text-gray-400">Select character, image type, level required, then upload with metadata</p>
+      </div>
       
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
           <Label htmlFor="character-select">Select Character</Label>
           <Select value={selectedCharacterId} onValueChange={setSelectedCharacterId}>
@@ -157,16 +163,16 @@ export default function ImageUploader({ adminMode = false }: { adminMode?: boole
           <Label htmlFor="unlock-level">Level Required</Label>
           <Input id="unlock-level" type="number" min="1" value={unlockLevel} onChange={(e)=> setUnlockLevel(parseInt(e.target.value)||1)} />
         </div>
+      </div>
 
-        <div className="flex items-center gap-2">
-          <Button onClick={loadDataArraysFromServer} disabled={isLoadingArrays} variant="outline" size="sm">
-            <Database className="w-4 h-4 mr-2" />
-            {isLoadingArrays ? 'Loading...' : 'Sync Arrays'}
-          </Button>
-          <Button onClick={() => setCategories({ nsfw:false, vip:false, event:false, random:false })} variant="outline" size="sm">
-            <RefreshCw className="w-4 h-4 mr-2" />Reset
-          </Button>
-        </div>
+      <div className="flex gap-2 justify-center">
+        <Button onClick={loadDataArraysFromServer} disabled={isLoadingArrays} variant="outline" size="sm">
+          <Database className="w-4 h-4 mr-2" />
+          {isLoadingArrays ? 'Loading...' : 'Sync Arrays'}
+        </Button>
+        <Button onClick={() => setCategories({ nsfw:false, vip:false, event:false, random:false })} variant="outline" size="sm">
+          <RefreshCw className="w-4 h-4 mr-2" />Reset Settings
+        </Button>
       </div>
 
       <div>
@@ -180,40 +186,44 @@ export default function ImageUploader({ adminMode = false }: { adminMode?: boole
       </div>
 
       {previewUrl && (
-        <div className="space-y-3">
+        <div className="space-y-4">
           <div className="relative w-full aspect-square max-w-xs mx-auto rounded-lg overflow-hidden border-2 border-primary">
             <img src={previewUrl} alt="Preview" className="w-full h-full object-cover" />
           </div>
 
           <Card>
-            <CardHeader className="pb-3"><CardTitle className="text-sm">Upload Settings & Categories</CardTitle></CardHeader>
+            <CardHeader className="pb-3"><CardTitle className="text-sm flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 text-green-400" />Upload Settings & Categories
+            </CardTitle></CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-4">
                 {['nsfw','vip','event','random'].map(category => (
                   <div key={category} className="flex items-center space-x-2">
                     <Checkbox id={category} checked={(categories as any)[category]||false} onCheckedChange={(c)=> setCategories(prev=> ({ ...prev, [category]: !!c }))} />
-                    <Label htmlFor={category} className="capitalize">{category}</Label>
+                    <Label htmlFor={category} className="capitalize">{category} Content</Label>
                   </div>
                 ))}
                 <div className="flex items-center space-x-2">
                   <Checkbox id="hidden" checked={isHidden} onCheckedChange={(c)=> setIsHidden(!!c)} />
-                  <Label htmlFor="hidden">Hide from Character Gallery</Label>
+                  <Label htmlFor="hidden">Hide from Gallery</Label>
                 </div>
                 <div className="flex items-center space-x-2">
                   <Checkbox id="chatEnable" checked={chatEnable} onCheckedChange={(c)=> setChatEnable(!!c)} />
                   <Label htmlFor="chatEnable">Enable for Chat</Label>
                 </div>
-                <div>
-                  <Label htmlFor="chatSendPercent">Chat Send %</Label>
-                  <Input id="chatSendPercent" type="number" min="0" max="100" value={chatSendPercent} onChange={(e)=> setChatSendPercent(parseInt(e.target.value)||0)} />
-                </div>
+              </div>
+              <div className="mt-4">
+                <Label htmlFor="chatSendPercent">Chat Send Percent</Label>
+                <Input id="chatSendPercent" type="number" min="0" max="100" value={chatSendPercent} onChange={(e)=> setChatSendPercent(parseInt(e.target.value)||0)} />
               </div>
             </CardContent>
           </Card>
 
           <div className="flex gap-2">
-            <Button onClick={handleUpload} disabled={!selectedFile || !selectedCharacterId} className="flex-1"><Upload className="w-4 h-4 mr-2" />Upload with Metadata</Button>
-            <Button variant="outline" onClick={()=> { setSelectedFile(null); setPreviewUrl(null); }}>
+            <Button onClick={handleUpload} disabled={!selectedFile || !selectedCharacterId} className="flex-1">
+              <Upload className="w-4 h-4 mr-2" />Upload with Metadata
+            </Button>
+            <Button variant="outline" onClick={()=> { setSelectedFile(null); setPreviewUrl(null); try { if (previewUrl) URL.revokeObjectURL(previewUrl); } catch {} }}>
               <X className="w-4 h-4" />Cancel
             </Button>
           </div>
@@ -222,21 +232,44 @@ export default function ImageUploader({ adminMode = false }: { adminMode?: boole
 
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center justify-between">{adminMode ? 'Uploaded Images' : 'Image Gallery'}
+          <CardTitle className="flex items-center justify-between">
+            {adminMode ? 'Uploaded Images' : 'Character Gallery'}
             <Badge variant="outline">{characterImages.length} images</Badge>
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <ScrollContainer height="h-[60vh]">
-            <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+        <CardContent className="p-0">
+          <ScrollContainer height="h-[50vh]">
+            <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 p-4">
               {characterImages.map(image => {
-                const isSelected = state.selectedImageId===image.id; const isUnlocked = state.level>=image.unlockLevel;
+                const isSelected = state.selectedImageId===image.id; 
+                const isUnlocked = state.level>=image.unlockLevel;
                 return (
-                  <div key={image.id} style={{ contentVisibility: 'auto' }} className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all duration-200 ${isSelected ? 'border-primary ring-2 ring-primary/50':'border-card-border'} ${isUnlocked ? 'hover:border-primary/70 hover:scale-105 cursor-pointer transform-gpu':'opacity-50 cursor-not-allowed'}`} onClick={()=> isUnlocked && !adminMode && selectImage(image.id)}>
+                  <div 
+                    key={image.id} 
+                    style={{ contentVisibility: 'auto' }} 
+                    className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all duration-200 ${
+                      isSelected ? 'border-primary ring-2 ring-primary/50':'border-card-border'
+                    } ${
+                      isUnlocked ? 'hover:border-primary/70 hover:scale-105 cursor-pointer transform-gpu':'opacity-50 cursor-not-allowed'
+                    }`} 
+                    onClick={()=> isUnlocked && !adminMode && selectImage(image.id)}
+                  >
                     <img src={image.url} alt="Character" className={`w-full h-full object-cover ${!isUnlocked && 'blur-sm'}`} loading="lazy" />
+                    {image.imageType && (
+                      <Badge className="absolute top-1 left-1 text-xs">{image.imageType}</Badge>
+                    )}
+                    {image.unlockLevel > 1 && (
+                      <Badge variant="secondary" className="absolute top-1 right-1 text-xs">Lv{image.unlockLevel}</Badge>
+                    )}
                   </div>
                 );
               })}
+              {characterImages.length === 0 && (
+                <div className="col-span-full text-center py-8 text-gray-500">
+                  <ImageIcon className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                  <p>No images for this character yet</p>
+                </div>
+              )}
             </div>
           </ScrollContainer>
         </CardContent>
