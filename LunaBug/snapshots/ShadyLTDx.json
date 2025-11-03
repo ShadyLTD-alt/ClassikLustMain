@@ -2,18 +2,18 @@
   "id": "8e2e5ac9-d623-4daa-b797-ea332a805d31",
   "telegramId": "dev_shadyltdx",
   "username": "ShadyLTDx",
-  "points": 12689,
-  "lustPoints": 12689,
+  "points": 1994,
+  "lustPoints": 1994,
   "lustGems": 0,
-  "energy": 3799,
-  "energyMax": 3800,
+  "energy": 3900,
+  "energyMax": 3900,
   "level": 2,
   "experience": 0,
-  "passiveIncomeRate": 245,
+  "passiveIncomeRate": 255,
   "upgrades": {
     "perTap": 30,
-    "perHour": 20,
-    "energyMax": 18,
+    "perHour": 21,
+    "energyMax": 19,
     "energyRegen": 12,
     "criticalChance": 28,
     "incomeMultiplier": 7
@@ -32,6 +32,6 @@
   "boostMultiplier": 1,
   "boostExpiresAt": null,
   "boostEnergy": 0,
-  "totalTapsToday": 0,
-  "totalTapsAllTime": 0
+  "totalTapsToday": 34,
+  "totalTapsAllTime": 34
 }
