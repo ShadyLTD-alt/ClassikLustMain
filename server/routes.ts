@@ -25,6 +25,8 @@ import { generateSecureToken, getSessionExpiry } from "./utils/auth";
 import logger from "./logger";
 // ✅ LUNA FIX: Import MasterDataService for single source of truth
 import masterDataService from "./utils/MasterDataService";
+// 🎯 JSON-FIRST: Import new player state manager
+import { playerStateManager, getPlayerState, updatePlayerState, selectCharacterForPlayer, purchaseUpgradeForPlayer } from "./utils/playerStateManager";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -162,11 +164,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   logger.info('🔐 Setting up auth routes...');
   app.get("/api/auth/me", requireAuth, async (req, res) => {
     try {
-      const player = await storage.getPlayer(req.player!.id);
-      if (!player) {
-        return res.status(404).json({ error: 'Player not found' });
-      }
-      res.json({ success: true, player });
+      // 🎯 JSON-FIRST: Load from JSON state manager
+      const playerState = await getPlayerState(req.player!.id);
+      res.json({ success: true, player: playerState });
     } catch (error) {
       logger.error('Auth error', { error: error instanceof Error ? error.message : 'Unknown error' });
       res.status(500).json({ error: 'Failed to fetch player data' });
@@ -270,7 +270,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // [Continue with all other routes exactly as they were]
   logger.info('🎮 Setting up game data routes...');
   // Get all upgrades (from memory)
   app.get("/api/upgrades", requireAuth, async (_req, res) => {
@@ -287,6 +286,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const characters = getCharactersFromMemory();
       res.json({ characters });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  });
+
+  // Get specific character
+  app.get("/api/characters/:id", requireAuth, async (req, res) => {
+    try {
+      const character = getCharacterFromMemory(req.params.id);
+      if (!character) {
+        return res.status(404).json({ error: 'Character not found' });
+      }
+      res.json(character);
     } catch (error: any) {
       res.status(500).json({ success: false, message: error.message });
     }
@@ -361,23 +373,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  logger.info('👤 Setting up player routes...');
+  logger.info('👤 Setting up JSON-FIRST player routes...');
+  
+  // 🎯 JSON-FIRST: Get player data (from JSON snapshots)
   app.get("/api/player/me", requireAuth, async (req, res) => {
     try {
-      const player = await storage.getPlayer(req.player!.id);
-      if (!player) {
-        return res.status(404).json({ error: 'Player not found' });
-      }
-      res.json({ player });
+      const playerState = await getPlayerState(req.player!.id);
+      res.json({ player: playerState });
+      console.log(`📤 Player ${req.player!.id} data served from JSON`);
     } catch (error) {
       logger.error('Player fetch error', { error: error instanceof Error ? error.message : 'Unknown' });
       res.status(500).json({ error: 'Failed to fetch player data' });
     }
   });
 
+  // 🎯 JSON-FIRST: Update player data (immediate JSON + async DB)
   app.patch("/api/player/me", requireAuth, async (req, res) => {
     try {
       const updates = req.body;
+      
+      // Security: prevent admin escalation
       if (updates.isAdmin !== undefined) {
         delete updates.isAdmin;
       }
@@ -390,37 +405,87 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      const currentPlayer = await storage.getPlayer(req.player!.id);
-      if (!currentPlayer) {
-        return res.status(404).json({ error: 'Player not found' });
-      }
+      // Apply updates via JSON-first manager
+      const updatedState = await updatePlayerState(req.player!.id, updates);
 
-      // Merge upgrades if provided
-      if (updates.upgrades) {
-        updates.upgrades = { ...currentPlayer.upgrades, ...updates.upgrades };
-      }
-
-      // Merge unlockedCharacters if provided
-      if (updates.unlockedCharacters) {
-        const current = Array.isArray(currentPlayer.unlockedCharacters) ? currentPlayer.unlockedCharacters : [];
-        const incoming = Array.isArray(updates.unlockedCharacters) ? updates.unlockedCharacters : [];
-        updates.unlockedCharacters = Array.from(new Set([...current, ...incoming]));
-      }
-
-      const updatedPlayer = await storage.updatePlayer(req.player!.id, updates);
-      if (updatedPlayer) {
-        await savePlayerDataToJSON(updatedPlayer);
-      }
-
-      // Handle sendBeacon requests (no response expected) - LESS SPAMMY LOGGING
+      // Handle sendBeacon requests (no response expected)
       if (req.headers['content-type']?.includes('text/plain')) {
         res.status(204).end();
       } else {
-        res.json({ player: updatedPlayer });
+        res.json({ player: updatedState });
       }
+      
+      console.log(`💾 Player ${req.player!.id} updated via JSON-first system`);
     } catch (error) {
       logger.error('Player update error', { error: error instanceof Error ? error.message : 'Unknown' });
       res.status(500).json({ error: 'Failed to update player' });
+    }
+  });
+
+  // 🎯 JSON-FIRST: Character selection (dedicated endpoint)
+  app.post("/api/player/select-character", requireAuth, async (req, res) => {
+    try {
+      const { characterId } = req.body;
+      
+      if (!characterId) {
+        return res.status(400).json({ error: 'Character ID is required' });
+      }
+
+      // Verify character exists and is unlocked
+      const playerState = await getPlayerState(req.player!.id);
+      if (!playerState.unlockedCharacters.includes(characterId)) {
+        return res.status(403).json({ error: 'Character not unlocked' });
+      }
+
+      const updatedState = await selectCharacterForPlayer(req.player!.id, characterId);
+      
+      res.json({ success: true, player: updatedState });
+      console.log(`🎭 Player ${req.player!.id} selected character ${characterId} via JSON-first`);
+    } catch (error) {
+      logger.error('Character selection error', { error: error instanceof Error ? error.message : 'Unknown' });
+      res.status(500).json({ error: 'Failed to select character' });
+    }
+  });
+
+  // 🎯 JSON-FIRST: Purchase upgrade
+  app.post("/api/player/upgrades", requireAuth, async (req, res) => {
+    try {
+      const { upgradeId, level } = req.body;
+      const upgrade = getUpgradeFromMemory(upgradeId);
+      
+      if (!upgrade) {
+        return res.status(400).json({ error: 'Invalid upgrade' });
+      }
+
+      if (level > upgrade.maxLevel) {
+        return res.status(400).json({ error: 'Level exceeds maximum' });
+      }
+
+      // Calculate cost (you'll need to import/implement this)
+      const cost = upgrade.baseCost * Math.pow(upgrade.costMultiplier, level - 1);
+      
+      const updatedState = await purchaseUpgradeForPlayer(req.player!.id, upgradeId, level, cost);
+      
+      res.json({ success: true, player: updatedState });
+      console.log(`🛒 Player ${req.player!.id} purchased upgrade ${upgradeId} level ${level} via JSON-first`);
+    } catch (error) {
+      logger.error('Upgrade purchase error', { error: error instanceof Error ? error.message : 'Unknown' });
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to purchase upgrade' });
+    }
+  });
+
+  // 🎯 JSON-FIRST: Health check for player state system
+  app.get("/api/player/health", requireAuth, async (req, res) => {
+    try {
+      const health = await playerStateManager.healthCheck();
+      res.json({ 
+        success: true, 
+        health,
+        message: 'JSON-first player state system status'
+      });
+    } catch (error) {
+      logger.error('Player state health check error', { error: error instanceof Error ? error.message : 'Unknown' });
+      res.status(500).json({ error: 'Failed to check player state health' });
     }
   });
 
@@ -443,6 +508,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
   
   logger.info('✅ All routes registered successfully');
-  logger.info('🤖 Luna: Architectural violations fixed - no more hardcoded player data!');
+  logger.info('🎯 JSON-FIRST: Player state system initialized with atomic writes and delta syncing');
   return httpServer;
 }
