@@ -1,6 +1,6 @@
 [
   {
-    "timestamp": "2025-11-03T21:05:40.685Z",
+    "timestamp": "2025-11-03T21:54:55.532Z",
     "errorPattern": "MaxListenersExceededWarning: Possible EventEmitter memory leak detected",
     "errorType": "EVENT_EMITTER",
     "impact": "HIGH",
@@ -13,7 +13,7 @@
     ]
   },
   {
-    "timestamp": "2025-11-03T21:05:40.685Z",
+    "timestamp": "2025-11-03T21:54:55.532Z",
     "errorPattern": "ReferenceError: module is not defined in ES module scope",
     "errorType": "ES_MODULE",
     "impact": "CRITICAL",
@@ -26,7 +26,7 @@
     ]
   },
   {
-    "timestamp": "2025-11-03T21:05:40.685Z",
+    "timestamp": "2025-11-03T21:54:55.532Z",
     "errorPattern": "column \"maxEnergy\" does not exist",
     "errorType": "DATABASE_FIELD",
     "impact": "HIGH",
@@ -39,7 +39,7 @@
     ]
   },
   {
-    "timestamp": "2025-11-03T21:05:40.685Z",
+    "timestamp": "2025-11-03T21:54:55.532Z",
     "errorPattern": "Wrong player JSON directory: using uploads/snapshots instead of main-gamedata/player-data",
     "errorType": "DIRECTORY_STRUCTURE",
     "impact": "HIGH",
@@ -52,7 +52,7 @@
     ]
   },
   {
-    "timestamp": "2025-11-03T21:05:40.685Z",
+    "timestamp": "2025-11-03T21:54:55.532Z",
     "errorPattern": "Character selection API calls failing without proper error handling",
     "errorType": "API_TIMEOUT",
     "impact": "MEDIUM",
@@ -65,7 +65,7 @@
     ]
   },
   {
-    "timestamp": "2025-11-03T21:05:40.685Z",
+    "timestamp": "2025-11-03T21:54:55.532Z",
     "errorPattern": "Image loading failures due to malformed URLs or missing files",
     "errorType": "IMAGE_LOADING",
     "impact": "MEDIUM",
