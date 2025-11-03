@@ -2,7 +2,7 @@
   "defaultPlayerState": {
     "points": 0,
     "energy": 1000,
-    "maxEnergy": 1000,
+    "energyMax": 1000,
     "level": 1,
     "experience": 0,
     "passiveIncomeRate": 0,
@@ -22,7 +22,7 @@
       "username": { "type": "string", "required": true },
       "points": { "type": "bigint", "default": 0 },
       "energy": { "type": "integer", "default": 1000 },
-      "maxEnergy": { "type": "integer", "default": 1000 },
+      "energyMax": { "type": "integer", "default": 1000 },
       "level": { "type": "integer", "default": 1 },
       "experience": { "type": "bigint", "default": 0 },
       "passiveIncomeRate": { "type": "integer", "default": 0 },
