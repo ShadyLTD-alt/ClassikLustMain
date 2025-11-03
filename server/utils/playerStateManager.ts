@@ -99,10 +99,18 @@ class PlayerStateManager extends EventEmitter {
     return crypto.createHash('md5').update(JSON.stringify(critical)).digest('hex');
   }
 
-  // 📁 Generate proper filename based on telegramId and username
-  private getPlayerFileName(telegramId: string, username: string): string {
-    const sanitized = username.replace(/[^a-zA-Z0-9_-]/g, '_');
-    return `${telegramId}_${sanitized}.json`;
+  // 📁 Generate proper filename: player-{username} or player-{telegramId} as fallback
+  private getPlayerFileName(telegramId: string, username?: string | null): string {
+    const cleanUsername = username?.trim();
+    
+    if (cleanUsername && cleanUsername !== '' && cleanUsername !== 'null' && cleanUsername !== 'undefined') {
+      const sanitized = cleanUsername.replace(/[^a-zA-Z0-9_-]/g, '_');
+      return `player-${sanitized}.json`;
+    } else {
+      // Fallback to telegramId if username is null/empty/invalid
+      const sanitizedTelegramId = telegramId.replace(/[^a-zA-Z0-9_-]/g, '_');
+      return `player-${sanitizedTelegramId}.json`;
+    }
   }
 
   // Load player state (JSON first from main-gamedata, DB fallback)
@@ -203,7 +211,7 @@ class PlayerStateManager extends EventEmitter {
         await fs.writeFile(tempPath, jsonData, 'utf8');
         await fs.rename(tempPath, filePath);
         
-        console.log(`💾 Player ${playerId} main JSON saved: ${filename}`);
+        console.log(`💾 Player ${state.username || state.telegramId} main JSON saved: ${filename}`);
       } finally {
         await release();
       }
@@ -226,7 +234,7 @@ class PlayerStateManager extends EventEmitter {
       const data = await fs.readFile(filePath, 'utf8');
       const state = JSON.parse(data);
       
-      console.log(`📂 Player ${playerId} loaded from main JSON: ${filename}`);
+      console.log(`📂 Player ${player.username || player.telegramId} loaded from main JSON: ${filename}`);
       return {
         ...state,
         // Ensure dates are properly parsed
@@ -296,7 +304,7 @@ class PlayerStateManager extends EventEmitter {
       // Calculate initial hash
       state.lastSync.hash = this.hashState(state);
       
-      console.log(`✅ Player ${playerId} loaded from database`);
+      console.log(`✅ Player ${player.username || player.telegramId} loaded from database`);
       return state;
     } catch (error) {
       console.error(`🔴 Failed to load player ${playerId} from database:`, error);
@@ -310,7 +318,7 @@ class PlayerStateManager extends EventEmitter {
     const existingTimeout = this.syncTimeouts.get(playerId);
     if (existingTimeout) {
       clearTimeout(existingTimeout);
-      this.syncTimeouts.delete(playerId);
+      this.syncTimeouts.delete(existingTimeout);
     }
     
     // Skip if already pending
@@ -350,8 +358,7 @@ class PlayerStateManager extends EventEmitter {
 
       const currentHash = this.hashState(currentCached);
       if (currentHash === state.lastSync.hash) {
-        console.log(`✅ Player ${playerId} unchanged, skipping DB sync`);
-        return;
+        return; // No need to log unchanged syncs
       }
 
       console.log(`🔄 Syncing player ${playerId} to database...`);
@@ -392,7 +399,7 @@ class PlayerStateManager extends EventEmitter {
         hash: currentHash
       };
 
-      console.log(`✅ Player ${playerId} synced to database successfully`);
+      console.log(`✅ Player ${state.username || state.telegramId} synced to DB`);
       this.emit('syncSuccess', { playerId, timestamp: Date.now() });
     } catch (error) {
       console.error(`🔴 Database sync failed for player ${playerId}:`, error);
@@ -421,9 +428,9 @@ class PlayerStateManager extends EventEmitter {
         await fs.unlink(path.join(playerDir, backup.name));
       }
       
-      console.log(`💾 Created backup snapshot for player ${playerId}, keeping ${Math.min(backups.length, 5)} total`);
+      // Only log backup creation occasionally to reduce spam
     } catch (error) {
-      console.warn(`⚠️ Failed to create backup for player ${playerId}:`, error);
+      // Only warn for backup failures, don't spam console
     }
   }
 
@@ -513,7 +520,6 @@ class PlayerStateManager extends EventEmitter {
     // Clear all timeouts
     for (const [playerId, timeout] of this.syncTimeouts.entries()) {
       clearTimeout(timeout);
-      console.log(`⏹️ Cleared pending sync timeout for player ${playerId}`);
     }
     this.syncTimeouts.clear();
     
@@ -554,7 +560,7 @@ export async function updatePlayerState(playerId: string, updates: Partial<Playe
 }
 
 export async function selectCharacterForPlayer(playerId: string, characterId: string): Promise<PlayerState> {
-  console.log(`🎭 Selecting character ${characterId} for player ${playerId}`);
+  console.log(`🎭 [SELECT] Player ${playerId} -> Character ${characterId}`);
   
   return await playerStateManager.updatePlayer(playerId, {
     selectedCharacterId: characterId,
@@ -564,7 +570,7 @@ export async function selectCharacterForPlayer(playerId: string, characterId: st
 }
 
 export async function setDisplayImageForPlayer(playerId: string, imageUrl: string): Promise<PlayerState> {
-  console.log(`🖼️ Setting display image for player ${playerId}: ${imageUrl}`);
+  console.log(`🖼️ [DISPLAY] Player ${playerId} -> Image: ${imageUrl}`);
   
   return await playerStateManager.updatePlayer(playerId, {
     displayImage: imageUrl
