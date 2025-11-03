@@ -247,7 +247,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           level: playerFromAuth.level,
           selectedCharacterId: playerFromAuth.selectedCharacterId,
           displayImage: playerFromAuth.displayImage,
-          points: playerFromAuth.points
+          points: playerFromAuth.points,
+          upgradesCount: Object.keys(playerFromAuth.upgrades || {}).length
         });
 
         if (!mounted) return; // Component unmounted
@@ -340,6 +341,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           const { baseMaxEnergy, baseEnergyRegen } = calculateBaseEnergyValues(upgradesData.upgrades, playerUpgrades);
           
           console.log('🔧 [GAME CONTEXT] Luna calculated energy from upgrades:', { baseMaxEnergy, baseEnergyRegen });
+          console.log('🔧 [GAME CONTEXT] Player upgrade levels from JSON:', playerUpgrades);
           
           // ✅ LUNA JSON-FIRST: Set player state from JSON snapshot data
           setState(prev => {
@@ -358,7 +360,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
               selectedCharacterId: player.selectedCharacterId || (charactersData?.characters?.[0]?.id || 'shadow'),
               selectedImageId: player.selectedImageId || null,
               displayImage: normalizeImageUrl(player.displayImage), // 🔧 FIX: Normalize display image URL
-              upgrades: playerUpgrades,
+              upgrades: playerUpgrades, // 🔧 CRITICAL: This contains the actual upgrade levels!
               unlockedCharacters: Array.isArray(player.unlockedCharacters) ? player.unlockedCharacters : ['shadow'],
               unlockedImages: Array.isArray(player.unlockedImages) ? player.unlockedImages : [],
               passiveIncomeRate: player.passiveIncomeRate || 0,
@@ -383,7 +385,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
               selectedCharacter: newState.selectedCharacterId,
               displayImage: newState.displayImage,
               energyMax: newState.energyMax,
-              upgradesCount: Object.keys(newState.upgrades).length
+              upgradesCount: Object.keys(newState.upgrades).length,
+              upgradeDetails: Object.entries(newState.upgrades).map(([id, lvl]) => `${id}:${lvl}`).join(', ')
             });
             
             return newState;
@@ -443,6 +446,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       if (newPassiveRate !== prev.passiveIncomeRate || 
           baseMaxEnergy !== prev.energyMax || 
           baseEnergyRegen !== prev.energyRegenRate) {
+        
+        console.log('🔧 [GAME CONTEXT] Recalculating upgrade effects:', {
+          passiveRate: `${prev.passiveIncomeRate} → ${newPassiveRate}`,
+          energyMax: `${prev.energyMax} → ${baseMaxEnergy}`,
+          energyRegen: `${prev.energyRegenRate} → ${baseEnergyRegen}`
+        });
         
         return {
           ...prev,
@@ -613,12 +622,45 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       case 'UPDATE_DISPLAY_IMAGE': // 🆕 NEW: Handle display image updates from external components
         setState(prev => ({ ...prev, displayImage: normalizeImageUrl(action.payload) }));
         break;
+      case 'REFRESH_FROM_SERVER': // 🔄 NEW: Refresh state from server (for after purchase)
+        console.log('🔄 [GAME CONTEXT] Refreshing state from server...');
+        const sessionToken = localStorage.getItem('sessionToken');
+        if (sessionToken) {
+          fetch('/api/auth/me', {
+            headers: { 'Authorization': `Bearer ${sessionToken}` }
+          })
+          .then(res => res.json())
+          .then(data => {
+            if (data.success && data.player) {
+              const player = data.player;
+              console.log('🔄 [REFRESH] Player data refreshed from server');
+              setState(prev => {
+                const { baseMaxEnergy, baseEnergyRegen } = calculateBaseEnergyValues(upgrades, player.upgrades || {});
+                return {
+                  ...prev,
+                  points: typeof player.points === 'string' ? parseFloat(player.points) : (player.points || prev.points),
+                  lustPoints: typeof player.lustPoints === 'string' ? parseFloat(player.lustPoints) : (player.lustPoints || prev.lustPoints),
+                  energy: Math.min(player.energy || prev.energy, baseMaxEnergy),
+                  energyMax: baseMaxEnergy,
+                  energyRegenRate: baseEnergyRegen,
+                  level: player.level || prev.level,
+                  selectedCharacterId: player.selectedCharacterId || prev.selectedCharacterId,
+                  displayImage: normalizeImageUrl(player.displayImage) || prev.displayImage,
+                  upgrades: player.upgrades || prev.upgrades, // 🔧 CRITICAL: Update upgrade levels!
+                  unlockedCharacters: player.unlockedCharacters || prev.unlockedCharacters
+                };
+              });
+            }
+          })
+          .catch(err => console.error('🔴 [REFRESH] Failed to refresh from server:', err));
+        }
+        break;
       default:
         break;
     }
   }, [upgrades, state.upgrades]);
 
-  // 🎯 JSON-FIRST: Enhanced purchase with better error handling
+  // 🎯 JSON-FIRST: FIXED upgrade purchase with proper state update
   const purchaseUpgrade = useCallback(async (upgradeId: string): Promise<boolean> => {
     if (pendingPurchases.has(upgradeId)) return false;
     
@@ -635,7 +677,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setPendingPurchases(prev => new Set(prev).add(upgradeId));
 
     try {
-      console.log(`🎯 [UPGRADE] ${state.username} purchasing upgrade ${upgradeId} level ${newLevel}`);
+      console.log(`🎯 [UPGRADE] ${state.username} purchasing upgrade ${upgradeId} level ${newLevel} for ${cost} points`);
+      console.log(`🎯 [UPGRADE] Current state: points=${state.points}, current_level=${currentLevel}`);
       
       const response = await fetch('/api/player/upgrades', {
         method: 'POST',
@@ -649,30 +692,46 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        console.error(`❌ [UPGRADE] Purchase failed:`, errorData);
         throw new Error(errorData.error || `HTTP ${response.status}`);
       }
 
       const result = await response.json();
       const updatedPlayer = result.player;
       
-      // Update local state from JSON response
+      console.log(`✅ [UPGRADE] Server response:`, {
+        points: updatedPlayer.points,
+        upgrades: Object.entries(updatedPlayer.upgrades || {}).map(([id, lvl]) => `${id}:${lvl}`).join(', ')
+      });
+      
+      // 🔧 CRITICAL FIX: Update local state immediately with ALL server data
       setState(prev => {
         const newUpgrades = updatedPlayer.upgrades || prev.upgrades;
         const { baseMaxEnergy, baseEnergyRegen } = calculateBaseEnergyValues(upgrades, newUpgrades);
         
-        console.log(`✅ [UPGRADE] ${prev.username} upgrade ${upgradeId} purchased successfully`);
+        console.log(`🔧 [UPGRADE] Updating local state:`, {
+          pointsBefore: prev.points,
+          pointsAfter: updatedPlayer.points,
+          upgradesBefore: Object.entries(prev.upgrades).map(([id, lvl]) => `${id}:${lvl}`).join(', '),
+          upgradesAfter: Object.entries(newUpgrades).map(([id, lvl]) => `${id}:${lvl}`).join(', '),
+          energyMaxBefore: prev.energyMax,
+          energyMaxAfter: baseMaxEnergy
+        });
         
         return {
           ...prev,
-          points: updatedPlayer.points,
-          lustPoints: updatedPlayer.lustPoints,
-          upgrades: newUpgrades,
+          points: typeof updatedPlayer.points === 'string' ? parseFloat(updatedPlayer.points) : updatedPlayer.points,
+          lustPoints: typeof updatedPlayer.lustPoints === 'string' ? parseFloat(updatedPlayer.lustPoints) : (updatedPlayer.lustPoints || updatedPlayer.points),
+          upgrades: newUpgrades, // 🔧 CRITICAL: Update upgrade levels immediately!
           energyMax: baseMaxEnergy,
           energyRegenRate: baseEnergyRegen,
-          energy: Math.min(prev.energy, baseMaxEnergy)
+          energy: Math.min(prev.energy, baseMaxEnergy),
+          // Also update any other fields that might have changed
+          passiveIncomeRate: updatedPlayer.passiveIncomeRate !== undefined ? updatedPlayer.passiveIncomeRate : prev.passiveIncomeRate
         };
       });
-
+      
+      console.log(`✅ [UPGRADE] ${state.username} upgrade ${upgradeId} purchase complete - local state updated`);
       return true;
     } catch (err) {
       console.error(`🔴 [UPGRADE] Purchase failed for ${state.username}:`, err);
@@ -863,16 +922,23 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       {children}
       
       {/* 🔍 Debug info overlay in development */}
-      {process.env.NODE_ENV === 'development' && loadingError && (
+      {process.env.NODE_ENV === 'development' && (loadingError || !state.selectedCharacterId) && (
         <div className="fixed bottom-4 right-4 bg-red-900/90 text-white p-3 rounded-lg border border-red-500 max-w-md text-sm z-50">
           <div className="font-semibold">🔍 Debug Info:</div>
-          <div>Loading Error: {loadingError}</div>
+          {loadingError && <div>Loading Error: {loadingError}</div>}
           <div>Initialized: {isInitialized ? '✅' : '❌'}</div>
           <div>Username: {state.username || 'None'}</div>
           <div>Session: {localStorage.getItem('sessionToken') ? 'Present' : 'Missing'}</div>
           <div>Attempts: {loadingAttempts}/3</div>
           <div>Selected Character: {state.selectedCharacterId || 'None'}</div>
           <div>Display Image: {state.displayImage ? 'Set' : 'None'}</div>
+          <div>Upgrades: {Object.keys(state.upgrades).length}</div>
+          {Object.keys(state.upgrades).length > 0 && (
+            <div className="text-xs mt-1">{Object.entries(state.upgrades).map(([id, lvl]) => `${id}:${lvl}`).join(', ')}</div>
+          )}
+          <button onClick={() => dispatch({ type: 'REFRESH_FROM_SERVER' })} className="mt-2 px-2 py-1 bg-blue-600 rounded text-xs">
+            🔄 Refresh from Server
+          </button>
         </div>
       )}
     </GameContext.Provider>
