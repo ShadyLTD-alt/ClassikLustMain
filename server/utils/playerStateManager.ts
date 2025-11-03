@@ -58,6 +58,10 @@ class PlayerStateManager extends EventEmitter {
   private async ensureDirectories() {
     await fs.mkdir(this.playersRoot, { recursive: true });
     await fs.mkdir(this.snapshotsDir, { recursive: true });
+    console.log('📁 Player directories ensured:', {
+      primary: this.playersRoot,
+      backup: this.snapshotsDir
+    });
   }
 
   private getLock(playerId: string): AsyncLock {
@@ -65,7 +69,7 @@ class PlayerStateManager extends EventEmitter {
     return this.locks.get(playerId)!;
   }
 
-  // New: folder name and file name helpers
+  // 📁 NEW: Generate folder name for per-player directory
   private getFolderName(telegramId: string, username?: string | null): string {
     const clean = (s: string) => s.replace(/[^a-zA-Z0-9_-]/g, '_');
     if (username && username.trim() && username !== 'null' && username !== 'undefined') {
@@ -74,6 +78,7 @@ class PlayerStateManager extends EventEmitter {
     return `player-${clean(telegramId)}`;
   }
 
+  // 📁 NEW: Get path to player.json inside per-player folder
   private getJsonPath(telegramId: string, username?: string | null): string {
     const folder = this.getFolderName(telegramId, username);
     return path.join(this.playersRoot, folder, 'player.json');
@@ -98,16 +103,21 @@ class PlayerStateManager extends EventEmitter {
     return await lock.acquire(playerId, async () => {
       if (this.states.has(playerId)) return this.states.get(playerId)!;
 
+      console.log(`📂 Loading player ${playerId} from per-player folder...`);
       let state = await this.loadFromMainJson(playerId);
+      
       if (!state) {
+        console.log(`📂 No per-player JSON found for ${playerId}, loading from DB...`);
         state = await this.loadFromDatabase(playerId);
         if (state) {
           await this.saveMainJson(playerId, state);
           await this.createBackupSnapshot(playerId, state);
         }
       }
+      
       if (!state) throw new Error(`Player ${playerId} not found`);
       this.states.set(playerId, state);
+      console.log(`✅ Player ${state.username || playerId} state loaded from per-player folder`);
       return state;
     });
   }
@@ -122,6 +132,8 @@ class PlayerStateManager extends EventEmitter {
         updatedAt: new Date(),
         lastSync: { timestamp: Date.now(), hash: this.hashState({ ...current, ...updates }) }
       };
+      
+      console.log(`💾 Updating player ${newState.username || playerId} in per-player folder...`);
       await this.saveMainJson(playerId, newState);
       this.states.set(playerId, newState);
       this.queueDatabaseSync(playerId, newState);
@@ -130,29 +142,45 @@ class PlayerStateManager extends EventEmitter {
     });
   }
 
+  // 📁 Save to per-player folder: main-gamedata/player-data/player-{username}/player.json
   private async saveMainJson(playerId: string, state: PlayerState): Promise<void> {
     const filePath = this.getJsonPath(state.telegramId, state.username);
     const dir = path.dirname(filePath);
     const lockPath = `${filePath}.lock`;
+    
+    console.log(`💾 Saving to per-player folder: ${filePath}`);
+    
     await fs.mkdir(dir, { recursive: true });
-    const release = await lockfile.lock(filePath, { lockfilePath: lockPath, retries: 3, minTimeout: 50, maxTimeout: 500, realpath: false });
+    const release = await lockfile.lock(filePath, { 
+      lockfilePath: lockPath, 
+      retries: 3, 
+      minTimeout: 50, 
+      maxTimeout: 500, 
+      realpath: false 
+    });
+    
     try {
       const tmp = `${filePath}.tmp`;
       await fs.writeFile(tmp, JSON.stringify(state, null, 2), 'utf8');
       await fs.rename(tmp, filePath);
-      console.log(`💾 Player JSON saved: ${filePath}`);
+      console.log(`✅ Player JSON saved to per-player folder: ${path.basename(dir)}/player.json`);
     } finally {
       await release();
     }
   }
 
+  // 📁 Load from per-player folder
   private async loadFromMainJson(playerId: string): Promise<PlayerState | null> {
     try {
       const player = await storage.getPlayer(playerId);
       if (!player) return null;
+      
       const filePath = this.getJsonPath(player.telegramId, player.username);
       const data = await fs.readFile(filePath, 'utf8');
       const state = JSON.parse(data);
+      
+      console.log(`📂 Loaded from per-player folder: ${path.basename(path.dirname(filePath))}/player.json`);
+      
       return {
         ...state,
         boostExpiresAt: state.boostExpiresAt ? new Date(state.boostExpiresAt) : null,
@@ -163,17 +191,24 @@ class PlayerStateManager extends EventEmitter {
       };
     } catch (err: any) {
       if (err.code === 'ENOENT') return null;
-      console.error('Failed to load player JSON:', err);
+      console.error('Failed to load player JSON from per-player folder:', err);
       return null;
     }
   }
 
   private async loadFromDatabase(playerId: string): Promise<PlayerState | null> {
     try {
+      console.log(`🗃️ Loading player ${playerId} from database...`);
+      
       const player = await storage.getPlayer(playerId);
       if (!player) return null;
+      
       const upgrades = await storage.getPlayerUpgrades(playerId);
-      const upgradesMap = upgrades.reduce((acc, u) => { acc[u.upgradeId] = u.level; return acc; }, {} as Record<string, number>);
+      const upgradesMap = upgrades.reduce((acc, u) => { 
+        acc[u.upgradeId] = u.level; 
+        return acc; 
+      }, {} as Record<string, number>);
+      
       const state: PlayerState = {
         id: player.id,
         telegramId: player.telegramId,
@@ -204,7 +239,9 @@ class PlayerStateManager extends EventEmitter {
         createdAt: player.createdAt ? new Date(player.createdAt) : new Date(),
         updatedAt: new Date()
       };
+      
       state.lastSync.hash = this.hashState(state);
+      console.log(`✅ Player ${player.username || player.telegramId} loaded from database`);
       return state;
     } catch (e) {
       console.error('Failed to load from DB:', e);
@@ -214,20 +251,35 @@ class PlayerStateManager extends EventEmitter {
 
   private queueDatabaseSync(playerId: string, state: PlayerState) {
     const existing = this.syncTimeouts.get(playerId);
-    if (existing) { clearTimeout(existing); this.syncTimeouts.delete(playerId); }
+    if (existing) { 
+      clearTimeout(existing); 
+      this.syncTimeouts.delete(playerId); 
+    }
+    
     this.pendingSyncs.add(playerId);
-    const t = setTimeout(async () => {
-      try { await this.syncToDatabase(playerId, state); } catch (e) { this.emit('syncError', { playerId, error: e }); }
-      finally { this.pendingSyncs.delete(playerId); this.syncTimeouts.delete(playerId); }
+    const timeout = setTimeout(async () => {
+      try { 
+        await this.syncToDatabase(playerId, state); 
+      } catch (e) { 
+        console.error(`🔴 DB sync failed for ${playerId}:`, e);
+        this.emit('syncError', { playerId, error: e }); 
+      } finally { 
+        this.pendingSyncs.delete(playerId); 
+        this.syncTimeouts.delete(playerId); 
+      }
     }, 3000);
-    this.syncTimeouts.set(playerId, t);
+    this.syncTimeouts.set(playerId, timeout);
   }
 
   private async syncToDatabase(playerId: string, state: PlayerState) {
     const cached = this.states.get(playerId);
     if (!cached) return;
+    
     const currentHash = this.hashState(cached);
     if (currentHash === state.lastSync.hash) return;
+    
+    console.log(`🔄 Syncing player ${state.username || playerId} to database...`);
+    
     await storage.updatePlayer(playerId, {
       points: state.points,
       lustPoints: state.lustPoints,
@@ -251,10 +303,13 @@ class PlayerStateManager extends EventEmitter {
       lastDailyReset: state.lastDailyReset,
       lastWeeklyReset: state.lastWeeklyReset
     });
+
     for (const [id, lvl] of Object.entries(state.upgrades)) {
       await storage.setPlayerUpgrade(playerId, id, lvl);
     }
+    
     cached.lastSync = { timestamp: Date.now(), hash: currentHash };
+    console.log(`✅ Player ${state.username || playerId} synced to database`);
   }
 
   private async createBackupSnapshot(playerId: string, state: PlayerState) {
@@ -262,6 +317,7 @@ class PlayerStateManager extends EventEmitter {
     await fs.mkdir(dir, { recursive: true });
     const backup = path.join(dir, `backup-${Date.now()}.json`);
     await fs.writeFile(backup, JSON.stringify(state, null, 2), 'utf8');
+    
     try {
       const files = await fs.readdir(dir);
       const backups = files.filter(f => f.startsWith('backup-') && f.endsWith('.json')).sort();
@@ -272,11 +328,16 @@ class PlayerStateManager extends EventEmitter {
     } catch {}
   }
 
-  getCachedState(playerId: string): PlayerState | null { return this.states.get(playerId) || null; }
+  getCachedState(playerId: string): PlayerState | null { 
+    return this.states.get(playerId) || null; 
+  }
 
   clearCache(playerId: string) {
-    const t = this.syncTimeouts.get(playerId); if (t) clearTimeout(t);
-    this.syncTimeouts.delete(playerId);
+    const timeout = this.syncTimeouts.get(playerId); 
+    if (timeout) {
+      clearTimeout(timeout);
+      this.syncTimeouts.delete(playerId);
+    }
     this.states.delete(playerId);
     this.locks.delete(playerId);
     this.pendingSyncs.delete(playerId);
@@ -287,7 +348,163 @@ class PlayerStateManager extends EventEmitter {
     if (!state) throw new Error('Player not in cache');
     await this.syncToDatabase(playerId, state);
   }
+
+  async healthCheck() {
+    try {
+      const mainDirs = await fs.readdir(this.playersRoot).catch(() => []);
+      const backupDirs = await fs.readdir(this.snapshotsDir).catch(() => []);
+      
+      let totalJsonFiles = 0;
+      let totalBackups = 0;
+      
+      // Count JSON files in per-player folders
+      for (const playerFolder of mainDirs) {
+        try {
+          const playerDir = path.join(this.playersRoot, playerFolder);
+          const files = await fs.readdir(playerDir);
+          totalJsonFiles += files.filter(f => f === 'player.json').length;
+        } catch {}
+      }
+      
+      // Count backup files
+      for (const dir of backupDirs) {
+        try {
+          const backups = await fs.readdir(path.join(this.snapshotsDir, dir));
+          totalBackups += backups.filter(f => f.startsWith('backup-')).length;
+        } catch {}
+      }
+      
+      return {
+        playerFolders: mainDirs.length,
+        playerJsonFiles: totalJsonFiles,
+        backupSnapshots: totalBackups,
+        cachedPlayers: this.states.size,
+        pendingSyncs: this.pendingSyncs.size,
+        pendingTimeouts: this.syncTimeouts.size,
+        directories: {
+          main: this.playersRoot,
+          backup: this.snapshotsDir
+        }
+      };
+    } catch {
+      return {
+        playerFolders: 0,
+        playerJsonFiles: 0,
+        backupSnapshots: 0,
+        cachedPlayers: this.states.size,
+        pendingSyncs: this.pendingSyncs.size,
+        pendingTimeouts: this.syncTimeouts.size,
+        directories: {
+          main: this.playersRoot,
+          backup: this.snapshotsDir
+        }
+      };
+    }
+  }
+
+  async cleanup(): Promise<void> {
+    console.log('🧹 Cleaning up PlayerStateManager...');
+    
+    for (const [playerId, timeout] of this.syncTimeouts.entries()) {
+      clearTimeout(timeout);
+    }
+    this.syncTimeouts.clear();
+    
+    if (this.pendingSyncs.size > 0) {
+      console.log(`⏳ Waiting for ${this.pendingSyncs.size} pending syncs...`);
+      let attempts = 0;
+      while (this.pendingSyncs.size > 0 && attempts < 30) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        attempts++;
+      }
+    }
+    
+    this.removeAllListeners();
+    console.log('✅ PlayerStateManager cleanup complete');
+  }
 }
 
+// Global singleton instance
 export const playerStateManager = new PlayerStateManager();
+
+// 🔧 RESTORED: Helper functions for routes.ts
+export async function getPlayerState(playerId: string): Promise<PlayerState> {
+  return await playerStateManager.loadPlayer(playerId);
+}
+
+export async function updatePlayerState(playerId: string, updates: Partial<PlayerState>): Promise<PlayerState> {
+  return await playerStateManager.updatePlayer(playerId, updates);
+}
+
+export async function selectCharacterForPlayer(playerId: string, characterId: string): Promise<PlayerState> {
+  console.log(`🎭 [CHARACTER SELECT] Player ${playerId} selecting character ${characterId}...`);
+  
+  // Load current state to validate unlocked characters
+  const currentState = await playerStateManager.loadPlayer(playerId);
+  
+  if (!currentState.unlockedCharacters.includes(characterId)) {
+    console.log(`❌ [CHARACTER SELECT] Character ${characterId} not unlocked for player ${playerId}`);
+    throw new Error(`Character ${characterId} is not unlocked`);
+  }
+  
+  const updatedState = await playerStateManager.updatePlayer(playerId, {
+    selectedCharacterId: characterId,
+    selectedImageId: null, // Reset to use character's default
+    displayImage: null     // Reset to use character's default
+  });
+  
+  console.log(`✅ [CHARACTER SELECT] Success! Player ${playerId} now using character ${characterId}`);
+  console.log(`📁 [CHARACTER SELECT] Saved to: main-gamedata/player-data/${playerStateManager['getFolderName'](updatedState.telegramId, updatedState.username)}/player.json`);
+  
+  return updatedState;
+}
+
+export async function setDisplayImageForPlayer(playerId: string, imageUrl: string): Promise<PlayerState> {
+  console.log(`🖼️ [DISPLAY IMAGE] Player ${playerId} setting display image: ${imageUrl}`);
+  
+  // Basic URL validation
+  if (!imageUrl || typeof imageUrl !== 'string') {
+    console.log(`❌ [DISPLAY IMAGE] Invalid URL provided: ${imageUrl}`);
+    throw new Error('Invalid image URL');
+  }
+  
+  // Ensure URL is from uploads directory (security)
+  if (!imageUrl.startsWith('/uploads/')) {
+    console.log(`❌ [DISPLAY IMAGE] URL not from uploads directory: ${imageUrl}`);
+    throw new Error('Image URL must be from uploads directory');
+  }
+  
+  const updatedState = await playerStateManager.updatePlayer(playerId, {
+    displayImage: imageUrl
+  });
+  
+  console.log(`✅ [DISPLAY IMAGE] Success! Player ${playerId} display image updated`);
+  console.log(`📁 [DISPLAY IMAGE] Saved to: main-gamedata/player-data/${playerStateManager['getFolderName'](updatedState.telegramId, updatedState.username)}/player.json`);
+  
+  return updatedState;
+}
+
+export async function purchaseUpgradeForPlayer(playerId: string, upgradeId: string, newLevel: number, cost: number): Promise<PlayerState> {
+  console.log(`🛒 [UPGRADE] Player ${playerId} purchasing upgrade ${upgradeId} level ${newLevel} for ${cost} points`);
+  
+  const currentState = await playerStateManager.loadPlayer(playerId);
+  
+  if (currentState.points < cost) {
+    console.log(`❌ [UPGRADE] Insufficient points: has ${currentState.points}, needs ${cost}`);
+    throw new Error('Insufficient points');
+  }
+  
+  const updatedState = await playerStateManager.updatePlayer(playerId, {
+    points: currentState.points - cost,
+    lustPoints: currentState.lustPoints - cost,
+    upgrades: {
+      ...currentState.upgrades,
+      [upgradeId]: newLevel
+    }
+  });
+  
+  console.log(`✅ [UPGRADE] Success! Player ${playerId} upgrade ${upgradeId} purchased`);
+  return updatedState;
+}
+
 export default playerStateManager;
