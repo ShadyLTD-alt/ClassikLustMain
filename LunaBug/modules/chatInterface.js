@@ -64,7 +64,7 @@ class ChatInterface {
   formatActionName(action) {
     const actionNames = {
       'auto_fix': '🤖 Auto-Fix (Let Luna handle it)',
-      'manual_steps': '📋 Manual Steps (I'll do it myself)',
+      'manual_steps': '📋 Manual Steps (I will do it myself)',
       'ignore': '🙈 Ignore for now',
       'view_details': '🔍 Show more details',
       'run_diagnostic': '🧪 Run diagnostic'
