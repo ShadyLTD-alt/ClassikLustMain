@@ -2,7 +2,7 @@
  * Luna's Enhanced Master Data Service  
  * Single Source of Truth for all game data creation
  * Eliminates hardcoded defaults throughout the codebase
- * EMERGENCY FIX: ES Module compatibility
+ * 🔧 FIXED: ES Module compatibility - no CommonJS exports
  */
 import fs from 'fs';
 import path from 'path';
@@ -16,12 +16,14 @@ interface PlayerDefaults {
   lustPoints: number;
   lustGems: number;
   energy: number;
-  energyMax: number;
+  energyMax: number;  // 🔧 FIX: Correct field name (not maxEnergy)
   level: number;
   experience: number;
   passiveIncomeRate: number;
+  energyRegenRate: number; // 🔧 FIX: Added missing field
   upgrades: Record<string, any>;
   unlockedCharacters: string[];
+  unlockedImages: string[];
   isAdmin: boolean;
   boostEnergy: number;
   totalTapsToday: number;
@@ -49,8 +51,10 @@ class MasterDataService {
       level: 1,
       experience: 0,
       passiveIncomeRate: 0,
+      energyRegenRate: 1,  // ✅ Added default energy regen
       upgrades: {},
       unlockedCharacters: ['shadow'],
+      unlockedImages: [],
       isAdmin: false,
       boostEnergy: 0,
       totalTapsToday: 0,
@@ -68,7 +72,7 @@ class MasterDataService {
   private initialized = false;
 
   constructor() {
-    console.log('🎯 Luna: Initializing Enhanced Master Data Service');
+    console.log('🎯 Luna: Initializing Enhanced Master Data Service (ES Module)');
   }
 
   private async loadMasterData(): Promise<void> {
@@ -80,16 +84,19 @@ class MasterDataService {
       // Load player defaults with corrected field names
       if (fs.existsSync(this.masterPaths.playerDefaults)) {
         const playerMaster = JSON.parse(fs.readFileSync(this.masterPaths.playerDefaults, 'utf8'));
-        this.masterData.defaultPlayerState = playerMaster.defaultPlayerState;
+        this.masterData.defaultPlayerState = { ...this.masterData.defaultPlayerState, ...playerMaster.defaultPlayerState };
         
-        // ✅ Luna Validation: Ensure correct field names
-        if ('maxEnergy' in this.masterData.defaultPlayerState) {
+        // 🔧 FIX: Auto-correct field naming issues
+        const state = this.masterData.defaultPlayerState as any;
+        if ('maxEnergy' in state) {
           console.warn('⚠️ Luna: Found maxEnergy instead of energyMax in master data - auto-correcting');
-          (this.masterData.defaultPlayerState as any).energyMax = (this.masterData.defaultPlayerState as any).maxEnergy;
-          delete (this.masterData.defaultPlayerState as any).maxEnergy;
+          state.energyMax = state.maxEnergy;
+          delete state.maxEnergy;
         }
         
         console.log('✅ Player defaults loaded with correct field naming');
+      } else {
+        console.warn('⚠️ Luna: Player master file not found, using built-in defaults');
       }
 
       // Load upgrades
@@ -103,6 +110,8 @@ class MasterDataService {
         }
         
         console.log(`✅ Loaded ${this.masterData.upgrades.length} upgrades`);
+      } else {
+        console.warn('⚠️ Luna: Upgrades master file not found');
       }
 
       // Load characters
@@ -110,6 +119,8 @@ class MasterDataService {
         const characterMaster = JSON.parse(fs.readFileSync(this.masterPaths.characters, 'utf8'));
         this.masterData.characters = characterMaster.characters || [];
         console.log(`✅ Loaded ${this.masterData.characters.length} characters`);
+      } else {
+        console.warn('⚠️ Luna: Characters master file not found');
       }
 
       // Load levels
@@ -117,6 +128,8 @@ class MasterDataService {
         const levelsMaster = JSON.parse(fs.readFileSync(this.masterPaths.levels, 'utf8'));
         this.masterData.levels = levelsMaster.levels || [];
         console.log(`✅ Loaded ${this.masterData.levels.length} levels`);
+      } else {
+        console.warn('⚠️ Luna: Levels master file not found');
       }
 
       this.initialized = true;
@@ -130,6 +143,7 @@ class MasterDataService {
     }
   }
 
+  // 🔧 FIX: Ensure all required player fields are included
   async createNewPlayerData(telegramId: string, username: string) {
     await this.loadMasterData();
     
@@ -145,13 +159,25 @@ class MasterDataService {
       lustGems: defaults.lustGems || 0,
       energy: defaults.energy,
       energyMax: defaults.energyMax,  // ✅ CORRECTED FIELD NAME
+      energyRegenRate: defaults.energyRegenRate || 1,  // ✅ Added field
       level: defaults.level,
       experience: defaults.experience,
       passiveIncomeRate: defaults.passiveIncomeRate,
+      selectedCharacterId: 'shadow', // Default character
+      selectedImageId: null,
+      displayImage: null,
+      upgrades: defaults.upgrades || {},
+      unlockedCharacters: defaults.unlockedCharacters || ['shadow'],
+      unlockedImages: defaults.unlockedImages || [],
       isAdmin: defaults.isAdmin,
+      boostActive: false,
+      boostMultiplier: 1.0,
+      boostExpiresAt: null,
       boostEnergy: defaults.boostEnergy || 0,
       totalTapsToday: defaults.totalTapsToday || 0,
-      totalTapsAllTime: defaults.totalTapsAllTime || 0
+      totalTapsAllTime: defaults.totalTapsAllTime || 0,
+      lastDailyReset: new Date(),
+      lastWeeklyReset: new Date()
     };
 
     console.log('✅ Luna: Player data created using enhanced master defaults');
@@ -249,11 +275,20 @@ class MasterDataService {
     return defaultChar;
   }
 
+  // 🔧 FIX: Enhanced validation for database field naming
   validateFieldNaming(data: any): { isValid: boolean; violations: string[] } {
     const violations: string[] = [];
     
     if ('maxEnergy' in data) {
       violations.push('Found maxEnergy - should be energyMax');
+    }
+    
+    if (!('energyMax' in data)) {
+      violations.push('Missing energyMax field');
+    }
+    
+    if (!('energyRegenRate' in data)) {
+      violations.push('Missing energyRegenRate field');
     }
     
     return {
@@ -278,17 +313,14 @@ class MasterDataService {
       fieldNamingConsistent: validation.isValid,
       violations: validation.violations,
       adminRoutesClean: true,
+      esModuleCompliant: true, // 🔧 NEW: ES module compliance
       phase2Status: 'Complete - All hardcoded admin defaults eliminated'
     };
   }
 }
 
-// Export singleton instance
+// 🔧 FIX: Export singleton instance with proper ES module syntax only
 export const masterDataService = new MasterDataService();
-
-// ❌ LUNA FIX: Remove CommonJS export causing ES module error
-// module.exports = { masterDataService };  // THIS WAS CAUSING THE CRASH!
-
 export default masterDataService;
 
-console.log('✅ Luna: MasterDataService exported as ES module only');
+console.log('✅ Luna: MasterDataService exported as ES module (no CommonJS)');
