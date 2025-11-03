@@ -110,9 +110,7 @@
     "ws": "^8.18.0",
     "zod": "^3.24.2",
     "zod-bignumber": "^1.0.6",
-    "zod-validation-error": "^3.4.0",
-    "async-lock": "^1.4.1",
-    "proper-lockfile": "^4.1.2"
+    "zod-validation-error": "^3.4.0"
   },
   "devDependencies": {
     "@replit/vite-plugin-cartographer": "^0.4.1",
