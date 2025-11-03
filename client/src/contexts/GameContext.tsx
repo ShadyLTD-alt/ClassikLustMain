@@ -65,32 +65,32 @@ interface GameContextType {
 const GameContext = createContext<GameContextType | undefined>(undefined);
 
 // ✅ LUNA FIX: DYNAMIC INITIAL STATE - No hardcoded values!
-// Values will be loaded from server/master data
+// Values will be loaded from server JSON-first system
 const createInitialState = (): GameState => ({
-  points: 0,          // Will be loaded from DB
-  lustPoints: 0,      // Will be loaded from DB  
-  lustGems: 0,        // Will be loaded from DB
-  energy: 0,          // Will be loaded from DB
+  points: 0,          // Will be loaded from JSON
+  lustPoints: 0,      // Will be loaded from JSON
+  lustGems: 0,        // Will be loaded from JSON
+  energy: 0,          // Will be loaded from JSON
   energyMax: 0,       // Will be CALCULATED from upgrades!
-  level: 1,           // Will be loaded from DB
-  selectedCharacterId: '',  // Will be loaded from DB
+  level: 1,           // Will be loaded from JSON
+  selectedCharacterId: '',  // Will be loaded from JSON
   selectedImageId: null,
   selectedAvatarId: null,
-  upgrades: {},       // Will be loaded from DB
-  unlockedCharacters: [],  // Will be loaded from DB
+  upgrades: {},       // Will be loaded from JSON
+  unlockedCharacters: [],  // Will be loaded from JSON
   unlockedImages: [],
   passiveIncomeRate: 0,    // Will be CALCULATED from upgrades!
   passiveIncomeCap: 10000, // From master data
   energyRegenRate: 0,      // Will be CALCULATED from upgrades!
-  isAdmin: false,          // Will be loaded from DB
+  isAdmin: false,          // Will be loaded from JSON
   displayImage: null,
   lastTapValue: 1,
-  // NEW BOOST SYSTEM - All loaded from DB
+  // NEW BOOST SYSTEM - All loaded from JSON
   boostActive: false,
   boostMultiplier: 1.0,
   boostExpiresAt: null,
   boostEnergy: 0,
-  // NEW TRACKING - All loaded from DB
+  // NEW TRACKING - All loaded from JSON
   totalTapsToday: 0,
   totalTapsAllTime: 0,
   lastDailyReset: new Date(),
@@ -173,7 +173,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
   }, [state.boostActive, state.boostExpiresAt]);
 
-  // ✅ LUNA FIX: Enhanced data loading with proper error handling
+  // 🎯 JSON-FIRST: Enhanced data loading from JSON-first system
   useEffect(() => {
     const loadAllData = async () => {
       const sessionToken = localStorage.getItem('sessionToken');
@@ -184,10 +184,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        console.log('🔄 Starting to load game data...');
+        console.log('🎯 JSON-FIRST: Loading game data from new system...');
 
-        // STEP 1: Load player data FIRST
-        console.log('📥 Loading player data...');
+        // STEP 1: Load player data from JSON-first API (immediate JSON response)
+        console.log('📥 Loading player data from JSON snapshots...');
         const playerRes = await fetch('/api/player/me', {
           headers: { 'Authorization': `Bearer ${sessionToken}` }
         });
@@ -199,8 +199,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         }
 
         const playerData = await playerRes.json();
+        console.log('🎯 Player data loaded from JSON-first system:', playerData.player?.username);
 
-        // STEP 2: Load game config data to calculate proper energy values
+        // STEP 2: Load game config data (still from memory/JSON)
         console.log('📥 Loading game configuration data...');
         const [upgradesRes, charactersRes, levelsRes, mediaRes] = await Promise.all([
           fetch('/api/upgrades', {
@@ -255,7 +256,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           console.log('✅ Loaded media:', imageConfigs.length);
         }
 
-        // STEP 3: Calculate actual energy values from upgrades
+        // STEP 3: Set player state from JSON-first system
         if (playerData?.player && upgradesData?.upgrades) {
           const player = playerData.player;
           const playerUpgrades = player.upgrades || {};
@@ -265,10 +266,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           
           console.log('🔧 Luna calculated energy from upgrades:', { baseMaxEnergy, baseEnergyRegen });
           
-          // ✅ LUNA FIX: Set player state with CALCULATED values, not hardcoded!
+          // ✅ LUNA JSON-FIRST: Set player state from JSON snapshot data
           setState(prev => ({
             ...prev,
-            points: typeof player.points === 'string' ? parseFloat(player.points) : player.points,
+            points: typeof player.points === 'string' ? parseFloat(player.points) : (player.points || 0),
             lustPoints: typeof player.lustPoints === 'string' ? parseFloat(player.lustPoints) : (player.lustPoints || player.points || 0),
             lustGems: player.lustGems || 0,
             energy: Math.min(player.energy || baseMaxEnergy, baseMaxEnergy),
@@ -282,19 +283,19 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
             passiveIncomeRate: player.passiveIncomeRate || 0,
             energyRegenRate: baseEnergyRegen,      // CALCULATED, NOT HARDCODED!
             isAdmin: player.isAdmin || false,
-            // NEW BOOST FIELDS - From DB
+            // NEW BOOST FIELDS - From JSON
             boostActive: player.boostActive || false,
             boostMultiplier: player.boostMultiplier || 1.0,
             boostExpiresAt: player.boostExpiresAt ? new Date(player.boostExpiresAt) : null,
             boostEnergy: player.boostEnergy || 0,
-            // NEW TRACKING FIELDS - From DB
+            // NEW TRACKING FIELDS - From JSON
             totalTapsToday: player.totalTapsToday || 0,
             totalTapsAllTime: player.totalTapsAllTime || 0,
             lastDailyReset: player.lastDailyReset ? new Date(player.lastDailyReset) : new Date(),
             lastWeeklyReset: player.lastWeeklyReset ? new Date(player.lastWeeklyReset) : new Date()
           }));
           
-          console.log('✅ Luna: Player data loaded with calculated energy:', player.username);
+          console.log('🎯 JSON-FIRST: Player data loaded from JSON snapshots:', player.username);
           console.log('⚡ Final energyMax:', baseMaxEnergy);
         }
 
@@ -361,43 +362,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     applyTheme(theme);
   }, [theme]);
 
-  // Save state before user leaves/refreshes
-  useEffect(() => {
-    const handleBeforeUnload = async () => {
-      const sessionToken = localStorage.getItem('sessionToken');
-      if (sessionToken) {
-        // Use sendBeacon for reliable save on page unload
-        const data = JSON.stringify({
-          points: state.points,
-          lustPoints: state.lustPoints,
-          lustGems: state.lustGems,
-          energy: state.energy,
-          passiveIncomeRate: state.passiveIncomeRate,
-          upgrades: state.upgrades,
-          unlockedCharacters: state.unlockedCharacters,
-          level: state.level,
-          energyMax: state.energyMax,  // Save calculated max energy
-          energyRegenRate: state.energyRegenRate,
-          displayImage: state.displayImage,
-          selectedCharacterId: state.selectedCharacterId,
-          boostActive: state.boostActive,
-          boostMultiplier: state.boostMultiplier,
-          boostExpiresAt: state.boostExpiresAt,
-          boostEnergy: state.boostEnergy,
-          totalTapsToday: state.totalTapsToday,
-          totalTapsAllTime: state.totalTapsAllTime
-        });
-
-        const blob = new Blob([data], { type: 'application/json' });
-        navigator.sendBeacon('/api/player/me', blob);
-      }
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [state]);
-
-  // ✅ LUNA FIX: Enhanced passive income and energy regen loop
+  // 🎯 JSON-FIRST: Simplified autosync - only essential fields
   useEffect(() => {
     let syncCounter = 0;
     const interval = setInterval(() => {
@@ -417,7 +382,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           return prev;
         }
 
-        // Sync to database every 10 seconds
+        // 🎯 JSON-FIRST: Minimal sync payload every 10 seconds
         syncCounter++;
         if (syncCounter >= 10) {
           syncCounter = 0;
@@ -431,15 +396,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
               energy: newEnergy,
               points: newPoints,
               lustPoints: newLustPoints,
-              passiveIncomeRate: prev.passiveIncomeRate,
-              upgrades: prev.upgrades,
-              unlockedCharacters: prev.unlockedCharacters,
-              displayImage: prev.displayImage,
+              // Always include these to prevent overwrites
               selectedCharacterId: prev.selectedCharacterId,
-              energyMax: prev.energyMax,  // Sync calculated max energy
-              energyRegenRate: prev.energyRegenRate
+              displayImage: prev.displayImage,
+              passiveIncomeRate: prev.passiveIncomeRate
             })
-          }).catch(err => console.error('Failed to sync to DB:', err));
+          }).catch(err => console.error('JSON-first sync failed:', err));
         }
 
         return { ...prev, energy: newEnergy, points: newPoints, lustPoints: newLustPoints };
@@ -473,7 +435,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         });
       }
 
-      // Sync to database
+      // 🎯 JSON-FIRST: Sync tap to JSON system
       fetch('/api/player/me', {
         method: 'PATCH',
         headers: {
@@ -487,7 +449,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           totalTapsToday: newTotalTapsToday,
           totalTapsAllTime: newTotalTapsAllTime
         })
-      }).catch(err => console.error('Failed to sync tap to DB:', err));
+      }).catch(err => console.error('Failed to sync tap to JSON system:', err));
 
       return {
         ...prev,
@@ -533,7 +495,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
   }, [upgrades, state.upgrades]);
 
-  // [Remaining methods unchanged for space...]
+  // 🎯 JSON-FIRST: Use new dedicated purchase endpoint
   const purchaseUpgrade = useCallback(async (upgradeId: string): Promise<boolean> => {
     if (pendingPurchases.has(upgradeId)) return false;
     
@@ -550,6 +512,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setPendingPurchases(prev => new Set(prev).add(upgradeId));
 
     try {
+      console.log(`🎯 JSON-FIRST: Purchasing upgrade ${upgradeId} level ${newLevel}`);
+      
       const response = await fetch('/api/player/upgrades', {
         method: 'POST',
         headers: {
@@ -559,16 +523,23 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         body: JSON.stringify({ upgradeId, level: newLevel })
       });
 
-      if (!response.ok) throw new Error('Failed to purchase upgrade');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to purchase upgrade');
+      }
 
+      const result = await response.json();
+      const updatedPlayer = result.player;
+      
+      // Update local state from JSON response
       setState(prev => {
-        const newUpgrades = { ...prev.upgrades, [upgradeId]: newLevel };
+        const newUpgrades = updatedPlayer.upgrades || prev.upgrades;
         const { baseMaxEnergy, baseEnergyRegen } = calculateBaseEnergyValues(upgrades, newUpgrades);
         
         return {
           ...prev,
-          points: prev.points - cost,
-          lustPoints: prev.lustPoints - cost,
+          points: updatedPlayer.points,
+          lustPoints: updatedPlayer.lustPoints,
           upgrades: newUpgrades,
           energyMax: baseMaxEnergy,
           energyRegenRate: baseEnergyRegen,
@@ -576,9 +547,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         };
       });
 
+      console.log(`✅ JSON-FIRST upgrade purchase successful`);
       return true;
     } catch (err) {
-      console.error('Failed to save upgrade to DB:', err);
+      console.error('🔴 Failed to purchase upgrade via JSON-first:', err);
       return false;
     } finally {
       setPendingPurchases(prev => {
@@ -589,7 +561,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
   }, [state.upgrades, state.points, upgrades, pendingPurchases]);
 
-  // FIXED: selectCharacter now persists to database
+  // 🎯 JSON-FIRST: Character selection via dedicated endpoint
   const selectCharacter = useCallback(async (characterId: string): Promise<boolean> => {
     if (!state.unlockedCharacters.includes(characterId)) {
       console.log('❌ Character not unlocked:', characterId);
@@ -597,37 +569,38 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      // Persist to database first
-      const response = await fetch('/api/player/me', {
-        method: 'PATCH',
+      console.log(`🎯 JSON-FIRST: Selecting character ${characterId}`);
+      
+      const response = await fetch('/api/player/select-character', {
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`
         },
-        body: JSON.stringify({
-          selectedCharacterId: characterId,
-          selectedImageId: null,  // Reset to use character's default image
-          displayImage: null      // Reset so character.defaultImage is used
-        })
+        body: JSON.stringify({ characterId })
       });
 
       if (!response.ok) {
-        console.error('❌ Failed to save character selection to DB');
+        const errorData = await response.json().catch(() => ({}));
+        console.error('❌ Failed to save character selection:', errorData);
         return false;
       }
 
-      // Update local state only after DB success
+      const result = await response.json();
+      const updatedPlayer = result.player;
+      
+      // Update local state from JSON response
       setState(prev => ({
         ...prev,
-        selectedCharacterId: characterId,
-        selectedImageId: null,
-        displayImage: null
+        selectedCharacterId: updatedPlayer.selectedCharacterId,
+        selectedImageId: updatedPlayer.selectedImageId,
+        displayImage: updatedPlayer.displayImage
       }));
 
-      console.log('✅ Character selected and saved to DB:', characterId);
+      console.log(`✅ JSON-FIRST character selection successful:`, characterId);
       return true;
     } catch (error) {
-      console.error('❌ Error selecting character:', error);
+      console.error('🔴 Error selecting character via JSON-first:', error);
       return false;
     }
   }, [state.unlockedCharacters]);
