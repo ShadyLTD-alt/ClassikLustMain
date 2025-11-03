@@ -41,7 +41,7 @@ interface GameContextType {
   theme: ThemeConfig;
   tap: () => void;
   purchaseUpgrade: (upgradeId: string) => Promise<boolean>;
-  selectCharacter: (characterId: string) => void;
+  selectCharacter: (characterId: string) => Promise<boolean>;
   selectImage: (imageId: string) => void;
   selectAvatar: (imageId: string) => void;
   levelUp: () => Promise<boolean>;
@@ -379,6 +379,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           energyMax: state.energyMax,  // Save calculated max energy
           energyRegenRate: state.energyRegenRate,
           displayImage: state.displayImage,
+          selectedCharacterId: state.selectedCharacterId,
           boostActive: state.boostActive,
           boostMultiplier: state.boostMultiplier,
           boostExpiresAt: state.boostExpiresAt,
@@ -434,6 +435,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
               upgrades: prev.upgrades,
               unlockedCharacters: prev.unlockedCharacters,
               displayImage: prev.displayImage,
+              selectedCharacterId: prev.selectedCharacterId,
               energyMax: prev.energyMax,  // Sync calculated max energy
               energyRegenRate: prev.energyRegenRate
             })
@@ -587,10 +589,46 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
   }, [state.upgrades, state.points, upgrades, pendingPurchases]);
 
-  // [Other methods remain the same but shortened for space]
-  const selectCharacter = useCallback(async (characterId: string) => {
-    if (state.unlockedCharacters.includes(characterId)) {
-      setState(prev => ({ ...prev, selectedCharacterId: characterId, selectedImageId: null }));
+  // FIXED: selectCharacter now persists to database
+  const selectCharacter = useCallback(async (characterId: string): Promise<boolean> => {
+    if (!state.unlockedCharacters.includes(characterId)) {
+      console.log('❌ Character not unlocked:', characterId);
+      return false;
+    }
+
+    try {
+      // Persist to database first
+      const response = await fetch('/api/player/me', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`
+        },
+        body: JSON.stringify({
+          selectedCharacterId: characterId,
+          selectedImageId: null,  // Reset to use character's default image
+          displayImage: null      // Reset so character.defaultImage is used
+        })
+      });
+
+      if (!response.ok) {
+        console.error('❌ Failed to save character selection to DB');
+        return false;
+      }
+
+      // Update local state only after DB success
+      setState(prev => ({
+        ...prev,
+        selectedCharacterId: characterId,
+        selectedImageId: null,
+        displayImage: null
+      }));
+
+      console.log('✅ Character selected and saved to DB:', characterId);
+      return true;
+    } catch (error) {
+      console.error('❌ Error selecting character:', error);
+      return false;
     }
   }, [state.unlockedCharacters]);
 
