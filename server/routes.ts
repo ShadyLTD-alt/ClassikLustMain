@@ -23,6 +23,8 @@ import {
 import { insertUpgradeSchema, insertCharacterSchema, insertLevelSchema, insertPlayerUpgradeSchema, insertMediaUploadSchema } from "@shared/schema";
 import { generateSecureToken, getSessionExpiry } from "./utils/auth";
 import logger from "./logger";
+// ✅ LUNA FIX: Import MasterDataService for single source of truth
+import masterDataService from "./utils/MasterDataService";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -188,18 +190,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let player = await storage.getPlayerByTelegramId(devTelegramId);
 
       if (!player) {
-        player = await storage.createPlayer({
-          telegramId: devTelegramId,
-          username: sanitizedUsername,
-          points: 0,
-          energy: 1000,
-          maxEnergy: 1000,
-          level: 1,
-          experience: 0,
-          passiveIncomeRate: 0,
-          isAdmin: false,
-        });
+        // ✅ LUNA FIX: Use MasterDataService instead of hardcoded values
+        const playerData = await masterDataService.createNewPlayerData(devTelegramId, sanitizedUsername);
+        
+        player = await storage.createPlayer(playerData);
         await savePlayerDataToJSON(player);
+        
+        logger.info(`🎮 Luna: Created new dev player using master defaults for ${sanitizedUsername}`);
       } else {
         await storage.updatePlayer(player.id, { lastLogin: new Date() });
         await savePlayerDataToJSON(player);
@@ -242,21 +239,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const telegramId = validationResult.id.toString();
+      const username = (validationResult as any).username || (validationResult as any).first_name || 'TelegramUser';
 
       let player = await storage.getPlayerByTelegramId(telegramId);
 
       if (!player) {
-        player = await storage.createPlayer({
-          telegramId,
-          username: (validationResult as any).username || (validationResult as any).first_name || 'TelegramUser',
-          points: 0,
-          energy: 1000,
-          maxEnergy: 1000,
-          level: 1,
-          passiveIncomeRate: 0,
-          isAdmin: false,
-        });
+        // ✅ LUNA FIX: Use MasterDataService instead of hardcoded values  
+        const playerData = await masterDataService.createNewPlayerData(telegramId, username);
+        
+        player = await storage.createPlayer(playerData);
         await savePlayerDataToJSON(player);
+        
+        logger.info(`🎮 Luna: Created new Telegram player using master defaults for ${username}`);
       } else {
         await storage.updatePlayer(player.id, { lastLogin: new Date() });
         await savePlayerDataToJSON(player);
@@ -343,7 +337,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Round integer fields to prevent PostgreSQL errors
-      const integerFields = ['points', 'energy', 'maxEnergy', 'level', 'experience', 'passiveIncomeRate'];
+      const integerFields = ['points', 'energy', 'energyMax', 'level', 'experience', 'passiveIncomeRate'];
       for (const field of integerFields) {
         if (updates[field] !== undefined && typeof updates[field] === 'number') {
           updates[field] = Math.round(updates[field]);
@@ -384,12 +378,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // [All other routes remain exactly the same but with cleaner error logging]
-  // ... [truncated for brevity - keeping all existing functionality]
+  // ✅ LUNA DIAGNOSTIC ROUTE: Check master data integrity
+  app.get("/api/luna/master-data-report", requireAuth, async (req, res) => {
+    try {
+      const report = await masterDataService.getDataIntegrityReport();
+      res.json({ 
+        success: true, 
+        report,
+        message: "Luna's Master Data Integrity Report"
+      });
+    } catch (error) {
+      logger.error('Master data report error', { error: error instanceof Error ? error.message : 'Unknown' });
+      res.status(500).json({ error: 'Failed to generate master data report' });
+    }
+  });
   
   logger.info('🚀 Creating HTTP server...');
   const httpServer = createServer(app);
   
   logger.info('✅ All routes registered successfully');
+  logger.info('🤖 Luna: Architectural violations fixed - no more hardcoded player data!');
   return httpServer;
 }
