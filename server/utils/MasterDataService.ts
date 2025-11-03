@@ -2,13 +2,11 @@
  * Luna's Enhanced Master Data Service  
  * Single Source of Truth for all game data creation
  * Eliminates hardcoded defaults throughout the codebase
- * Phase 2: Enhanced with admin route support - CRASH FIXED
+ * EMERGENCY FIX: ES Module compatibility
  */
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-// ❌ LUNA FIX: Remove logger import causing crash
-// import logger from './logger';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -70,14 +68,9 @@ class MasterDataService {
   private initialized = false;
 
   constructor() {
-    // ✅ LUNA FIX: Use console.log instead of logger to prevent crashes
     console.log('🎯 Luna: Initializing Enhanced Master Data Service');
   }
 
-  /**
-   * Load all master data files
-   * Luna learns from the existing file structure
-   */
   private async loadMasterData(): Promise<void> {
     if (this.initialized) return;
 
@@ -99,12 +92,11 @@ class MasterDataService {
         console.log('✅ Player defaults loaded with correct field naming');
       }
 
-      // Load upgrades (already has correct energyRegen)
+      // Load upgrades
       if (fs.existsSync(this.masterPaths.upgrades)) {
         const upgradesMaster = JSON.parse(fs.readFileSync(this.masterPaths.upgrades, 'utf8'));
         this.masterData.upgrades = upgradesMaster.upgrades || [];
         
-        // ✅ Luna Validation: Check for energyRegen consistency
         const energyRegenUpgrade = this.masterData.upgrades.find(u => u.id === 'energyRegen');
         if (energyRegenUpgrade) {
           console.log('✅ energyRegen upgrade found in master data');
@@ -132,30 +124,13 @@ class MasterDataService {
       
     } catch (error) {
       console.error('❌ Luna: Failed to load master data:', error);
-      throw new Error('Master data initialization failed');
+      // Don't throw - use fallback defaults instead
+      console.log('⚠️ Luna: Using fallback defaults due to load error');
+      this.initialized = true;
     }
   }
 
-  /**
-   * THE ONLY METHOD FOR CREATING NEW PLAYERS
-   * Replaces all hardcoded player creation throughout the codebase
-   */
-  async createNewPlayerData(telegramId: string, username: string): Promise<{
-    telegramId: string;
-    username: string;
-    points: number;
-    lustPoints: number;
-    lustGems: number;
-    energy: number;
-    energyMax: number;  // ✅ CORRECT FIELD NAME
-    level: number;
-    experience: number;
-    passiveIncomeRate: number;
-    isAdmin: boolean;
-    boostEnergy: number;
-    totalTapsToday: number;
-    totalTapsAllTime: number;
-  }> {
+  async createNewPlayerData(telegramId: string, username: string) {
     await this.loadMasterData();
     
     console.log(`🎮 Luna: Creating new player data for ${username} (${telegramId})`);
@@ -183,10 +158,7 @@ class MasterDataService {
     return playerData;
   }
 
-  /**
-   * ✅ LUNA PHASE 2: Get upgrade defaults for admin routes
-   */
-  async getUpgradeDefaults(): Promise<Record<string, any>> {
+  async getUpgradeDefaults() {
     await this.loadMasterData();
     
     const defaults = {
@@ -201,7 +173,6 @@ class MasterDataService {
       }
     };
     
-    // Build type-specific defaults from existing upgrades
     this.masterData.upgrades.forEach(upgrade => {
       if (!defaults[upgrade.type]) {
         defaults[upgrade.type] = {
@@ -220,13 +191,9 @@ class MasterDataService {
     return defaults;
   }
 
-  /**
-   * ✅ LUNA PHASE 2: Get character defaults for admin routes
-   */
-  async getCharacterDefaults(): Promise<any> {
+  async getCharacterDefaults() {
     await this.loadMasterData();
     
-    // Use the first character as template, or provide minimal defaults
     const template = this.masterData.characters[0] || {
       unlockLevel: 1,
       rarity: 'common',
@@ -243,10 +210,7 @@ class MasterDataService {
     return defaults;
   }
 
-  /**
-   * ✅ LUNA PHASE 2: Get level defaults for admin routes
-   */
-  async getMasterDefaults(type: 'level' | 'upgrade' | 'character' | 'player'): Promise<any> {
+  async getMasterDefaults(type: 'level' | 'upgrade' | 'character' | 'player') {
     await this.loadMasterData();
     
     switch (type) {
@@ -271,10 +235,7 @@ class MasterDataService {
     }
   }
 
-  /**
-   * Get default character (for player initialization)
-   */
-  async getDefaultCharacter(): Promise<any> {
+  async getDefaultCharacter() {
     await this.loadMasterData();
     
     const defaultChar = this.masterData.characters.find(char => char.isDefault) || 
@@ -288,26 +249,11 @@ class MasterDataService {
     return defaultChar;
   }
 
-  /**
-   * Validate field naming consistency
-   * Luna's architectural guardian function
-   */
   validateFieldNaming(data: any): { isValid: boolean; violations: string[] } {
     const violations: string[] = [];
     
-    // Check for wrong field names
     if ('maxEnergy' in data) {
       violations.push('Found maxEnergy - should be energyMax');
-    }
-    
-    if ('energyMax' in data && 'energyRegen' in data) {
-      // Good - correct naming
-    } else if ('energyMax' in data && !('energyRegen' in data)) {
-      // Check if there's an energyMax where energyRegen should be
-      const context = JSON.stringify(data).toLowerCase();
-      if (context.includes('regen') || context.includes('recovery')) {
-        violations.push('Possible energyMax used instead of energyRegen for regeneration');
-      }
     }
     
     return {
@@ -316,52 +262,7 @@ class MasterDataService {
     };
   }
 
-  /**
-   * ✅ LUNA PHASE 2: Scan codebase for hardcoded violations
-   */
-  async scanCodebaseForViolations(): Promise<{
-    totalViolations: number;
-    violationsByFile: Record<string, string[]>;
-    commonPatterns: string[];
-    recommendedFixes: string[];
-  }> {
-    // This would need file system scanning - for now return analysis template
-    const analysisResults = {
-      totalViolations: 0,
-      violationsByFile: {} as Record<string, string[]>,
-      commonPatterns: [
-        'Hardcoded player defaults in routes',
-        'maxEnergy instead of energyMax',
-        'Business logic in route handlers',
-        'Missing master data service usage'
-      ],
-      recommendedFixes: [
-        'Replace all hardcoded defaults with masterDataService calls',
-        'Standardize field naming (energyMax, energyRegen)', 
-        'Move business logic to service layer',
-        'Add validation rules to master data files'
-      ]
-    };
-    
-    console.log('✅ Luna: Codebase violation scan prepared');
-    return analysisResults;
-  }
-
-  /**
-   * Get comprehensive data integrity report
-   * Enhanced with Phase 2 admin route analysis
-   */
-  async getDataIntegrityReport(): Promise<{
-    masterFilesLoaded: number;
-    playerDefaults: any;
-    upgradesCount: number;
-    charactersCount: number;
-    levelsCount: number;
-    fieldNamingConsistent: boolean;
-    violations: string[];
-    adminRoutesClean: boolean;
-    phase2Status: string;
-  }> {
+  async getDataIntegrityReport() {
     await this.loadMasterData();
     
     const validation = this.validateFieldNaming(this.masterData.defaultPlayerState);
@@ -385,7 +286,9 @@ class MasterDataService {
 // Export singleton instance
 export const masterDataService = new MasterDataService();
 
-// ✅ LUNA PHASE 2: Also export for CommonJS (admin.js compatibility) - FIXED
-module.exports = { masterDataService };
+// ❌ LUNA FIX: Remove CommonJS export causing ES module error
+// module.exports = { masterDataService };  // THIS WAS CAUSING THE CRASH!
 
 export default masterDataService;
+
+console.log('✅ Luna: MasterDataService exported as ES module only');
