@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import GameLayout from "@/components/GameLayout";
 import { useGame } from "@/contexts/GameContext";
-import CharacterSelectionScrollable from "@/components/CharacterSelectionScrollable";
 import { AdminFAB } from "@/components/AdminFAB";
 import { apiRequest } from "@/lib/queryClient";
 import { User, Crown } from "lucide-react";
@@ -11,7 +10,6 @@ import MenuCore from "@/components/menu-core/MenuCore";
 
 export default function GameInterfaceV2() {
   const { state, tap } = useGame();
-  const [showCharacters, setShowCharacters] = useState(false);
   const [showDebugger, setShowDebugger] = useState(false);
   const [tapEffects, setTapEffects] = useState<Array<{id: string, x: number, y: number, value: number}>>([]);
 
@@ -60,12 +58,13 @@ export default function GameInterfaceV2() {
 
   return (
     <GameLayout>
-      <div className="flex items-center justify-center min-h-[60vh]">
+      {/* Main character display area - CLEAN, NO PROGRESS BAR */}
+      <div className="flex items-center justify-center min-h-[60vh] mt-16"> {/* Added margin-top for top menu */}
         <div className="text-center relative">
           <div className="text-sm text-gray-400 mb-4">Tap to earn points!</div>
           
           <div className="relative">
-            {/* Character Display Area - NO PROGRESS BAR */}
+            {/* Character Display Area */}
             <div
               className="w-80 h-80 mx-auto rounded-2xl bg-gradient-to-br from-purple-800/40 via-black/50 to-pink-800/40 border-2 border-purple-500/40 flex items-center justify-center cursor-pointer hover:border-purple-400/60 transition-all active:scale-[0.98] overflow-hidden relative group"
               onClick={handleTap}
@@ -102,16 +101,7 @@ export default function GameInterfaceV2() {
                 <div className="text-gray-400 text-center p-8">
                   <User className="w-20 h-20 mx-auto mb-4 opacity-50" />
                   <div className="text-lg mb-2">No character selected</div>
-                  <Button 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setShowCharacters(true);
-                    }}
-                    className="bg-purple-600 hover:bg-purple-700 mt-4"
-                  >
-                    <Crown className="w-4 h-4 mr-2" />
-                    Select Character
-                  </Button>
+                  <div className="text-sm text-purple-300 mb-4">Click the crown in top menu to select</div>
                 </div>
               )}
               
@@ -147,7 +137,7 @@ export default function GameInterfaceV2() {
                   animation: 'float-up 2s ease-out forwards'
                 }}
               >
-                +{effect.value}{state?.boostActive ? ' ⚡' : ''}
+                +{Math.round(effect.value)}{state?.boostActive ? ' ⚡' : ''}
               </div>
             ))}
           </div>
@@ -156,9 +146,6 @@ export default function GameInterfaceV2() {
 
       {/* USE EXISTING AdminFAB */}
       <AdminFAB onOpenDebugger={() => setShowDebugger(true)} />
-
-      {/* Character Selection Modal */}
-      {showCharacters && <CharacterSelectionScrollable isOpen={showCharacters} onClose={() => setShowCharacters(false)} />}
       
       {/* Debug Panel */}
       {showDebugger && (
@@ -189,7 +176,7 @@ export default function GameInterfaceV2() {
         </div>
       )}
       
-      {/* NEW: Modular Menu System */}
+      {/* NEW: Complete Modular Menu System */}
       <MenuCore />
       
       {/* CSS Animation for floating points */}

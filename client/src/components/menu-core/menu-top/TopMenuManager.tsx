@@ -1,8 +1,13 @@
 import React from 'react';
+import { useGame } from '@/contexts/GameContext';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { User, Crown, Zap } from 'lucide-react';
 
-// Import all top menu plugins (when needed)
-// import NotificationMenu from './NotificationMenu';
-// import UserMenu from './UserMenu';
+// Import all top menu plugins
+import PlayerInfoMenu from './PlayerInfoMenu';
+import CharacterGalleryMenu from './CharacterGalleryMenu';
+import BoostStatusMenu from './BoostStatusMenu';
 
 export interface TopMenuConfig {
   id: string;
@@ -11,14 +16,23 @@ export interface TopMenuConfig {
   isVisible?: () => boolean;
 }
 
-// Top menu configuration - currently empty, ready for expansion
+// Top menu configuration
 const TOP_MENUS: TopMenuConfig[] = [
-  // Future top menu items will go here
-  // {
-  //   id: 'notifications',
-  //   component: NotificationMenu,
-  //   position: 'right'
-  // }
+  {
+    id: 'player-info',
+    component: PlayerInfoMenu,
+    position: 'left'
+  },
+  {
+    id: 'character-gallery',
+    component: CharacterGalleryMenu,
+    position: 'center'
+  },
+  {
+    id: 'boost-status',
+    component: BoostStatusMenu,
+    position: 'right'
+  }
 ];
 
 interface Props {
@@ -28,7 +42,7 @@ interface Props {
 }
 
 export default function TopMenuManager({ activeMenu, openMenu, closeMenu }: Props) {
-  // Currently no top menus, but structure is ready
+  const { state } = useGame();
   const visibleMenus = TOP_MENUS.filter(menu => !menu.isVisible || menu.isVisible());
   
   if (visibleMenus.length === 0) {
@@ -37,7 +51,66 @@ export default function TopMenuManager({ activeMenu, openMenu, closeMenu }: Prop
 
   return (
     <>
-      {/* Top menu bar would go here when needed */}
+      {/* Top Stats Bar */}
+      <div className="fixed top-0 left-0 right-0 z-30 bg-black/90 backdrop-blur border-b border-gray-700">
+        <div className="mx-auto max-w-5xl px-4 py-3">
+          <div className="flex items-center justify-between">
+            {/* Left: Player Info */}
+            <button 
+              onClick={() => openMenu('player-info')}
+              className="flex items-center gap-2 hover:bg-purple-600/10 px-3 py-2 rounded-lg transition-colors"
+            >
+              <div className="w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center">
+                <User className="w-4 h-4 text-white" />
+              </div>
+              <div className="text-left">
+                <div className="text-white font-semibold text-sm">{state?.username || 'Player'}</div>
+                <div className="text-purple-300 text-xs">Level {state?.level || 1}</div>
+              </div>
+            </button>
+            
+            {/* Center: Currency Stats */}
+            <div className="flex items-center gap-4">
+              <div className="text-center">
+                <div className="text-purple-300 text-xs">LUSTPOINTS</div>
+                <div className="text-white font-bold">{Math.round(state?.lustPoints || state?.points || 0).toLocaleString()}</div>
+              </div>
+              
+              <div className="text-center">
+                <div className="text-purple-300 text-xs">GEMS</div>
+                <div className="text-white font-bold">{Math.round(state?.lustGems || 0).toLocaleString()}</div>
+              </div>
+              
+              <div className="text-center">
+                <div className="text-purple-300 text-xs">ENERGY</div>
+                <div className="text-white font-bold">
+                  {Math.round(state?.energy || 0)}/{Math.round(state?.energyMax || 3300)}
+                </div>
+              </div>
+            </div>
+            
+            {/* Right: Character & Boost */}
+            <div className="flex items-center gap-2">
+              {state?.boostActive && (
+                <button 
+                  onClick={() => openMenu('boost-status')}
+                  className="flex items-center gap-1 bg-orange-600/20 hover:bg-orange-600/30 text-orange-300 px-3 py-1 rounded-full text-xs font-bold border border-orange-400/30 animate-pulse"
+                >
+                  <Zap className="w-3 h-3" />
+                  {state.boostMultiplier}x BOOST
+                </button>
+              )}
+              
+              <button 
+                onClick={() => openMenu('character-gallery')}
+                className="hover:bg-purple-600/10 px-2 py-1 rounded-lg transition-colors"
+              >
+                <Crown className="w-5 h-5 text-purple-400" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
       
       {/* Render Active Top Menu */}
       {activeMenu && (() => {
