@@ -32,10 +32,12 @@ export class MediaCleaner {
   static async findDuplicates(uploadsDir: string = path.join(process.cwd(), 'uploads')) {
     console.log(`🔍 [MEDIA CLEANER] Scanning ${uploadsDir} for duplicates...`);
     
-    const filesByHash = new Map<string, Array<{ path: string; stats: any }>();
-    const duplicatesFound: Array<{ hash: string; files: string[]; sizeMB: number }> = [];
+    // 🔧 FIX: Proper Map initialization to prevent runtime errors
+    const filesByHash = new Map<string, { path: string; stats: any }[]>();
+    const duplicatesFound: { hash: string; files: string[]; sizeMB: number }[] = [];
     
-    async function scanDirectory(dirPath: string) {
+    // 🔧 FIX: Define scanDirectory function properly
+    const scanDirectory = async (dirPath: string): Promise<void> => {
       try {
         const entries = await fs.readdir(dirPath, { withFileTypes: true });
         
@@ -45,27 +47,31 @@ export class MediaCleaner {
           if (entry.isDirectory()) {
             await scanDirectory(fullPath);
           } else if (entry.isFile() && /\.(jpg|jpeg|png|webp|gif)$/i.test(entry.name)) {
-            const hash = await this.getFileHash(fullPath);
-            const stats = await this.getFileStats(fullPath);
+            const hash = await MediaCleaner.getFileHash(fullPath);
+            const stats = await MediaCleaner.getFileStats(fullPath);
             
             if (hash && stats) {
+              // 🔧 FIX: Properly initialize array if doesn't exist
               if (!filesByHash.has(hash)) {
                 filesByHash.set(hash, []);
               }
-              filesByHash.get(hash)!.push({ path: fullPath, stats });
+              const files = filesByHash.get(hash);
+              if (files) { // 🔧 FIX: Null check before push
+                files.push({ path: fullPath, stats });
+              }
             }
           }
         }
       } catch (error) {
         console.error(`Error scanning ${dirPath}:`, error);
       }
-    }
+    };
     
     await scanDirectory(uploadsDir);
     
     // Find duplicates (same hash, multiple files)
     for (const [hash, files] of filesByHash.entries()) {
-      if (files.length > 1) {
+      if (files && files.length > 1) { // 🔧 FIX: Null check for files array
         // Sort by creation time (keep oldest)
         files.sort((a, b) => a.stats.created.getTime() - b.stats.created.getTime());
         
@@ -89,6 +95,9 @@ export class MediaCleaner {
     let spaceFreedMB = 0;
     
     for (const duplicate of duplicates) {
+      // 🔧 FIX: Proper destructuring with safety check
+      if (!duplicate.files || duplicate.files.length < 2) continue;
+      
       const [keep, ...toDelete] = duplicate.files;
       
       console.log(`👀 [DUPLICATE SET] Hash: ${duplicate.hash.substring(0, 8)}...`);
@@ -117,7 +126,7 @@ export class MediaCleaner {
       dryRun
     };
     
-    console.log(`🧹 [MEDIA CLEANER] ${dryRun ? 'DRY RUN' : 'CLEANUP'} Complete:`);
+    console.log(`🧩 [MEDIA CLEANER] ${dryRun ? 'DRY RUN' : 'CLEANUP'} Complete:`);
     console.log(`  📏 Duplicate sets: ${summary.duplicateSets}`);
     console.log(`  🗑️ Files ${dryRun ? 'would be' : ''} deleted: ${summary.filesDeleted}`);
     console.log(`  💾 Space ${dryRun ? 'would be' : ''} freed: ${summary.spaceFreedMB} MB`);
@@ -136,16 +145,22 @@ export class MediaCleaner {
     try {
       const mediaContent = await fs.readFile(mediaJsonPath, 'utf8');
       const mediaData = JSON.parse(mediaContent);
-      mediaEntries = mediaData.media || [];
+      // 🔧 FIX: Ensure mediaData.media exists and is an array
+      mediaEntries = Array.isArray(mediaData?.media) ? mediaData.media : [];
     } catch (error) {
       console.error('Failed to load media.json:', error);
       return [];
     }
     
-    const registeredPaths = new Set(mediaEntries.map(m => m.url).filter(Boolean));
+    // 🔧 FIX: Properly filter and map with null checks
+    const registeredPaths = new Set(
+      mediaEntries
+        .map(m => m?.url)
+        .filter((url): url is string => Boolean(url))
+    );
     const orphanedFiles: string[] = [];
     
-    async function scanForOrphans(dirPath: string) {
+    const scanForOrphans = async (dirPath: string): Promise<void> => {
       try {
         const entries = await fs.readdir(dirPath, { withFileTypes: true });
         
@@ -166,7 +181,7 @@ export class MediaCleaner {
       } catch (error) {
         console.error(`Error scanning ${dirPath} for orphans:`, error);
       }
-    }
+    };
     
     await scanForOrphans(uploadsDir);
     
@@ -188,7 +203,7 @@ export class MediaCleaner {
     
     for (const filePath of orphanedFiles) {
       try {
-        const stats = await this.getFileStats(filePath);
+        const stats = await MediaCleaner.getFileStats(filePath);
         const sizeMB = stats ? Math.round(stats.size / 1024 / 1024 * 100) / 100 : 0;
         
         console.log(`${dryRun ? '👀 WOULD DELETE' : '🗑️ DELETING'}: ${path.basename(filePath)} (${sizeMB}MB)`);
@@ -210,7 +225,7 @@ export class MediaCleaner {
       dryRun
     };
     
-    console.log(`🧹 [ORPHAN CLEANUP] ${dryRun ? 'DRY RUN' : 'CLEANUP'} Complete:`);
+    console.log(`🧩 [ORPHAN CLEANUP] ${dryRun ? 'DRY RUN' : 'CLEANUP'} Complete:`);
     console.log(`  📏 Orphaned files: ${summary.orphanedFiles}`);
     console.log(`  🗑️ Files ${dryRun ? 'would be' : ''} deleted: ${summary.filesDeleted}`);
     console.log(`  💾 Space ${dryRun ? 'would be' : ''} freed: ${summary.spaceFreedMB} MB`);
@@ -221,7 +236,7 @@ export class MediaCleaner {
   
   // Full cleanup: duplicates + orphans
   static async fullCleanup(uploadsDir?: string, dryRun: boolean = true) {
-    console.log(`🧹 [MEDIA CLEANER] Starting full cleanup (${dryRun ? 'DRY RUN' : 'LIVE'})...`);
+    console.log(`🧩 [MEDIA CLEANER] Starting full cleanup (${dryRun ? 'DRY RUN' : 'LIVE'})...`);
     
     const duplicateResult = await this.removeDuplicates(uploadsDir, dryRun);
     const orphanResult = await this.removeOrphanedFiles(uploadsDir, dryRun);
