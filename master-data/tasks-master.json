@@ -1,0 +1,62 @@
+[
+  {
+    "id": "template-daily-taps",
+    "name": "Template Daily Taps",
+    "description": "Example daily tapping task",
+    "category": "daily",
+    "requirementType": "tapCount",
+    "target": 100,
+    "rewardType": "lp",
+    "rewardAmount": 100,
+    "icon": "💆",
+    "resetType": "daily",
+    "sortOrder": 0,
+    "isActive": true,
+    "isHidden": false
+  },
+  {
+    "id": "template-weekly-lp",
+    "name": "Template Weekly LP",
+    "description": "Example weekly LP earning task",
+    "category": "weekly",
+    "requirementType": "lpEarnedWeek",
+    "target": 5000,
+    "rewardType": "lg",
+    "rewardAmount": 50,
+    "icon": "💎",
+    "resetType": "weekly",
+    "sortOrder": 0,
+    "isActive": true,
+    "isHidden": false
+  },
+  {
+    "id": "template-energy-efficient",
+    "name": "Template Energy Task",
+    "description": "Example energy efficiency task",
+    "category": "daily",
+    "requirementType": "energyEfficiency",
+    "target": 80,
+    "rewardType": "energy",
+    "rewardAmount": 100,
+    "icon": "⚡",
+    "resetType": "daily",
+    "sortOrder": 1,
+    "isActive": true,
+    "isHidden": false
+  },
+  {
+    "id": "template-upgrade-purchase",
+    "name": "Template Upgrade Task",
+    "description": "Example upgrade purchase task",
+    "category": "daily",
+    "requirementType": "upgradesPurchasedToday",
+    "target": 1,
+    "rewardType": "lp",
+    "rewardAmount": 200,
+    "icon": "💸",
+    "resetType": "daily",
+    "sortOrder": 2,
+    "isActive": false,
+    "isHidden": true
+  }
+]
