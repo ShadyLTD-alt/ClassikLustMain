@@ -2,10 +2,10 @@
   "id": "8e2e5ac9-d623-4daa-b797-ea332a805d31",
   "telegramId": "dev_shadyltdx",
   "username": "ShadyLTDx",
-  "points": 6371,
-  "lustPoints": 6371,
+  "points": 6539,
+  "lustPoints": 6539,
   "lustGems": 0,
-  "energy": 3299,
+  "energy": 3296,
   "energyMax": 3900,
   "energyRegenRate": 1,
   "level": 2,
@@ -30,8 +30,8 @@
   "boostActive": false,
   "boostMultiplier": 1,
   "boostExpiresAt": null,
-  "totalTapsToday": 345,
-  "totalTapsAllTime": 345,
+  "totalTapsToday": 349,
+  "totalTapsAllTime": 349,
   "lastDailyReset": "2025-11-02T15:48:53.944Z",
   "lastWeeklyReset": "2025-11-02T15:48:53.944Z",
   "lastSync": {
@@ -39,5 +39,6 @@
     "hash": "27dbdd3d9e62ac9520ea5581f19ca113"
   },
   "createdAt": "2025-11-01T19:28:33.742Z",
-  "updatedAt": "2025-11-04T09:38:06.382Z"
+  "updatedAt": "2025-11-04T10:14:45.813Z",
+  "experience": 0
 }
