@@ -76,13 +76,10 @@ export const levels = pgTable("levels", {
 export const playerUpgrades = pgTable("playerUpgrades", {
   id: varchar("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   playerId: varchar("playerId").notNull().references(() => players.id, { onDelete: 'cascade' }),
-  upgradeId: text("upgradeId").notNull().references(() => upgrades.id, { onDelete: 'cascade' }), // perTap, perHour, etc.
-  type: text("type"), // Store upgrade type for fast filtering - NULLABLE
-  level: integer("level").default(0).notNull(),
+  upgrades: jsonb("upgrades").default('{}').notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 }, (table) => ({
-  // Ensure each player can only have one record per upgrade
-  playerUpgradeUnique: unique().on(table.playerId, table.upgradeId),
+  playerUpgradeUnique: unique().on(table.playerId), // 1 row per player
 }));
 
 // New: Track player level progression (requirements-based)
