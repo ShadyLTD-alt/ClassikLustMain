@@ -6,6 +6,8 @@ import logger from '../logger';
 
 // 🌙 IMPORT LUNA'S TIMING HELPER
 import { lunaTimeOperation } from './lunaLearningSystem';
+// 🔄 IMPORT SYNC QUEUE FOR DB SYNC
+import { queuePlayerSync } from './syncQueue';
 
 interface PlayerState {
   id: string;
@@ -18,6 +20,7 @@ interface PlayerState {
   energyMax: number;
   energyRegenRate: number;
   level: number;
+  experience: number; // 🆕 ADD: experience field for level-up calculations
   selectedCharacterId: string;
   selectedImageId: string | null;
   displayImage: string | null;
@@ -94,7 +97,8 @@ class SimplePlayerStateManager {
       selectedCharacterId: state.selectedCharacterId,
       displayImage: state.displayImage,
       upgrades: state.upgrades,
-      level: state.level
+      level: state.level,
+      experience: state.experience // 🆕 INCLUDE: experience in hash
     };
     return crypto.createHash('md5').update(JSON.stringify(critical)).digest('hex');
   }
@@ -136,6 +140,7 @@ class SimplePlayerStateManager {
         
         state = {
           ...parsed,
+          experience: parsed.experience || 0, // 🆕 ENSURE experience field
           boostExpiresAt: parsed.boostExpiresAt ? new Date(parsed.boostExpiresAt) : null,
           lastDailyReset: new Date(parsed.lastDailyReset || Date.now()),
           lastWeeklyReset: new Date(parsed.lastWeeklyReset || Date.now()),
@@ -159,6 +164,7 @@ class SimplePlayerStateManager {
           energyMax: player.energyMax || 1000,
           energyRegenRate: 1,
           level: player.level || 1,
+          experience: player.experience || 0, // 🆕 ENSURE experience is loaded
           selectedCharacterId: player.selectedCharacterId || 'shadow',
           selectedImageId: player.selectedImageId || null,
           displayImage: player.displayImage || null,
@@ -241,42 +247,11 @@ class SimplePlayerStateManager {
     
     console.log(`✅ [SIMPLE] Updated player ${newState.username}`);
     
-    // Background DB sync (don't await)
-    this.syncToDatabaseBackground(playerId, newState);
+    // 🔄 QUEUE for DB sync (throttled)
+    queuePlayerSync(playerId, newState);
+    console.log(`🔄 [SIMPLE] Player queued for DB sync`);
     
     return newState;
-  }
-
-  // 🚨 SIMPLIFIED: Background DB sync without blocking
-  private async syncToDatabaseBackground(playerId: string, state: PlayerState): Promise<void> {
-    try {
-      console.log(`🔄 [BG SYNC] Starting background sync for ${state.username}`);
-      
-      // 🔧 NEW: Use new JSON-based playerUpgrades storage
-      await storage.setPlayerUpgradesJSON(playerId, state.upgrades);
-      console.log(`✅ [BG SYNC] Upgrades synced for ${state.username}: ${Object.keys(state.upgrades).length} upgrades`);
-      
-      // Update main player data
-      await storage.updatePlayer(playerId, {
-        points: Math.round(state.points),
-        lustPoints: Math.round(state.lustPoints || state.points),
-        lustGems: Math.round(state.lustGems || 0),
-        energy: Math.round(state.energy),
-        energyMax: Math.round(state.energyMax),
-        level: state.level,
-        selectedCharacterId: state.selectedCharacterId,
-        displayImage: state.displayImage,
-        unlockedCharacters: state.unlockedCharacters, // 🔧 ENSURE THIS SYNCS
-        boostActive: state.boostActive,
-        boostMultiplier: state.boostMultiplier,
-        lastLogin: new Date()
-      });
-      
-      console.log(`✅ [BG SYNC] Database updated for ${state.username}`);
-    } catch (error) {
-      console.error(`🔴 [BG SYNC] Failed for ${state.username}:`, error);
-      // Don't throw - this is background operation
-    }
   }
 
   async healthCheck() {
@@ -300,7 +275,7 @@ class SimplePlayerStateManager {
         playerJsonFiles: totalJsonFiles,
         backupSnapshots: 0, // Simplified - no complex backup system
         cachedPlayers: this.cache.size,
-        pendingSyncs: 0, // No more pending queues
+        pendingSyncs: 0, // No more pending queues - using sync queue system
         pendingTimeouts: 0, // No more timeout queues
         directories: {
           main: this.playersRoot,
@@ -329,7 +304,41 @@ class SimplePlayerStateManager {
   async forceDatabaseSync(playerId: string) {
     const state = this.cache.get(playerId);
     if (!state) throw new Error(`Player ${playerId} not in cache`);
-    await this.syncToDatabaseBackground(playerId, state);
+    // 🔄 Direct DB sync for admin force-sync operations
+    await this.directDatabaseSync(playerId, state);
+  }
+
+  // 🔄 DIRECT DB SYNC: For admin force operations (not queued)
+  private async directDatabaseSync(playerId: string, state: PlayerState): Promise<void> {
+    try {
+      console.log(`🔄 [DIRECT SYNC] Starting immediate sync for ${state.username}`);
+      
+      // Update upgrades
+      await storage.setPlayerUpgradesJSON(playerId, state.upgrades);
+      console.log(`✅ [DIRECT SYNC] Upgrades synced: ${Object.keys(state.upgrades).length}`);
+      
+      // Update main player data - 🆕 INCLUDE EXPERIENCE FOR LEVEL-UP MENU
+      await storage.updatePlayer(playerId, {
+        points: Math.round(state.points),
+        lustPoints: Math.round(state.lustPoints || state.points),
+        lustGems: Math.round(state.lustGems || 0),
+        energy: Math.round(state.energy),
+        energyMax: Math.round(state.energyMax),
+        level: state.level,
+        experience: state.experience || 0, // 🆕 SYNC EXPERIENCE TO FIX LEVEL-UP MENU
+        selectedCharacterId: state.selectedCharacterId,
+        displayImage: state.displayImage,
+        unlockedCharacters: state.unlockedCharacters, // 🆕 SYNC UNLOCKED CHARACTERS
+        boostActive: state.boostActive,
+        boostMultiplier: state.boostMultiplier,
+        lastLogin: new Date()
+      });
+      
+      console.log(`✅ [DIRECT SYNC] Database updated for ${state.username}`);
+    } catch (error) {
+      console.error(`🔴 [DIRECT SYNC] Failed for ${state.username}:`, error);
+      throw error; // Throw for admin operations
+    }
   }
 
   getCachedState(playerId: string): PlayerState | null {
@@ -338,7 +347,7 @@ class SimplePlayerStateManager {
 
   clearCache(playerId: string) {
     this.cache.delete(playerId);
-    console.log(`🧹 Cache cleared for player ${playerId}`);
+    console.log(`🧩 Cache cleared for player ${playerId}`);
   }
 
   async migrateOldPlayerFiles(): Promise<{ moved: number; errors: number }> {
@@ -419,6 +428,7 @@ export async function setDisplayImageForPlayer(playerId: string, imageUrl: strin
   });
 }
 
+// 🆕 ENHANCED: Upgrade purchase with experience gain for level-up menu fix
 export async function purchaseUpgradeForPlayer(playerId: string, upgradeId: string, newLevel: number, cost: number): Promise<PlayerState> {
   return lunaTimeOperation('purchaseUpgradeForPlayer', async () => {
     console.log(`🛒 [UPGRADE] Player ${playerId} purchasing ${upgradeId} level ${newLevel} for ${cost} points`);
@@ -429,9 +439,14 @@ export async function purchaseUpgradeForPlayer(playerId: string, upgradeId: stri
       throw new Error(`Insufficient points: has ${currentState.points}, needs ${cost}`);
     }
     
+    // 🆕 ADD: Experience gain on upgrade purchase (helps level-up system)
+    const experienceGain = Math.floor(cost * 0.1); // 10% of cost as experience
+    console.log(`🏆 [UPGRADE] Experience gain: ${experienceGain} XP`);
+    
     const updatedState = await updatePlayerState(playerId, {
       points: Math.round(currentState.points - cost),
-      lustPoints: Math.round(currentState.lustPoints - cost),
+      lustPoints: Math.round((currentState.lustPoints || currentState.points) - cost),
+      experience: (currentState.experience || 0) + experienceGain, // 🆕 ADD EXPERIENCE
       upgrades: {
         ...currentState.upgrades,
         [upgradeId]: newLevel
@@ -439,6 +454,7 @@ export async function purchaseUpgradeForPlayer(playerId: string, upgradeId: stri
     });
     
     console.log(`✅ [UPGRADE] SUCCESS: ${upgradeId} level ${newLevel} purchased for ${updatedState.username}`);
+    console.log(`🏆 [UPGRADE] New experience: ${updatedState.experience} XP`);
     return updatedState;
   });
 }
