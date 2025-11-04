@@ -5,9 +5,10 @@ import CharacterSelectionScrollable from "@/components/CharacterSelectionScrolla
 import UpgradePanel from "@/components/UpgradePanel";
 import LevelUp from "@/components/LevelUp";
 import ChatModal from "@/components/ChatModal";
+import TasksAchievementsMenuV2 from "@/components/TasksAchievementsMenuV2";
 import { AdminFAB } from "@/components/AdminFAB";
 import { apiRequest } from "@/lib/queryClient";
-import { User, Crown, Zap, Heart, Gem, TrendingUp } from "lucide-react";
+import { User, Crown, Zap, Heart, Gem, TrendingUp, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 // 🎆 Enhanced floating tap effects with better animations
@@ -25,6 +26,7 @@ export default function GameInterfaceV3() {
   const [showUpgrades, setShowUpgrades] = useState(false);
   const [showLevel, setShowLevel] = useState(false);
   const [showChat, setShowChat] = useState(false);
+  const [showTasks, setShowTasks] = useState(false);
   const [showDebugger, setShowDebugger] = useState(false);
   const [tapEffects, setTapEffects] = useState<TapEffect[]>([]);
   const [iconsLoaded, setIconsLoaded] = useState({ hearts: false, gems: false });
@@ -384,34 +386,43 @@ export default function GameInterfaceV3() {
         </div>
       </main>
 
-      {/* BOTTOM NAVIGATION */}
+      {/* 🏆 ENHANCED: 4-Button Bottom Navigation with Tasks & Achievements */}
       <nav className="fixed bottom-0 left-0 right-0 z-30 bg-gray-900/95 backdrop-blur border-t border-purple-500/20">
         <div className="mx-auto max-w-5xl px-4 py-3">
-          <div className="flex items-center justify-around">
+          <div className="grid grid-cols-4 gap-2">
             <Button 
               onClick={() => setShowUpgrades(true)}
               variant="ghost" 
-              className="flex flex-col items-center gap-1 text-purple-300 hover:text-purple-200 hover:bg-purple-900/30 px-6 py-3"
+              className="flex flex-col items-center gap-1 text-purple-300 hover:text-purple-200 hover:bg-purple-900/30 px-4 py-3"
             >
-              <TrendingUp className="w-6 h-6" />
+              <TrendingUp className="w-5 h-5" />
               <span className="text-xs font-medium">Upgrades</span>
+            </Button>
+            
+            <Button 
+              onClick={() => setShowTasks(true)}
+              variant="ghost" 
+              className="flex flex-col items-center gap-1 text-purple-300 hover:text-purple-200 hover:bg-purple-900/30 px-4 py-3"
+            >
+              <Trophy className="w-5 h-5" />
+              <span className="text-xs font-medium">Tasks</span>
             </Button>
             
             <Button 
               onClick={() => setShowChat(true)}
               variant="ghost" 
-              className="flex flex-col items-center gap-1 text-purple-300 hover:text-purple-200 hover:bg-purple-900/30 px-6 py-3"
+              className="flex flex-col items-center gap-1 text-purple-300 hover:text-purple-200 hover:bg-purple-900/30 px-4 py-3"
             >
-              <Heart className="w-6 h-6" />
+              <Heart className="w-5 h-5" />
               <span className="text-xs font-medium">AI Chat</span>
             </Button>
             
             <Button 
               onClick={() => setShowLevel(true)}
               variant="ghost" 
-              className="flex flex-col items-center gap-1 text-purple-300 hover:text-purple-200 hover:bg-purple-900/30 px-6 py-3"
+              className="flex flex-col items-center gap-1 text-purple-300 hover:text-purple-200 hover:bg-purple-900/30 px-4 py-3"
             >
-              <Zap className="w-6 h-6" />
+              <Zap className="w-5 h-5" />
               <span className="text-xs font-medium">Level</span>
             </Button>
           </div>
@@ -426,6 +437,7 @@ export default function GameInterfaceV3() {
       {showUpgrades && <UpgradePanel isOpen={showUpgrades} onClose={() => setShowUpgrades(false)} />}
       {showLevel && <LevelUp isOpen={showLevel} onClose={() => setShowLevel(false)} />}
       {showChat && <ChatModal isOpen={showChat} onClose={() => setShowChat(false)} />}
+      {showTasks && <TasksAchievementsMenuV2 isOpen={showTasks} onClose={() => setShowTasks(false)} />}
       {showDebugger && (
         <div className="fixed inset-0 z-50 bg-black/80 text-white p-4 overflow-y-auto">
           <div className="max-w-4xl mx-auto">
