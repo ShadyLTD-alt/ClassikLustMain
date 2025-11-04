@@ -1,13 +1,13 @@
 import { Router } from 'express';
-import { MediaCleaner } from '../utils/mediaCleaner.js';
-import { authenticate } from '../middleware/auth.js';
-import { getPlayerState } from '../utils/playerStateManager.js';
-import logger from '../logger.js';
+import { MediaCleaner } from '../utils/mediaCleaner';
+import { requireAuth } from '../middleware/auth';
+import { getPlayerState } from '../utils/playerStateManager';
+import logger from '../logger';
 
 const router = Router();
 
 // 🔍 DEBUG: Who am I and what do I have unlocked?
-router.get('/whoami', authenticate, async (req, res) => {
+router.get('/whoami', requireAuth, async (req, res) => {
   try {
     const player = req.player!;
     const playerState = await getPlayerState(player.id);
@@ -46,7 +46,7 @@ router.get('/whoami', authenticate, async (req, res) => {
 });
 
 // 🧹 DEBUG: Clean up duplicate media files
-router.post('/cleanup-media', authenticate, async (req, res) => {
+router.post('/cleanup-media', requireAuth, async (req, res) => {
   try {
     if (!req.player!.isAdmin) {
       return res.status(403).json({ error: 'Admin required' });
@@ -69,7 +69,7 @@ router.post('/cleanup-media', authenticate, async (req, res) => {
 });
 
 // 🔧 DEBUG: Force unlock character (dev only)
-router.post('/unlock-character', authenticate, async (req, res) => {
+router.post('/unlock-character', requireAuth, async (req, res) => {
   try {
     if (process.env.NODE_ENV === 'production') {
       return res.status(403).json({ error: 'Development only' });
@@ -110,7 +110,7 @@ router.post('/unlock-character', authenticate, async (req, res) => {
 });
 
 // 🔧 DEBUG: Force unlock all characters (dev only)
-router.post('/unlock-all-characters', authenticate, async (req, res) => {
+router.post('/unlock-all-characters', requireAuth, async (req, res) => {
   try {
     if (process.env.NODE_ENV === 'production') {
       return res.status(403).json({ error: 'Development only' });
@@ -174,7 +174,7 @@ router.all('/echo', (req, res) => {
 });
 
 // 🔍 DEBUG: Test endpoint performance
-router.get('/perf/:endpoint', authenticate, async (req, res) => {
+router.get('/perf/:endpoint', requireAuth, async (req, res) => {
   const { endpoint } = req.params;
   const validEndpoints = ['characters', 'upgrades', 'levels', 'media', 'auth/me', 'player/me'];
   
