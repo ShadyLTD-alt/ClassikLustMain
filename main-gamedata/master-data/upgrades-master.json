@@ -67,7 +67,7 @@
     {
       "id": "energyRegen",
       "name": "Energy Regeneration",
-      "description": "Energy recovery rate",
+      "description": "Energy recovery rate test",
       "type": "energyRegen",
       "icon": "Battery",
       "maxLevel": 30,
@@ -75,7 +75,8 @@
       "costMultiplier": 1.22,
       "baseValue": 1,
       "valueIncrement": 0.5,
-      "isHidden": false
+      "isHidden": false,
+      "updatedAt": "2025-11-04T09:05:29.195Z"
     }
   ]
 }
