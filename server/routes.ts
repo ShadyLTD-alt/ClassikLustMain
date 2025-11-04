@@ -54,7 +54,7 @@ const storageConfig = multer.diskStorage({
 const upload = multer({
   storage: storageConfig,
   limits: { fileSize: 10 * 1024 * 1024 },
-  fileFilter: (_req, file, cb) =>{
+  fileFilter: (_req, file, cb) => {
     const allowedTypes = /jpeg|jpg|png|gif|webp/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
     const mimetype = allowedTypes.test(file.mimetype);
@@ -72,7 +72,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // 🔧 REGISTER DEBUG ROUTES (development only) - FIXED IMPORT
   if (process.env.NODE_ENV !== 'production') {
     try {
-      const debugRoutes = await import('./routes/debug.js');
+      const debugRoutes = await import('./routes/debug');
       app.use('/api/debug', debugRoutes.default);
       console.log('🔧 Debug routes registered at /api/debug');
     } catch (error) {
