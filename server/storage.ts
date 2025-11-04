@@ -97,6 +97,7 @@ export interface IStorage {
   createSession(data: InsertSession): Promise<Session>;
   getSessionByToken(token: string): Promise<(Session & { player: Player }) | undefined>;
   deleteSession(token: string): Promise<void>;
+  deletePlayerSessions(playerId: string): Promise<number>; // 🆕 NEW: FK constraint fix
   cleanupExpiredSessions(): Promise<void>;
   
   getMediaUploads(characterId?: string, includeHidden?: boolean): Promise<MediaUpload[]>;
@@ -481,8 +482,31 @@ export class DatabaseStorage implements IStorage {
     await db.delete(schema.sessions).where(eq(schema.sessions.token, token));
   }
 
+  // 🆕 NEW: Delete all sessions for a specific player (FK constraint fix)
+  async deletePlayerSessions(playerId: string): Promise<number> {
+    console.log(`🧹 [STORAGE] Deleting all sessions for player: ${playerId}`);
+    
+    try {
+      const result = await db
+        .delete(schema.sessions)
+        .where(eq(schema.sessions.playerId, playerId));
+      
+      const deletedCount = result.rowCount || 0;
+      console.log(`✅ [STORAGE] Deleted ${deletedCount} sessions for player ${playerId}`);
+      
+      return deletedCount;
+    } catch (error) {
+      console.error(`❌ [STORAGE] Failed to delete sessions for player ${playerId}:`, error);
+      throw error;
+    }
+  }
+
   async cleanupExpiredSessions(): Promise<void> {
-    await db.delete(schema.sessions).where(lt(schema.sessions.expiresAt, new Date()));
+    const result = await db.delete(schema.sessions).where(lt(schema.sessions.expiresAt, new Date()));
+    const deletedCount = result.rowCount || 0;
+    if (deletedCount > 0) {
+      console.log(`🧹 [STORAGE] Cleaned up ${deletedCount} expired sessions`);
+    }
   }
 
   async getMediaUploads(characterId?: string, includeHidden = false): Promise<MediaUpload[]> {
