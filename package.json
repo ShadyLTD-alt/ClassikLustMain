@@ -95,6 +95,8 @@
     "react-perfect-scrollbar": "^1.5.8",
     "react-resizable-panels": "^2.1.7",
     "recharts": "^2.15.2",
+    "@types/proper-lockfile": "^4.1.4",
+    "perfect-scrollbar": "^1.5.6",
     "safe-json-parse": "^4.0.0",
     "sharp": "^0.34.4",
     "supabase": "^2.54.11",

@@ -49,7 +49,7 @@ export default defineConfig({
     fs: {
       strict: false, // Allow access to parent directories
       // Allow serving files from these directories
-      allow: [r(), r("main-gamedata/**"), r("LunaBug")],
+      allow: [r(), r("main-gamedata"), r("LunaBug")],
       deny: ["**/node_modules/**", "**/.git/**"],
     },
     // Add more lenient CORS for development
