@@ -37,6 +37,22 @@ const __dirname = path.dirname(__filename);
 const MASTER_DATA_DIR = path.join(process.cwd(), 'master-data');
 const MAIN_GAMEDATA_DIR = path.join(process.cwd(), 'main-gamedata');
 
+// 🔧 TIMEOUT HELPER: Wrap database operations with timeout protection
+const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number = 5000, operation: string = 'operation'): Promise<T> => {
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(() => {
+      reject(new Error(`${operation} timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+  
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } catch (error) {
+    logger.error(`Timeout in ${operation}`, { error: error instanceof Error ? error.message : 'Unknown' });
+    throw error;
+  }
+};
+
 const storageConfig = multer.diskStorage({
   destination: function (req, _file, cb) {
     const uploadPath = path.join(__dirname, "..", "uploads", "temp");
@@ -83,7 +99,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // 🔍 DIAGNOSTIC: Enhanced health check with detailed debugging
   app.get("/api/health", async (req, res) => {
     try {
-      const playerStateHealth = await playerStateManager.healthCheck();
+      const playerStateHealth = await withTimeout(
+        playerStateManager.healthCheck(),
+        3000,
+        'player state health check'
+      );
       const timestamp = new Date().toISOString();
       
       // Check session token if provided
@@ -91,7 +111,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const sessionToken = req.headers['authorization']?.replace('Bearer ', '');
       if (sessionToken) {
         try {
-          const session = await storage.getSessionByToken(sessionToken);
+          const session = await withTimeout(
+            storage.getSessionByToken(sessionToken),
+            2000,
+            'session validation'
+          );
           sessionInfo = {
             exists: !!session,
             playerId: session?.player?.id,
@@ -143,7 +167,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log('📦 Starting player file migration to telegramId_username structure...');
       logger.info('Player file migration started');
       
-      const result = await playerStateManager.migrateOldPlayerFiles();
+      const result = await withTimeout(
+        playerStateManager.migrateOldPlayerFiles(),
+        30000,
+        'player file migration'
+      );
       
       console.log(`✅ Migration complete: ${result.moved} moved, ${result.errors} errors`);
       logger.info('Player file migration completed', result);
@@ -165,9 +193,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // 🌙 LUNA LEARNING ENDPOINT (now fixed)
   app.get("/api/luna/learning-report", requireAuth, requireAdmin, async (req, res) => {
     try {
-      const summary = await lunaLearning.getLearningSummary();
-      const checklist = await lunaLearning.getPreventionChecklist();
-      const scan = await lunaLearning.runPreventionScan();
+      const summary = await withTimeout(
+        lunaLearning.getLearningSummary(),
+        5000,
+        'luna learning summary'
+      );
+      const checklist = await withTimeout(
+        lunaLearning.getPreventionChecklist(),
+        5000,
+        'luna prevention checklist'
+      );
+      const scan = await withTimeout(
+        lunaLearning.runPreventionScan(),
+        5000,
+        'luna prevention scan'
+      );
       
       res.json({
         success: true,
@@ -250,7 +290,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Also save to database for compatibility
       try {
-        const dbCharacter = await storage.createCharacter(newCharacter);
+        const dbCharacter = await withTimeout(
+          storage.createCharacter(newCharacter),
+          5000,
+          'create character in database'
+        );
         console.log(`✅ [CREATE CHARACTER] Character created: ${newCharacter.name} (${newCharacter.id})`);
         console.log(`📁 [CREATE CHARACTER] Saved to: main-gamedata/characters/${newCharacter.id}.json`);
         res.json({ success: true, character: dbCharacter });
@@ -328,17 +372,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const fileUrl = `/uploads/characters/${parsedData.characterName}/${parsedData.imageType}/${req.file.filename}`;
 
-      const mediaUpload = await storage.createMediaUpload({
-        characterId: parsedData.characterId,
-        url: fileUrl,
-        type: parsedData.imageType,
-        unlockLevel: parsedData.unlockLevel,
-        categories: parsedData.categories,
-        poses: parsedData.poses,
-        isHidden: parsedData.isHidden,
-        chatEnable: parsedData.chatEnable,
-        chatSendPercent: parsedData.chatSendPercent,
-      });
+      const mediaUpload = await withTimeout(
+        storage.createMediaUpload({
+          characterId: parsedData.characterId,
+          url: fileUrl,
+          type: parsedData.imageType,
+          unlockLevel: parsedData.unlockLevel,
+          categories: parsedData.categories,
+          poses: parsedData.poses,
+          isHidden: parsedData.isHidden,
+          chatEnable: parsedData.chatEnable,
+          chatSendPercent: parsedData.chatSendPercent,
+        }),
+        5000,
+        'create media upload'
+      );
 
       res.json({ url: fileUrl, media: mediaUpload });
     } catch (error) {
@@ -362,7 +410,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       // 🎯 JSON-FIRST: Load from telegramId_username folder JSON
-      const playerState = await getPlayerState(req.player!.id);
+      const playerState = await withTimeout(
+        getPlayerState(req.player!.id),
+        5000,
+        'get player state'
+      );
       console.log(`✅ [AUTH/ME] Loaded player state for: ${playerState.username}`);
       
       res.json({ success: true, player: playerState });
@@ -396,7 +448,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log(`🔍 [DEV AUTH] Generated telegramId: ${devTelegramId}`);
 
-      let player = await storage.getPlayerByTelegramId(devTelegramId);
+      let player = await withTimeout(
+        storage.getPlayerByTelegramId(devTelegramId),
+        3000,
+        'get player by telegram id'
+      );
       console.log(`🔍 [DEV AUTH] Player lookup result:`, {
         found: !!player,
         id: player?.id,
@@ -416,23 +472,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         console.log(`🔓 [DEV AUTH] Auto-unlocked ${characters.length} characters`);
         
-        player = await storage.createPlayer(playerData);
+        player = await withTimeout(
+          storage.createPlayer(playerData),
+          5000,
+          'create new dev player'
+        );
         await savePlayerDataToJSON(player);
         console.log(`🎮 Created new dev player: ${sanitizedUsername} (${devTelegramId}_${sanitizedUsername})`);
       } else {
         console.log(`🔍 [DEV AUTH] Updating existing player login time...`);
-        await storage.updatePlayer(player.id, { lastLogin: new Date() });
+        await withTimeout(
+          storage.updatePlayer(player.id, { lastLogin: new Date() }),
+          3000,
+          'update player login time'
+        );
         await savePlayerDataToJSON(player);
       }
 
       const sessionToken = generateSecureToken();
       console.log(`🔍 [DEV AUTH] Generated session token: ${sessionToken.slice(0, 8)}...`);
       
-      await storage.createSession({
-        playerId: player.id,
-        token: sessionToken,
-        expiresAt: getSessionExpiry(),
-      });
+      await withTimeout(
+        storage.createSession({
+          playerId: player.id,
+          token: sessionToken,
+          expiresAt: getSessionExpiry(),
+        }),
+        3000,
+        'create session'
+      );
       
       console.log(`✅ [DEV AUTH] Session created for player ${player.username}`);
       logger.info('Dev auth successful', { username: player.username, playerId: player.id });
@@ -469,24 +537,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const telegramId = validationResult.id.toString();
       const username = (validationResult as any).username || (validationResult as any).first_name || 'TelegramUser';
 
-      let player = await storage.getPlayerByTelegramId(telegramId);
+      let player = await withTimeout(
+        storage.getPlayerByTelegramId(telegramId),
+        3000,
+        'get telegram player'
+      );
 
       if (!player) {
         const playerData = await masterDataService.createNewPlayerData(telegramId, username);
-        player = await storage.createPlayer(playerData);
+        player = await withTimeout(
+          storage.createPlayer(playerData),
+          5000,
+          'create telegram player'
+        );
         await savePlayerDataToJSON(player);
         console.log(`🎮 Created new Telegram player: ${username} (${telegramId}_${username})`);
       } else {
-        await storage.updatePlayer(player.id, { lastLogin: new Date() });
+        await withTimeout(
+          storage.updatePlayer(player.id, { lastLogin: new Date() }),
+          3000,
+          'update telegram player login'
+        );
         await savePlayerDataToJSON(player);
       }
 
       const sessionToken = generateSecureToken();
-      await storage.createSession({
-        playerId: player.id,
-        token: sessionToken,
-        expiresAt: getSessionExpiry(),
-      });
+      await withTimeout(
+        storage.createSession({
+          playerId: player.id,
+          token: sessionToken,
+          expiresAt: getSessionExpiry(),
+        }),
+        3000,
+        'create telegram session'
+      );
 
       res.json({ success: true, player, sessionToken });
     } catch (error) {
@@ -543,7 +627,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const characterId = req.query.characterId as string | undefined;
       const includeHidden = req.query.includeHidden === 'true';
-      const mediaUploads = await storage.getMediaUploads(characterId, includeHidden);
+      const mediaUploads = await withTimeout(
+        storage.getMediaUploads(characterId, includeHidden),
+        5000,
+        'get media uploads'
+      );
       res.json({ media: mediaUploads });
     } catch (error: any) {
       logger.error('Media fetch error', { error: error.message });
@@ -559,7 +647,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log(`🖼️ [UPDATE MEDIA] Updating media ${id}...`, updates);
       
-      const existingMedia = await storage.getMediaUpload(id);
+      const existingMedia = await withTimeout(
+        storage.getMediaUpload(id),
+        3000,
+        'get existing media'
+      );
       if (!existingMedia) {
         return res.status(404).json({ error: 'Media not found' });
       }
@@ -586,10 +678,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      const updatedMedia = await storage.updateMediaUpload(id, {
-        ...updates,
-        updatedAt: new Date()
-      });
+      const updatedMedia = await withTimeout(
+        storage.updateMediaUpload(id, {
+          ...updates,
+          updatedAt: new Date()
+        }),
+        5000,
+        'update media'
+      );
       
       console.log(`✅ [UPDATE MEDIA] Media ${id} updated successfully`);
       res.json({ success: true, media: updatedMedia });
@@ -604,7 +700,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       
-      const media = await storage.getMediaUpload(id);
+      const media = await withTimeout(
+        storage.getMediaUpload(id),
+        3000,
+        'get media for deletion'
+      );
       if (!media) {
         return res.status(404).json({ error: 'Media not found' });
       }
@@ -619,7 +719,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         logger.warn('Failed to delete media file', { url: media.url, error: fileError });
       }
       
-      await storage.deleteMediaUpload(id);
+      await withTimeout(
+        storage.deleteMediaUpload(id),
+        3000,
+        'delete media from database'
+      );
       res.json({ success: true });
     } catch (error: any) {
       logger.error('Media delete error', { error: error.message });
@@ -632,7 +736,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       console.log(`🔍 [PLAYER/ME] Request from: ${req.player?.username || req.player?.id}`);
       
-      const playerState = await getPlayerState(req.player!.id);
+      const playerState = await withTimeout(
+        getPlayerState(req.player!.id),
+        5000,
+        'get player state'
+      );
       console.log(`✅ [PLAYER/ME] Successfully loaded state for: ${playerState.username}`);
       console.log(`🔍 [PLAYER/ME] State summary:`, {
         points: playerState.points,
@@ -675,7 +783,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Apply updates via JSON-first manager
-      const updatedState = await updatePlayerState(req.player!.id, updates);
+      const updatedState = await withTimeout(
+        updatePlayerState(req.player!.id, updates),
+        5000,
+        'update player state'
+      );
       console.log(`✅ [PLAYER/ME PATCH] Successfully updated: ${updatedState.username}`);
 
       // Handle sendBeacon requests (no response expected)
@@ -696,7 +808,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // 🎭 CHARACTER SELECT: Now auto-unlocks in development
+  // 🎭 CHARACTER SELECT: Now with timeout protection and enhanced debugging
   app.post("/api/player/select-character", requireAuth, async (req, res) => {
     try {
       const { characterId } = req.body;
@@ -708,7 +820,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: 'Character ID is required' });
       }
 
-      const playerState = await getPlayerState(req.player!.id);
+      const playerState = await withTimeout(
+        getPlayerState(req.player!.id),
+        3000,
+        'get player state for character select'
+      );
       console.log(`🎭 [CHARACTER SELECT] Current character: ${playerState.selectedCharacterId}`);
       console.log(`🎭 [CHARACTER SELECT] Unlocked characters: [${playerState.unlockedCharacters.join(', ')}]`);
       
@@ -724,7 +840,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       console.log(`🔄 [CHARACTER SELECT] Attempting to select ${characterId}...`);
-      const updatedState = await selectCharacterForPlayer(req.player!.id, characterId);
+      const updatedState = await withTimeout(
+        selectCharacterForPlayer(req.player!.id, characterId),
+        5000,
+        'select character for player'
+      );
       
       console.log(`✅ [CHARACTER SELECT] SUCCESS: ${characterId} selected for ${updatedState.username}`);
       
@@ -741,7 +861,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // 🖼️ FIXED: Set display image with telegramId_username folder JSON - ENHANCED LOGGING
+  // 🖼️ FIXED: Set display image with telegramId_username folder JSON - ENHANCED LOGGING + TIMEOUT
   app.post("/api/player/set-display-image", requireAuth, async (req, res) => {
     try {
       const { imageUrl } = req.body;
@@ -760,7 +880,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       console.log(`🔄 [DISPLAY IMAGE] Attempting to set display image...`);
-      const updatedState = await setDisplayImageForPlayer(req.player!.id, imageUrl);
+      const updatedState = await withTimeout(
+        setDisplayImageForPlayer(req.player!.id, imageUrl),
+        5000,
+        'set display image for player'
+      );
       
       console.log(`✅ [DISPLAY IMAGE] SUCCESS: ${imageUrl} set for ${updatedState.username}`);
       
@@ -777,7 +901,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // 🎯 JSON-FIRST: Purchase upgrade
+  // 🎯 JSON-FIRST: Purchase upgrade - FIXED WITH TIMEOUT AND BETTER ERROR HANDLING
   app.post("/api/player/upgrades", requireAuth, async (req, res) => {
     try {
       const { upgradeId, level } = req.body;
@@ -796,9 +920,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const cost = upgrade.baseCost * Math.pow(upgrade.costMultiplier, level - 1);
-      const updatedState = await purchaseUpgradeForPlayer(req.player!.id, upgradeId, level, cost);
+      console.log(`💰 [UPGRADE] Cost calculated: ${cost} for ${upgradeId} level ${level}`);
+      
+      const updatedState = await withTimeout(
+        purchaseUpgradeForPlayer(req.player!.id, upgradeId, level, cost),
+        5000,
+        'purchase upgrade for player'
+      );
       
       console.log(`✅ [UPGRADE] Success for ${updatedState.username}`);
+      console.log(`📊 [UPGRADE] New upgrade levels:`, Object.keys(updatedState.upgrades).length);
+      
       res.json({ success: true, player: updatedState });
     } catch (error) {
       console.error(`🔴 [UPGRADE] Failed for ${req.player?.username}:`, error);
@@ -815,7 +947,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // 🎯 JSON-FIRST: Health check for player state system
   app.get("/api/player/health", requireAuth, async (req, res) => {
     try {
-      const health = await playerStateManager.healthCheck();
+      const health = await withTimeout(
+        playerStateManager.healthCheck(),
+        5000,
+        'player state health check'
+      );
       console.log(`🔍 [PLAYER HEALTH] Check requested by: ${req.player?.username}`);
       
       res.json({ 
@@ -833,7 +969,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ✅ LUNA DIAGNOSTIC ROUTE: Check master data integrity
   app.get("/api/luna/master-data-report", requireAuth, async (req, res) => {
     try {
-      const report = await masterDataService.getDataIntegrityReport();
+      const report = await withTimeout(
+        masterDataService.getDataIntegrityReport(),
+        10000,
+        'master data integrity report'
+      );
       res.json({ 
         success: true, 
         report,
@@ -855,7 +995,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       console.log(`⚡ [FORCE SYNC] Admin forcing sync for player: ${playerId}`);
-      await playerStateManager.forceDatabaseSync(playerId);
+      await withTimeout(
+        playerStateManager.forceDatabaseSync(playerId),
+        10000,
+        'force database sync'
+      );
       
       res.json({ 
         success: true, 
@@ -870,9 +1014,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // 🎯 JSON-FIRST: Admin endpoint to view system health + Luna learning
   app.get("/api/admin/system-health", requireAuth, requireAdmin, async (req, res) => {
     try {
-      const playerHealth = await playerStateManager.healthCheck();
-      const masterDataReport = await masterDataService.getDataIntegrityReport();
-      const lunaLearningReport = await lunaLearning.getLearningSummary();
+      const playerHealth = await withTimeout(
+        playerStateManager.healthCheck(),
+        5000,
+        'player health check'
+      );
+      const masterDataReport = await withTimeout(
+        masterDataService.getDataIntegrityReport(),
+        5000,
+        'master data report'
+      );
+      const lunaLearningReport = await withTimeout(
+        lunaLearning.getLearningSummary(),
+        5000,
+        'luna learning summary'
+      );
       
       console.log(`🔍 [SYSTEM HEALTH] Admin health check by: ${req.player?.username}`);
       
@@ -901,6 +1057,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
   
   console.log('✅ All routes registered successfully');
+  console.log('🔧 Timeout protection: 5s max for most operations, 3s for auth');
   console.log('🎯 JSON-FIRST: Player system using telegramId_username folders: main-gamedata/player-data/{telegramId}_{username}/player_{username}.json');
   console.log('🔧 Debug routes available at /api/debug (dev only)');
   console.log('📁 Master-data templates available for admin create flows');
