@@ -89,6 +89,7 @@ export interface IStorage {
   getPlayerLevelUps(playerId: string): Promise<PlayerLevelUp[]>;
   getPlayerLevelUp(playerId: string, level: number): Promise<PlayerLevelUp | undefined>;
   createPlayerLevelUp(data: InsertPlayerLevelUp): Promise<PlayerLevelUp>;
+  recordPlayerLevelUp(playerId: string, level: number, source?: string): Promise<PlayerLevelUp>; // 🚨 MISSING METHOD
   
   getPlayerCharacters(playerId: string): Promise<(PlayerCharacter & { character: Character })[]>;
   unlockCharacter(data: InsertPlayerCharacter): Promise<PlayerCharacter>;
@@ -417,6 +418,41 @@ export class DatabaseStorage implements IStorage {
   async createPlayerLevelUp(data: InsertPlayerLevelUp): Promise<PlayerLevelUp> {
     const result = await db.insert(schema.playerLevelUps).values(data).returning();
     return result[0];
+  }
+
+  // 🚨 MISSING METHOD: Record player level up with upsert
+  async recordPlayerLevelUp(playerId: string, level: number, source = 'progression'): Promise<PlayerLevelUp> {
+    console.log(`🏆 [STORAGE] Recording level up: Player ${playerId} → Level ${level} (${source})`);
+    
+    try {
+      // Check if already exists
+      const existing = await this.getPlayerLevelUp(playerId, level);
+      if (existing) {
+        console.log(`ℹ️ [STORAGE] Level up already recorded: Player ${playerId} Level ${level}`);
+        return existing;
+      }
+      
+      // Create new record
+      const newLevelUp = await this.createPlayerLevelUp({
+        playerId,
+        level,
+        source,
+        unlockedAt: new Date()
+      });
+      
+      console.log(`✅ [STORAGE] Level up recorded successfully`);
+      return newLevelUp;
+    } catch (error: any) {
+      // Handle unique constraint violation gracefully
+      if (error?.code === '23505' || error?.message?.includes('unique')) {
+        console.log(`ℹ️ [STORAGE] Level up already exists (unique constraint): Player ${playerId} Level ${level}`);
+        const existing = await this.getPlayerLevelUp(playerId, level);
+        if (existing) return existing;
+      }
+      
+      console.error(`❌ [STORAGE] Failed to record level up:`, error);
+      throw error;
+    }
   }
 
   async getPlayerCharacters(playerId: string): Promise<(PlayerCharacter & { character: Character })[]> {

@@ -34,6 +34,13 @@ interface PlayerState {
   boostExpiresAt: Date | null;
   totalTapsToday: number;
   totalTapsAllTime: number;
+  // 🏆 NEW: Task and Achievement tracking fields
+  lpEarnedToday?: number;
+  upgradesPurchasedToday?: number;
+  consecutiveDays?: number;
+  claimedTasks?: string[];
+  claimedAchievements?: string[];
+  achievementUnlockDates?: Record<string, string>;
   lastDailyReset: Date;
   lastWeeklyReset: Date;
   lastSync: { timestamp: number; hash: string };
@@ -141,6 +148,17 @@ class SimplePlayerStateManager {
         state = {
           ...parsed,
           experience: parsed.experience || 0, // 🆕 ENSURE experience field
+          // 🏆 ENSURE task/achievement tracking fields with SAFE DEFAULTS
+          lpEarnedToday: parsed.lpEarnedToday || 0,
+          upgradesPurchasedToday: parsed.upgradesPurchasedToday || 0,
+          consecutiveDays: parsed.consecutiveDays || 1,
+          claimedTasks: Array.isArray(parsed.claimedTasks) ? parsed.claimedTasks : [],
+          claimedAchievements: Array.isArray(parsed.claimedAchievements) ? parsed.claimedAchievements : [],
+          achievementUnlockDates: parsed.achievementUnlockDates || {},
+          // 🚨 CRITICAL: Ensure upgrades and unlockedCharacters are NEVER undefined
+          upgrades: parsed.upgrades || {},
+          unlockedCharacters: Array.isArray(parsed.unlockedCharacters) ? parsed.unlockedCharacters : ['shadow'],
+          unlockedImages: Array.isArray(parsed.unlockedImages) ? parsed.unlockedImages : [],
           boostExpiresAt: parsed.boostExpiresAt ? new Date(parsed.boostExpiresAt) : null,
           lastDailyReset: new Date(parsed.lastDailyReset || Date.now()),
           lastWeeklyReset: new Date(parsed.lastWeeklyReset || Date.now()),
@@ -168,6 +186,7 @@ class SimplePlayerStateManager {
           selectedCharacterId: player.selectedCharacterId || 'shadow',
           selectedImageId: player.selectedImageId || null,
           displayImage: player.displayImage || null,
+          // 🚨 CRITICAL: Initialize with SAFE defaults to prevent Object.keys errors
           upgrades: player.upgrades || {},
           unlockedCharacters: Array.isArray(player.unlockedCharacters) ? player.unlockedCharacters : ['shadow'],
           unlockedImages: Array.isArray(player.unlockedImages) ? player.unlockedImages : [],
@@ -178,6 +197,13 @@ class SimplePlayerStateManager {
           boostExpiresAt: player.boostExpiresAt ? new Date(player.boostExpiresAt) : null,
           totalTapsToday: player.totalTapsToday || 0,
           totalTapsAllTime: player.totalTapsAllTime || 0,
+          // 🏆 INITIALIZE: Task and achievement tracking with SAFE defaults
+          lpEarnedToday: 0,
+          upgradesPurchasedToday: 0,
+          consecutiveDays: 1,
+          claimedTasks: [],
+          claimedAchievements: [],
+          achievementUnlockDates: {},
           lastDailyReset: player.lastDailyReset ? new Date(player.lastDailyReset) : new Date(),
           lastWeeklyReset: player.lastWeeklyReset ? new Date(player.lastWeeklyReset) : new Date(),
           lastSync: { timestamp: Date.now(), hash: '' },
@@ -223,7 +249,7 @@ class SimplePlayerStateManager {
     }
   }
 
-  // 🚨 SIMPLIFIED: Update player with Luna timing
+  // 🚨 SIMPLIFIED: Update player with Luna timing + SAFE DEFAULTS
   async updatePlayer(playerId: string, updates: Partial<PlayerState>): Promise<PlayerState> {
     return lunaTimeOperation(`updatePlayer_${playerId}`, this._updatePlayer(playerId, updates));
   }
@@ -236,6 +262,11 @@ class SimplePlayerStateManager {
     const newState: PlayerState = {
       ...current,
       ...updates,
+      // 🚨 ENSURE these fields are NEVER undefined to prevent Object.keys errors
+      upgrades: updates.upgrades !== undefined ? updates.upgrades : (current.upgrades || {}),
+      unlockedCharacters: updates.unlockedCharacters !== undefined ? updates.unlockedCharacters : (current.unlockedCharacters || ['shadow']),
+      claimedTasks: updates.claimedTasks !== undefined ? updates.claimedTasks : (current.claimedTasks || []),
+      claimedAchievements: updates.claimedAchievements !== undefined ? updates.claimedAchievements : (current.claimedAchievements || []),
       updatedAt: new Date()
     };
     
@@ -314,8 +345,8 @@ class SimplePlayerStateManager {
       console.log(`🔄 [DIRECT SYNC] Starting immediate sync for ${state.username}`);
       
       // Update upgrades
-      await storage.setPlayerUpgradesJSON(playerId, state.upgrades);
-      console.log(`✅ [DIRECT SYNC] Upgrades synced: ${Object.keys(state.upgrades).length}`);
+      await storage.setPlayerUpgradesJSON(playerId, state.upgrades || {});
+      console.log(`✅ [DIRECT SYNC] Upgrades synced: ${Object.keys(state.upgrades || {}).length}`);
       
       // Update main player data - 🆕 INCLUDE EXPERIENCE FOR LEVEL-UP MENU
       await storage.updatePlayer(playerId, {
@@ -328,7 +359,9 @@ class SimplePlayerStateManager {
         experience: state.experience || 0, // 🆕 SYNC EXPERIENCE TO FIX LEVEL-UP MENU
         selectedCharacterId: state.selectedCharacterId,
         displayImage: state.displayImage,
-        unlockedCharacters: state.unlockedCharacters, // 🆕 SYNC UNLOCKED CHARACTERS
+        unlockedCharacters: state.unlockedCharacters || ['shadow'], // 🆕 SYNC UNLOCKED CHARACTERS
+        totalTapsAllTime: state.totalTapsAllTime,
+        totalTapsToday: state.totalTapsToday,
         boostActive: state.boostActive,
         boostMultiplier: state.boostMultiplier,
         lastLogin: new Date()
@@ -347,7 +380,7 @@ class SimplePlayerStateManager {
 
   clearCache(playerId: string) {
     this.cache.delete(playerId);
-    console.log(`🧩 Cache cleared for player ${playerId}`);
+    console.log(`🧹 Cache cleared for player ${playerId}`);
   }
 
   async migrateOldPlayerFiles(): Promise<{ moved: number; errors: number }> {
@@ -380,12 +413,12 @@ export async function selectCharacterForPlayer(playerId: string, characterId: st
     
     const currentState = await getPlayerState(playerId);
     console.log(`🎭 [CHARACTER] Current character: ${currentState.selectedCharacterId}`);
-    console.log(`🎭 [CHARACTER] Unlocked characters: [${currentState.unlockedCharacters.join(', ')}]`);
+    console.log(`🎭 [CHARACTER] Unlocked characters: [${(currentState.unlockedCharacters || []).join(', ')}]`);
     
-    let updatedUnlockedCharacters = [...currentState.unlockedCharacters];
+    let updatedUnlockedCharacters = [...(currentState.unlockedCharacters || ['shadow'])];
     
     // Check if character is unlocked
-    if (!currentState.unlockedCharacters.includes(characterId)) {
+    if (!updatedUnlockedCharacters.includes(characterId)) {
       if (process.env.NODE_ENV === 'production') {
         console.log(`❌ [CHARACTER] Character ${characterId} not unlocked in production`);
         throw new Error(`Character ${characterId} is not unlocked`);
@@ -405,7 +438,7 @@ export async function selectCharacterForPlayer(playerId: string, characterId: st
     });
     
     console.log(`✅ [CHARACTER] SUCCESS: ${characterId} selected for ${updatedState.username}`);
-    console.log(`🎭 [CHARACTER] Updated unlocked list: [${updatedState.unlockedCharacters.join(', ')}]`);
+    console.log(`🎭 [CHARACTER] Updated unlocked list: [${(updatedState.unlockedCharacters || []).join(', ')}]`);
     
     return updatedState;
   });
@@ -428,7 +461,7 @@ export async function setDisplayImageForPlayer(playerId: string, imageUrl: strin
   });
 }
 
-// 🆕 ENHANCED: Upgrade purchase with experience gain for level-up menu fix
+// 🆕 ENHANCED: Upgrade purchase with experience gain for level-up menu fix + task tracking
 export async function purchaseUpgradeForPlayer(playerId: string, upgradeId: string, newLevel: number, cost: number): Promise<PlayerState> {
   return lunaTimeOperation('purchaseUpgradeForPlayer', async () => {
     console.log(`🛒 [UPGRADE] Player ${playerId} purchasing ${upgradeId} level ${newLevel} for ${cost} points`);
@@ -443,18 +476,24 @@ export async function purchaseUpgradeForPlayer(playerId: string, upgradeId: stri
     const experienceGain = Math.floor(cost * 0.1); // 10% of cost as experience
     console.log(`🏆 [UPGRADE] Experience gain: ${experienceGain} XP`);
     
+    // 🚨 SAFE: Ensure upgrades object exists
+    const currentUpgrades = currentState.upgrades || {};
+    
     const updatedState = await updatePlayerState(playerId, {
       points: Math.round(currentState.points - cost),
       lustPoints: Math.round((currentState.lustPoints || currentState.points) - cost),
       experience: (currentState.experience || 0) + experienceGain, // 🆕 ADD EXPERIENCE
+      // 🏆 Track daily upgrade purchases for task system
+      upgradesPurchasedToday: (currentState.upgradesPurchasedToday || 0) + 1,
       upgrades: {
-        ...currentState.upgrades,
+        ...currentUpgrades,
         [upgradeId]: newLevel
       }
     });
     
     console.log(`✅ [UPGRADE] SUCCESS: ${upgradeId} level ${newLevel} purchased for ${updatedState.username}`);
     console.log(`🏆 [UPGRADE] New experience: ${updatedState.experience} XP`);
+    console.log(`🏆 [UPGRADE] Daily purchases: ${updatedState.upgradesPurchasedToday}`);
     return updatedState;
   });
 }
