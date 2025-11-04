@@ -37,6 +37,52 @@ const __dirname = path.dirname(__filename);
 const MASTER_DATA_DIR = path.join(process.cwd(), 'master-data');
 const MAIN_GAMEDATA_DIR = path.join(process.cwd(), 'main-gamedata');
 
+// 🔧 TYPE COERCION HELPERS FOR ADMIN FORMS
+const coerceNumeric = (value: any): number => {
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string') {
+    const parsed = parseFloat(value);
+    return isNaN(parsed) ? 0 : parsed;
+  }
+  return 0;
+};
+
+const coerceInteger = (value: any): number => {
+  if (typeof value === 'number') return Math.round(value);
+  if (typeof value === 'string') {
+    const parsed = parseInt(value, 10);
+    return isNaN(parsed) ? 0 : parsed;
+  }
+  return 0;
+};
+
+const sanitizeUpgrade = (data: any) => ({
+  ...data,
+  maxLevel: coerceInteger(data.maxLevel),
+  baseCost: coerceNumeric(data.baseCost),
+  costMultiplier: coerceNumeric(data.costMultiplier),
+  baseValue: coerceNumeric(data.baseValue),
+  valueIncrement: coerceNumeric(data.valueIncrement),
+  unlockLevel: coerceInteger(data.unlockLevel || 1),
+  isHidden: Boolean(data.isHidden)
+});
+
+const sanitizeCharacter = (data: any) => ({
+  ...data,
+  unlockLevel: coerceInteger(data.unlockLevel || 1),
+  rarity: data.rarity || 'Common',
+  isHidden: Boolean(data.isHidden),
+  isVip: Boolean(data.isVip)
+});
+
+const sanitizeLevel = (data: any) => ({
+  ...data,
+  level: coerceInteger(data.level),
+  experienceRequired: coerceInteger(data.experienceRequired || 0),
+  pointsReward: coerceInteger(data.pointsReward || 0),
+  requirements: Array.isArray(data.requirements) ? data.requirements : []
+});
+
 // 🔧 TIMEOUT HELPER: Wrap database operations with timeout protection
 const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number = 5000, operation: string = 'operation'): Promise<T> => {
   const timeoutPromise = new Promise<never>((_, reject) => {
@@ -264,193 +310,464 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // 🆕 NEW: ADMIN UPGRADE ROUTES (JSON-first with memory refresh)
+  // 🆕 NEW: Config diff endpoint for debugging admin issues
+  app.get("/api/admin/config-diff", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const upgradesInMemory = getUpgradesFromMemory();
+      const charactersInMemory = getCharactersFromMemory();
+      const levelsInMemory = getLevelsFromMemory();
+      
+      const mainGameDataDir = path.join(process.cwd(), 'main-gamedata');
+      let jsonUpgrades = [];
+      let jsonCharacters = [];
+      let jsonLevels = [];
+      let errors = [];
+      
+      try {
+        const upgradesFile = path.join(mainGameDataDir, 'upgrades', 'upgrades-master.json');
+        if (fs.existsSync(upgradesFile)) {
+          const data = await fs.promises.readFile(upgradesFile, 'utf8');
+          jsonUpgrades = JSON.parse(data);
+        } else {
+          errors.push('upgrades-master.json not found');
+        }
+      } catch (err) {
+        errors.push(`Upgrades JSON error: ${err instanceof Error ? err.message : 'Unknown'}`);
+      }
+      
+      try {
+        const charactersDir = path.join(mainGameDataDir, 'characters');
+        if (fs.existsSync(charactersDir)) {
+          const files = await fs.promises.readdir(charactersDir);
+          for (const file of files.filter(f => f.endsWith('.json'))) {
+            const data = await fs.promises.readFile(path.join(charactersDir, file), 'utf8');
+            jsonCharacters.push(JSON.parse(data));
+          }
+        } else {
+          errors.push('characters directory not found');
+        }
+      } catch (err) {
+        errors.push(`Characters JSON error: ${err instanceof Error ? err.message : 'Unknown'}`);
+      }
+      
+      res.json({
+        success: true,
+        comparison: {
+          upgrades: {
+            memoryCount: upgradesInMemory.length,
+            jsonCount: jsonUpgrades.length,
+            memoryIds: upgradesInMemory.map(u => u.id),
+            jsonIds: jsonUpgrades.map((u: any) => u.id)
+          },
+          characters: {
+            memoryCount: charactersInMemory.length,
+            jsonCount: jsonCharacters.length,
+            memoryIds: charactersInMemory.map(c => c.id),
+            jsonIds: jsonCharacters.map((c: any) => c.id)
+          },
+          levels: {
+            memoryCount: levelsInMemory.length,
+            jsonCount: jsonLevels.length,
+            memoryLevels: levelsInMemory.map(l => l.level),
+            jsonLevels: jsonLevels.map((l: any) => l.level)
+          }
+        },
+        errors,
+        paths: {
+          mainGameData: mainGameDataDir,
+          upgrades: path.join(mainGameDataDir, 'upgrades', 'upgrades-master.json'),
+          characters: path.join(mainGameDataDir, 'characters'),
+          levels: path.join(mainGameDataDir, 'levels', 'levels.json')
+        }
+      });
+    } catch (error) {
+      logger.error('Config diff error', { error: error instanceof Error ? error.message : 'Unknown' });
+      res.status(500).json({ error: 'Failed to generate config diff' });
+    }
+  });
+
+  // 🆕 FIXED: ADMIN UPGRADE ROUTES with detailed error handling
   app.post("/api/admin/upgrades", requireAuth, requireAdmin, async (req, res) => {
     try {
-      const upgrade = req.body;
-      console.log(`🔧 [ADMIN] Creating upgrade: ${upgrade.name || upgrade.id}`);
+      const upgradeData = sanitizeUpgrade(req.body);
+      console.log(`🔧 [ADMIN] Creating upgrade: ${upgradeData.name || upgradeData.id}`);
+      console.log(`🔧 [ADMIN] Sanitized data:`, upgradeData);
       
       // 1. Save to main-gamedata JSON (runtime source)
-      await saveUpgradeToJSON(upgrade);
+      try {
+        await saveUpgradeToJSON(upgradeData);
+        console.log(`✅ [ADMIN] Upgrade saved to JSON successfully`);
+      } catch (jsonError) {
+        console.error(`❌ [ADMIN] JSON save failed:`, jsonError);
+        return res.status(500).json({ 
+          error: 'Failed to save upgrade to JSON', 
+          details: jsonError instanceof Error ? jsonError.message : 'Unknown JSON error',
+          stack: jsonError instanceof Error ? jsonError.stack : undefined,
+          stage: 'json_save'
+        });
+      }
       
       // 2. Save to database (background, non-blocking)
-      storage.createUpgrade(upgrade).catch(err => {
-        console.error(`🔴 [ADMIN] DB save failed for upgrade ${upgrade.id}:`, err);
+      storage.createUpgrade(upgradeData).catch(err => {
+        console.error(`🔴 [ADMIN] DB save failed for upgrade ${upgradeData.id}:`, err);
       });
       
-      // 3. Refresh memory cache
-      await masterDataService.reloadUpgrades();
+      // 3. Refresh memory cache with error handling
+      let reloadWarning = null;
+      try {
+        await masterDataService.reloadUpgrades();
+        console.log(`✅ [ADMIN] Memory cache reloaded successfully`);
+      } catch (reloadError) {
+        console.error(`⚠️ [ADMIN] Memory reload failed:`, reloadError);
+        reloadWarning = `Memory reload failed: ${reloadError instanceof Error ? reloadError.message : 'Unknown'}`;
+      }
       
       // 4. Return fresh data for UI refresh
       const upgrades = getUpgradesFromMemory();
-      console.log(`✅ [ADMIN] Upgrade ${upgrade.id} created and memory refreshed`);
+      console.log(`✅ [ADMIN] Upgrade ${upgradeData.id} created, returning ${upgrades.length} upgrades`);
       
-      res.json({ success: true, upgrades, message: `Upgrade ${upgrade.name} created successfully` });
+      res.json({ 
+        success: true, 
+        upgrades, 
+        message: `Upgrade ${upgradeData.name} created successfully`,
+        warning: reloadWarning
+      });
     } catch (error) {
-      logger.error('Admin create upgrade error', { error: error instanceof Error ? error.message : 'Unknown' });
-      res.status(500).json({ error: 'Failed to create upgrade' });
+      console.error(`❌ [ADMIN] Create upgrade failed:`, error);
+      logger.error('Admin create upgrade error', { 
+        error: error instanceof Error ? error.message : 'Unknown',
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      res.status(500).json({ 
+        error: 'Failed to create upgrade', 
+        details: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      });
     }
   });
 
   app.patch("/api/admin/upgrades/:id", requireAuth, requireAdmin, async (req, res) => {
     try {
       const { id } = req.params;
-      const updates = req.body;
+      const updates = sanitizeUpgrade(req.body);
       console.log(`🔧 [ADMIN] Editing upgrade: ${id}`, Object.keys(updates));
+      console.log(`🔧 [ADMIN] Sanitized updates:`, updates);
       
       // Get current upgrade
       const currentUpgrade = getUpgradeFromMemory(id);
       if (!currentUpgrade) {
+        console.log(`❌ [ADMIN] Upgrade ${id} not found in memory`);
         return res.status(404).json({ error: 'Upgrade not found' });
       }
       
       const updatedUpgrade = { ...currentUpgrade, ...updates, updatedAt: new Date() };
       
       // 1. Save to main-gamedata JSON (runtime source)
-      await saveUpgradeToJSON(updatedUpgrade);
+      try {
+        await saveUpgradeToJSON(updatedUpgrade);
+        console.log(`✅ [ADMIN] Upgrade JSON updated successfully`);
+      } catch (jsonError) {
+        console.error(`❌ [ADMIN] JSON update failed:`, jsonError);
+        return res.status(500).json({ 
+          error: 'Failed to update upgrade JSON', 
+          details: jsonError instanceof Error ? jsonError.message : 'Unknown JSON error',
+          stack: jsonError instanceof Error ? jsonError.stack : undefined,
+          stage: 'json_update'
+        });
+      }
       
       // 2. Update database (background, non-blocking)
       storage.updateUpgrade(id, updates).catch(err => {
         console.error(`🔴 [ADMIN] DB update failed for upgrade ${id}:`, err);
       });
       
-      // 3. Refresh memory cache
-      await masterDataService.reloadUpgrades();
+      // 3. Refresh memory cache with error handling
+      let reloadWarning = null;
+      try {
+        await masterDataService.reloadUpgrades();
+        console.log(`✅ [ADMIN] Memory cache reloaded after update`);
+      } catch (reloadError) {
+        console.error(`⚠️ [ADMIN] Memory reload failed after update:`, reloadError);
+        reloadWarning = `Memory reload failed: ${reloadError instanceof Error ? reloadError.message : 'Unknown'}`;
+      }
       
       // 4. Return fresh data
       const upgrades = getUpgradesFromMemory();
-      console.log(`✅ [ADMIN] Upgrade ${id} updated and memory refreshed`);
+      console.log(`✅ [ADMIN] Upgrade ${id} updated, returning ${upgrades.length} upgrades`);
       
-      res.json({ success: true, upgrades, message: `Upgrade ${currentUpgrade.name} updated successfully` });
+      res.json({ 
+        success: true, 
+        upgrades, 
+        message: `Upgrade ${currentUpgrade.name} updated successfully`,
+        warning: reloadWarning
+      });
     } catch (error) {
-      logger.error('Admin update upgrade error', { error: error instanceof Error ? error.message : 'Unknown' });
-      res.status(500).json({ error: 'Failed to update upgrade' });
+      console.error(`❌ [ADMIN] Update upgrade failed:`, error);
+      logger.error('Admin update upgrade error', { 
+        error: error instanceof Error ? error.message : 'Unknown',
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      res.status(500).json({ 
+        error: 'Failed to update upgrade', 
+        details: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      });
     }
   });
 
-  // 🆕 NEW: ADMIN CHARACTER ROUTES
+  // 🆕 FIXED: ADMIN CHARACTER ROUTES with detailed error handling
   app.post("/api/admin/characters", requireAuth, requireAdmin, async (req, res) => {
     try {
-      const character = req.body;
-      console.log(`🎭 [ADMIN] Creating character: ${character.name || character.id}`);
+      const characterData = sanitizeCharacter(req.body);
+      console.log(`🎭 [ADMIN] Creating character: ${characterData.name || characterData.id}`);
+      console.log(`🎭 [ADMIN] Sanitized data:`, characterData);
       
       // 1. Save to main-gamedata JSON
-      await saveCharacterToJSON(character);
+      try {
+        await saveCharacterToJSON(characterData);
+        console.log(`✅ [ADMIN] Character saved to JSON successfully`);
+      } catch (jsonError) {
+        console.error(`❌ [ADMIN] Character JSON save failed:`, jsonError);
+        return res.status(500).json({ 
+          error: 'Failed to save character to JSON', 
+          details: jsonError instanceof Error ? jsonError.message : 'Unknown JSON error',
+          stack: jsonError instanceof Error ? jsonError.stack : undefined,
+          stage: 'json_save'
+        });
+      }
       
       // 2. Save to database (background)
-      storage.createCharacter(character).catch(err => {
-        console.error(`🔴 [ADMIN] DB save failed for character ${character.id}:`, err);
+      storage.createCharacter(characterData).catch(err => {
+        console.error(`🔴 [ADMIN] DB save failed for character ${characterData.id}:`, err);
       });
       
-      // 3. Refresh memory cache
-      await masterDataService.reloadCharacters();
+      // 3. Refresh memory cache with error handling
+      let reloadWarning = null;
+      try {
+        await masterDataService.reloadCharacters();
+        console.log(`✅ [ADMIN] Character memory cache reloaded`);
+      } catch (reloadError) {
+        console.error(`⚠️ [ADMIN] Character memory reload failed:`, reloadError);
+        reloadWarning = `Memory reload failed: ${reloadError instanceof Error ? reloadError.message : 'Unknown'}`;
+      }
       
       // 4. Return fresh data
       const characters = getCharactersFromMemory();
-      console.log(`✅ [ADMIN] Character ${character.id} created and memory refreshed`);
+      console.log(`✅ [ADMIN] Character ${characterData.id} created, returning ${characters.length} characters`);
       
-      res.json({ success: true, characters, message: `Character ${character.name} created successfully` });
+      res.json({ 
+        success: true, 
+        characters, 
+        message: `Character ${characterData.name} created successfully`,
+        warning: reloadWarning
+      });
     } catch (error) {
-      logger.error('Admin create character error', { error: error instanceof Error ? error.message : 'Unknown' });
-      res.status(500).json({ error: 'Failed to create character' });
+      console.error(`❌ [ADMIN] Create character failed:`, error);
+      logger.error('Admin create character error', { 
+        error: error instanceof Error ? error.message : 'Unknown',
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      res.status(500).json({ 
+        error: 'Failed to create character', 
+        details: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      });
     }
   });
 
   app.patch("/api/admin/characters/:id", requireAuth, requireAdmin, async (req, res) => {
     try {
       const { id } = req.params;
-      const updates = req.body;
+      const updates = sanitizeCharacter(req.body);
       console.log(`🎭 [ADMIN] Editing character: ${id}`, Object.keys(updates));
+      console.log(`🎭 [ADMIN] Sanitized updates:`, updates);
       
       const currentCharacter = getCharacterFromMemory(id);
       if (!currentCharacter) {
+        console.log(`❌ [ADMIN] Character ${id} not found in memory`);
         return res.status(404).json({ error: 'Character not found' });
       }
       
       const updatedCharacter = { ...currentCharacter, ...updates, updatedAt: new Date() };
       
       // 1. Save to JSON
-      await saveCharacterToJSON(updatedCharacter);
+      try {
+        await saveCharacterToJSON(updatedCharacter);
+        console.log(`✅ [ADMIN] Character JSON updated successfully`);
+      } catch (jsonError) {
+        console.error(`❌ [ADMIN] Character JSON update failed:`, jsonError);
+        return res.status(500).json({ 
+          error: 'Failed to update character JSON', 
+          details: jsonError instanceof Error ? jsonError.message : 'Unknown JSON error',
+          stack: jsonError instanceof Error ? jsonError.stack : undefined,
+          stage: 'json_update'
+        });
+      }
       
       // 2. Update database (background)
       storage.updateCharacter(id, updates).catch(err => {
         console.error(`🔴 [ADMIN] DB update failed for character ${id}:`, err);
       });
       
-      // 3. Refresh memory
-      await masterDataService.reloadCharacters();
+      // 3. Refresh memory with error handling
+      let reloadWarning = null;
+      try {
+        await masterDataService.reloadCharacters();
+        console.log(`✅ [ADMIN] Character memory reloaded after update`);
+      } catch (reloadError) {
+        console.error(`⚠️ [ADMIN] Character memory reload failed:`, reloadError);
+        reloadWarning = `Memory reload failed: ${reloadError instanceof Error ? reloadError.message : 'Unknown'}`;
+      }
       
       // 4. Return fresh data
       const characters = getCharactersFromMemory();
-      console.log(`✅ [ADMIN] Character ${id} updated and memory refreshed`);
+      console.log(`✅ [ADMIN] Character ${id} updated, returning ${characters.length} characters`);
       
-      res.json({ success: true, characters, message: `Character ${currentCharacter.name} updated successfully` });
+      res.json({ 
+        success: true, 
+        characters, 
+        message: `Character ${currentCharacter.name} updated successfully`,
+        warning: reloadWarning
+      });
     } catch (error) {
-      logger.error('Admin update character error', { error: error instanceof Error ? error.message : 'Unknown' });
-      res.status(500).json({ error: 'Failed to update character' });
+      console.error(`❌ [ADMIN] Update character failed:`, error);
+      logger.error('Admin update character error', { 
+        error: error instanceof Error ? error.message : 'Unknown',
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      res.status(500).json({ 
+        error: 'Failed to update character', 
+        details: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      });
     }
   });
 
-  // 🆕 NEW: ADMIN LEVEL ROUTES
+  // 🆕 FIXED: ADMIN LEVEL ROUTES with detailed error handling
   app.post("/api/admin/levels", requireAuth, requireAdmin, async (req, res) => {
     try {
-      const level = req.body;
-      console.log(`🏆 [ADMIN] Creating level: ${level.level}`);
+      const levelData = sanitizeLevel(req.body);
+      console.log(`🏆 [ADMIN] Creating level: ${levelData.level}`);
+      console.log(`🏆 [ADMIN] Sanitized data:`, levelData);
       
       // 1. Save to JSON
-      await saveLevelToJSON(level);
+      try {
+        await saveLevelToJSON(levelData);
+        console.log(`✅ [ADMIN] Level saved to JSON successfully`);
+      } catch (jsonError) {
+        console.error(`❌ [ADMIN] Level JSON save failed:`, jsonError);
+        return res.status(500).json({ 
+          error: 'Failed to save level to JSON', 
+          details: jsonError instanceof Error ? jsonError.message : 'Unknown JSON error',
+          stack: jsonError instanceof Error ? jsonError.stack : undefined,
+          stage: 'json_save'
+        });
+      }
       
       // 2. Save to database (background)
-      storage.createLevel(level).catch(err => {
-        console.error(`🔴 [ADMIN] DB save failed for level ${level.level}:`, err);
+      storage.createLevel(levelData).catch(err => {
+        console.error(`🔴 [ADMIN] DB save failed for level ${levelData.level}:`, err);
       });
       
-      // 3. Refresh memory
-      await masterDataService.reloadLevels();
+      // 3. Refresh memory with error handling
+      let reloadWarning = null;
+      try {
+        await masterDataService.reloadLevels();
+        console.log(`✅ [ADMIN] Level memory cache reloaded`);
+      } catch (reloadError) {
+        console.error(`⚠️ [ADMIN] Level memory reload failed:`, reloadError);
+        reloadWarning = `Memory reload failed: ${reloadError instanceof Error ? reloadError.message : 'Unknown'}`;
+      }
       
       // 4. Return fresh data
       const levels = getLevelsFromMemory();
-      console.log(`✅ [ADMIN] Level ${level.level} created and memory refreshed`);
+      console.log(`✅ [ADMIN] Level ${levelData.level} created, returning ${levels.length} levels`);
       
-      res.json({ success: true, levels, message: `Level ${level.level} created successfully` });
+      res.json({ 
+        success: true, 
+        levels, 
+        message: `Level ${levelData.level} created successfully`,
+        warning: reloadWarning
+      });
     } catch (error) {
-      logger.error('Admin create level error', { error: error instanceof Error ? error.message : 'Unknown' });
-      res.status(500).json({ error: 'Failed to create level' });
+      console.error(`❌ [ADMIN] Create level failed:`, error);
+      logger.error('Admin create level error', { 
+        error: error instanceof Error ? error.message : 'Unknown',
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      res.status(500).json({ 
+        error: 'Failed to create level', 
+        details: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      });
     }
   });
 
   app.patch("/api/admin/levels/:level", requireAuth, requireAdmin, async (req, res) => {
     try {
       const levelNum = parseInt(req.params.level);
-      const updates = req.body;
+      const updates = sanitizeLevel(req.body);
       console.log(`🏆 [ADMIN] Editing level: ${levelNum}`, Object.keys(updates));
+      console.log(`🏆 [ADMIN] Sanitized updates:`, updates);
       
       const currentLevel = getLevelFromMemory(levelNum);
       if (!currentLevel) {
+        console.log(`❌ [ADMIN] Level ${levelNum} not found in memory`);
         return res.status(404).json({ error: 'Level not found' });
       }
       
       const updatedLevel = { ...currentLevel, ...updates, updatedAt: new Date() };
       
       // 1. Save to JSON
-      await saveLevelToJSON(updatedLevel);
+      try {
+        await saveLevelToJSON(updatedLevel);
+        console.log(`✅ [ADMIN] Level JSON updated successfully`);
+      } catch (jsonError) {
+        console.error(`❌ [ADMIN] Level JSON update failed:`, jsonError);
+        return res.status(500).json({ 
+          error: 'Failed to update level JSON', 
+          details: jsonError instanceof Error ? jsonError.message : 'Unknown JSON error',
+          stack: jsonError instanceof Error ? jsonError.stack : undefined,
+          stage: 'json_update'
+        });
+      }
       
       // 2. Update database (background)
       storage.updateLevel(levelNum, updates).catch(err => {
         console.error(`🔴 [ADMIN] DB update failed for level ${levelNum}:`, err);
       });
       
-      // 3. Refresh memory
-      await masterDataService.reloadLevels();
+      // 3. Refresh memory with error handling
+      let reloadWarning = null;
+      try {
+        await masterDataService.reloadLevels();
+        console.log(`✅ [ADMIN] Level memory reloaded after update`);
+      } catch (reloadError) {
+        console.error(`⚠️ [ADMIN] Level memory reload failed:`, reloadError);
+        reloadWarning = `Memory reload failed: ${reloadError instanceof Error ? reloadError.message : 'Unknown'}`;
+      }
       
       // 4. Return fresh data
       const levels = getLevelsFromMemory();
-      console.log(`✅ [ADMIN] Level ${levelNum} updated and memory refreshed`);
+      console.log(`✅ [ADMIN] Level ${levelNum} updated, returning ${levels.length} levels`);
       
-      res.json({ success: true, levels, message: `Level ${levelNum} updated successfully` });
+      res.json({ 
+        success: true, 
+        levels, 
+        message: `Level ${levelNum} updated successfully`,
+        warning: reloadWarning
+      });
     } catch (error) {
-      logger.error('Admin update level error', { error: error instanceof Error ? error.message : 'Unknown' });
-      res.status(500).json({ error: 'Failed to update level' });
+      console.error(`❌ [ADMIN] Update level failed:`, error);
+      logger.error('Admin update level error', { 
+        error: error instanceof Error ? error.message : 'Unknown',
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      res.status(500).json({ 
+        error: 'Failed to update level', 
+        details: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      });
     }
   });
 
@@ -528,7 +845,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Merge template with custom fields
-      const newCharacter = {
+      const newCharacter = sanitizeCharacter({
         id: customFields.id || `char_${Date.now()}`,
         name: customFields.name || 'New Character',
         description: customFields.description || 'A mysterious character',
@@ -542,7 +859,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...customFields, // Override with user input
         createdAt: new Date(),
         updatedAt: new Date()
-      };
+      });
       
       // Save to main-gamedata/characters/
       await saveCharacterToJSON(newCharacter);
@@ -578,6 +895,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.log('🌙 LunaBug will use client-side fallback mode');
   }
 
+  // 🔧 ENHANCED: Upload with better JSON parsing and error handling
   app.post("/api/upload", requireAuth, upload.single("image"), async (req, res) => {
     if (!req.file) {
       return res.status(400).json({ error: "No file uploaded" });
@@ -585,8 +903,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     try {
       const body = req.body;
-      const categoriesObj = JSON.parse(body.categories);
-      const poses = JSON.parse(body.poses);
+      console.log('📤 [UPLOAD] Request body:', body);
+      
+      let categoriesObj = {};
+      let poses = [];
+      
+      // Better JSON parsing with error handling
+      try {
+        categoriesObj = typeof body.categories === 'string' ? JSON.parse(body.categories) : (body.categories || {});
+      } catch (parseError) {
+        console.error('❌ [UPLOAD] Categories parse error:', parseError);
+        fs.unlinkSync(req.file.path);
+        return res.status(400).json({ 
+          error: "Invalid categories format",
+          details: "Categories must be valid JSON",
+          received: body.categories
+        });
+      }
+      
+      try {
+        poses = typeof body.poses === 'string' ? JSON.parse(body.poses) : (body.poses || []);
+      } catch (parseError) {
+        console.error('❌ [UPLOAD] Poses parse error:', parseError);
+        fs.unlinkSync(req.file.path);
+        return res.status(400).json({ 
+          error: "Invalid poses format",
+          details: "Poses must be valid JSON array",
+          received: body.poses
+        });
+      }
       
       const sanitizedCharacterName = body.characterName?.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 100);
       const allowedImageTypes = ['character', 'avatar', 'vip', 'other'];
@@ -594,7 +939,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (!Array.isArray(poses) || !poses.every((p: any) => typeof p === 'string')) {
         fs.unlinkSync(req.file.path);
-        return res.status(400).json({ error: "Poses must be an array of strings" });
+        return res.status(400).json({ 
+          error: "Poses must be an array of strings",
+          received: poses
+        });
       }
       
       const categories = [
@@ -615,10 +963,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         chatEnable: body.chatEnable === 'true',
         chatSendPercent: Math.min(100, Math.max(0, parseInt(body.chatSendPercent) || 0))
       };
+      
+      console.log('📤 [UPLOAD] Parsed data:', parsedData);
 
       if (!parsedData.characterId || !parsedData.characterName) {
         fs.unlinkSync(req.file.path);
-        return res.status(400).json({ error: "Character ID and name are required" });
+        return res.status(400).json({ 
+          error: "Character ID and name are required",
+          received: { characterId: parsedData.characterId, characterName: parsedData.characterName }
+        });
       }
 
       const finalDir = path.join(__dirname, "..", "uploads", "characters", parsedData.characterName, parsedData.imageType);
@@ -630,6 +983,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       fs.renameSync(req.file.path, finalPath);
 
       const fileUrl = `/uploads/characters/${parsedData.characterName}/${parsedData.imageType}/${req.file.filename}`;
+      console.log('📤 [UPLOAD] File moved to:', fileUrl);
 
       const mediaUpload = await withTimeout(
         storage.createMediaUpload({
@@ -647,13 +1001,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         'create media upload'
       );
 
+      console.log('✅ [UPLOAD] Media upload created successfully');
       res.json({ url: fileUrl, media: mediaUpload });
     } catch (error) {
       if (req.file && fs.existsSync(req.file.path)) {
         fs.unlinkSync(req.file.path);
       }
-      logger.error('Upload error', { error: error instanceof Error ? error.message : 'Unknown error' });
-      res.status(500).json({ error: 'Failed to upload file', details: (error as Error).message });
+      console.error('❌ [UPLOAD] Upload error:', error);
+      logger.error('Upload error', { 
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      res.status(500).json({ 
+        error: 'Failed to upload file', 
+        details: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      });
     }
   });
 
@@ -1067,7 +1430,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // 🎭 CHARACTER SELECT: Fixed with atomic unlocked + selected update
+  // 🎭 CHARACTER SELECT: Enhanced with retry logic for memory reload
   app.post("/api/player/select-character", requireAuth, async (req, res) => {
     try {
       const { characterId } = req.body;
@@ -1077,6 +1440,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!characterId) {
         console.log(`❌ [CHARACTER SELECT] No characterId provided`);
         return res.status(400).json({ error: 'Character ID is required' });
+      }
+
+      // Check if character exists in memory first
+      let character = getCharacterFromMemory(characterId);
+      if (!character) {
+        console.log(`⚠️ [CHARACTER SELECT] Character ${characterId} not found in memory, reloading...`);
+        try {
+          await masterDataService.reloadCharacters();
+          character = getCharacterFromMemory(characterId);
+          if (!character) {
+            console.log(`❌ [CHARACTER SELECT] Character ${characterId} still not found after reload`);
+            return res.status(404).json({ error: `Character '${characterId}' not found` });
+          }
+          console.log(`✅ [CHARACTER SELECT] Character ${characterId} found after reload`);
+        } catch (reloadError) {
+          console.error(`🔴 [CHARACTER SELECT] Character reload failed:`, reloadError);
+          return res.status(500).json({ error: 'Failed to reload character data' });
+        }
       }
 
       console.log(`🔄 [CHARACTER SELECT] Calling selectCharacterForPlayer...`);
@@ -1303,7 +1684,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   console.log('📁 Master-data templates available for admin create flows');
   console.log('🌙 Luna Learning System active with AsyncLock deadlock prevention');
   console.log('📦 Migration endpoint available: POST /api/admin/migrate-player-files');
-  console.log('🔇 Winston logging active with enhanced error tracking');
-  console.log('🆕 NEW: Admin CRUD routes for upgrades/characters/levels with JSON-first sync');
+  console.log('🔍 Winston logging active with enhanced error tracking');
+  console.log('🆕 FIXED: Admin CRUD routes with detailed error handling and type coercion');
+  console.log('🔄 ENHANCED: Character selection with memory reload retry logic');
+  console.log('📤 IMPROVED: Upload endpoint with better JSON parsing');
+  console.log('🔍 NEW: Config diff endpoint at GET /api/admin/config-diff');
   return httpServer;
 }
