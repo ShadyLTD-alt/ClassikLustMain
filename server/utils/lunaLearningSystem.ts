@@ -451,7 +451,7 @@ class SafePlayerStateManager {
   async getPreventionChecklist(): Promise<string[]> {
     await this.loadKnowledgeBase();
     
-    const allChecks = this.knowledgeBase.flatMap(entry => entry.preventionChecks);
+    const allChecks = this.knowledgeBase.flatMap(entry => entry.preventionChecks || []);
     const checkCounts = new Map<string, number>();
     allChecks.forEach(check => {
       checkCounts.set(check, (checkCounts.get(check) || 0) + 1);
@@ -719,12 +719,25 @@ app.post('/api/admin/upgrades', async (req, res) => {
 export const lunaLearning = new LunaLearningSystem();
 
 // 🌙 RUNTIME TIMING HELPER: Use this to train Luna on operation speeds
+// 🔧 FIXED: Proper promise handling to prevent "finally is not a function" error
 export const lunaTimeOperation = <T>(operationName: string, promise: Promise<T>): Promise<T> => {
   const start = Date.now();
-  return promise.finally(() => {
-    const duration = Date.now() - start;
-    lunaLearning.recordOperationTiming(operationName, duration);
-  });
+  
+  // 🔧 CRITICAL FIX: Ensure we have a proper Promise before calling .finally()
+  const wrappedPromise = Promise.resolve(promise);
+  
+  // Add timing record in both success and error cases
+  return wrappedPromise
+    .then((result) => {
+      const duration = Date.now() - start;
+      lunaLearning.recordOperationTiming(operationName, duration);
+      return result;
+    })
+    .catch((error) => {
+      const duration = Date.now() - start;
+      lunaLearning.recordOperationTiming(operationName, duration);
+      throw error; // Re-throw the original error
+    });
 };
 
 console.log('🌙 🧠 Luna Learning System enhanced with AsyncLock deadlock prevention');

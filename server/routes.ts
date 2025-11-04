@@ -20,6 +20,15 @@ import {
   getLevelFromMemory,
   syncAllGameData
 } from "./utils/dataLoader";
+// 🔄 NEW: Import sync queue system for throttled DB updates
+import { 
+  queuePlayerSync, 
+  queueUpgradeSync, 
+  queueCharacterSync, 
+  queueLevelSync, 
+  forceFlushAllQueues, 
+  getAllQueueStatus 
+} from "./utils/syncQueue";
 import { insertUpgradeSchema, insertCharacterSchema, insertLevelSchema, insertPlayerUpgradeSchema, insertMediaUploadSchema } from "@shared/schema";
 import { generateSecureToken, getSessionExpiry } from "./utils/auth";
 import logger from "./logger";
@@ -199,6 +208,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         3000,
         'player state health check'
       );
+      const queueStatus = getAllQueueStatus();
       const timestamp = new Date().toISOString();
       
       // Check session token if provided
@@ -239,6 +249,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           active: true,
           ...playerStateHealth
         },
+        syncQueues: queueStatus, // 🔄 NEW: Show queue status
         session: sessionInfo,
         logging: {
           logDir: path.resolve(process.cwd(), "logs"),
@@ -310,6 +321,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // 🔄 NEW: Sync queue status endpoint for admin monitoring
+  app.get("/api/admin/sync-queues", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const status = getAllQueueStatus();
+      res.json({
+        success: true,
+        queues: status,
+        message: 'Sync queue status - JSON changes queued for DB sync'
+      });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to get sync queue status' });
+    }
+  });
+
+  // 🔄 NEW: Force flush all queues (admin tool)
+  app.post("/api/admin/sync-queues/flush", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const statusBefore = getAllQueueStatus();
+      await forceFlushAllQueues();
+      const statusAfter = getAllQueueStatus();
+      
+      res.json({
+        success: true,
+        before: statusBefore,
+        after: statusAfter,
+        message: 'All sync queues flushed to database immediately'
+      });
+    } catch (error) {
+      logger.error('Force flush queues error', { error: error instanceof Error ? error.message : 'Unknown' });
+      res.status(500).json({ error: 'Failed to flush sync queues' });
+    }
+  });
+
   // 🆕 NEW: Config diff endpoint for debugging admin issues
   app.get("/api/admin/config-diff", requireAuth, requireAdmin, async (req, res) => {
     try {
@@ -372,6 +416,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             jsonLevels: jsonLevels.map((l: any) => l.level)
           }
         },
+        syncQueues: getAllQueueStatus(), // 🔄 Include queue status
         errors,
         paths: {
           mainGameData: mainGameDataDir,
@@ -386,7 +431,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // 🆕 FIXED: ADMIN UPGRADE ROUTES with detailed error handling
+  // 🆕 FIXED: ADMIN UPGRADE ROUTES with sync queue
   app.post("/api/admin/upgrades", requireAuth, requireAdmin, async (req, res) => {
     try {
       const upgradeData = sanitizeUpgrade(req.body);
@@ -407,10 +452,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      // 2. Save to database (background, non-blocking)
-      storage.createUpgrade(upgradeData).catch(err => {
-        console.error(`🔴 [ADMIN] DB save failed for upgrade ${upgradeData.id}:`, err);
-      });
+      // 2. 🔄 QUEUE for DB sync (throttled, no blocking)
+      queueUpgradeSync(upgradeData.id, upgradeData, true);
+      console.log(`🔄 [ADMIN] Upgrade queued for DB sync`);
       
       // 3. Refresh memory cache with error handling
       let reloadWarning = null;
@@ -430,7 +474,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         success: true, 
         upgrades, 
         message: `Upgrade ${upgradeData.name} created successfully`,
-        warning: reloadWarning
+        warning: reloadWarning,
+        syncQueued: true
       });
     } catch (error) {
       console.error(`❌ [ADMIN] Create upgrade failed:`, error);
@@ -476,10 +521,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      // 2. Update database (background, non-blocking)
-      storage.updateUpgrade(id, updates).catch(err => {
-        console.error(`🔴 [ADMIN] DB update failed for upgrade ${id}:`, err);
-      });
+      // 2. 🔄 QUEUE for DB sync (throttled)
+      queueUpgradeSync(id, updatedUpgrade, false);
+      console.log(`🔄 [ADMIN] Upgrade update queued for DB sync`);
       
       // 3. Refresh memory cache with error handling
       let reloadWarning = null;
@@ -499,7 +543,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         success: true, 
         upgrades, 
         message: `Upgrade ${currentUpgrade.name} updated successfully`,
-        warning: reloadWarning
+        warning: reloadWarning,
+        syncQueued: true
       });
     } catch (error) {
       console.error(`❌ [ADMIN] Update upgrade failed:`, error);
@@ -515,7 +560,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // 🆕 FIXED: ADMIN CHARACTER ROUTES with detailed error handling
+  // 🆕 FIXED: ADMIN CHARACTER ROUTES with sync queue
   app.post("/api/admin/characters", requireAuth, requireAdmin, async (req, res) => {
     try {
       const characterData = sanitizeCharacter(req.body);
@@ -536,10 +581,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      // 2. Save to database (background)
-      storage.createCharacter(characterData).catch(err => {
-        console.error(`🔴 [ADMIN] DB save failed for character ${characterData.id}:`, err);
-      });
+      // 2. 🔄 QUEUE for DB sync (throttled)
+      queueCharacterSync(characterData.id, characterData, true);
+      console.log(`🔄 [ADMIN] Character queued for DB sync`);
       
       // 3. Refresh memory cache with error handling
       let reloadWarning = null;
@@ -559,7 +603,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         success: true, 
         characters, 
         message: `Character ${characterData.name} created successfully`,
-        warning: reloadWarning
+        warning: reloadWarning,
+        syncQueued: true
       });
     } catch (error) {
       console.error(`❌ [ADMIN] Create character failed:`, error);
@@ -604,10 +649,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      // 2. Update database (background)
-      storage.updateCharacter(id, updates).catch(err => {
-        console.error(`🔴 [ADMIN] DB update failed for character ${id}:`, err);
-      });
+      // 2. 🔄 QUEUE for DB sync (throttled)
+      queueCharacterSync(id, updatedCharacter, false);
+      console.log(`🔄 [ADMIN] Character update queued for DB sync`);
       
       // 3. Refresh memory with error handling
       let reloadWarning = null;
@@ -627,7 +671,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         success: true, 
         characters, 
         message: `Character ${currentCharacter.name} updated successfully`,
-        warning: reloadWarning
+        warning: reloadWarning,
+        syncQueued: true
       });
     } catch (error) {
       console.error(`❌ [ADMIN] Update character failed:`, error);
@@ -643,7 +688,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // 🆕 FIXED: ADMIN LEVEL ROUTES with detailed error handling
+  // 🆕 FIXED: ADMIN LEVEL ROUTES with sync queue
   app.post("/api/admin/levels", requireAuth, requireAdmin, async (req, res) => {
     try {
       const levelData = sanitizeLevel(req.body);
@@ -664,10 +709,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      // 2. Save to database (background)
-      storage.createLevel(levelData).catch(err => {
-        console.error(`🔴 [ADMIN] DB save failed for level ${levelData.level}:`, err);
-      });
+      // 2. 🔄 QUEUE for DB sync (throttled)
+      queueLevelSync(levelData.level, levelData, true);
+      console.log(`🔄 [ADMIN] Level queued for DB sync`);
       
       // 3. Refresh memory with error handling
       let reloadWarning = null;
@@ -687,7 +731,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         success: true, 
         levels, 
         message: `Level ${levelData.level} created successfully`,
-        warning: reloadWarning
+        warning: reloadWarning,
+        syncQueued: true
       });
     } catch (error) {
       console.error(`❌ [ADMIN] Create level failed:`, error);
@@ -732,10 +777,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      // 2. Update database (background)
-      storage.updateLevel(levelNum, updates).catch(err => {
-        console.error(`🔴 [ADMIN] DB update failed for level ${levelNum}:`, err);
-      });
+      // 2. 🔄 QUEUE for DB sync (throttled)
+      queueLevelSync(levelNum, updatedLevel, false);
+      console.log(`🔄 [ADMIN] Level update queued for DB sync`);
       
       // 3. Refresh memory with error handling
       let reloadWarning = null;
@@ -755,7 +799,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         success: true, 
         levels, 
         message: `Level ${levelNum} updated successfully`,
-        warning: reloadWarning
+        warning: reloadWarning,
+        syncQueued: true
       });
     } catch (error) {
       console.error(`❌ [ADMIN] Update level failed:`, error);
@@ -864,21 +909,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Save to main-gamedata/characters/
       await saveCharacterToJSON(newCharacter);
       
-      // Also save to database for compatibility
-      try {
-        const dbCharacter = await withTimeout(
-          storage.createCharacter(newCharacter),
-          5000,
-          'create character in database'
-        );
-        console.log(`✅ [CREATE CHARACTER] Character created: ${newCharacter.name} (${newCharacter.id})`);
-        console.log(`📁 [CREATE CHARACTER] Saved to: main-gamedata/characters/${newCharacter.id}.json`);
-        res.json({ success: true, character: dbCharacter });
-      } catch (dbError) {
-        // Character saved to JSON successfully, DB save failed (not critical)
-        console.log(`⚠️ [CREATE CHARACTER] JSON saved but DB failed - character will work from JSON`);
-        res.json({ success: true, character: newCharacter, warning: 'DB save failed but JSON saved' });
-      }
+      // 🔄 QUEUE for DB sync
+      queueCharacterSync(newCharacter.id, newCharacter, true);
+      
+      console.log(`✅ [CREATE CHARACTER] Character created: ${newCharacter.name} (${newCharacter.id})`);
+      console.log(`📁 [CREATE CHARACTER] Saved to: main-gamedata/characters/${newCharacter.id}.json`);
+      console.log(`🔄 [CREATE CHARACTER] Queued for DB sync`);
+      
+      res.json({ success: true, character: newCharacter, syncQueued: true });
     } catch (error) {
       logger.error('Create character failed', { error: error instanceof Error ? error.message : 'Unknown' });
       res.status(500).json({ error: 'Failed to create character' });
@@ -1385,7 +1423,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // 🎯 JSON-FIRST: Update player data (immediate telegramId_username JSON + async DB)
+  // 🎯 JSON-FIRST: Update player data (immediate telegramId_username JSON + queued DB sync)
   app.patch("/api/player/me", requireAuth, async (req, res) => {
     try {
       const updates = req.body;
@@ -1411,6 +1449,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         'update player state'
       );
       console.log(`✅ [PLAYER/ME PATCH] Successfully updated: ${updatedState.username}`);
+
+      // 🔄 QUEUE player for DB sync (throttled)
+      queuePlayerSync(req.player!.id, updatedState);
 
       // Handle sendBeacon requests (no response expected)
       if (req.headers['content-type']?.includes('text/plain')) {
@@ -1469,6 +1510,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log(`✅ [CHARACTER SELECT] SUCCESS: ${characterId} selected for ${updatedState.username}`);
       
+      // 🔄 QUEUE player for DB sync after character selection
+      queuePlayerSync(req.player!.id, updatedState);
+      
       res.json({ success: true, player: updatedState });
     } catch (error) {
       console.error(`🔴 [CHARACTER SELECT] FAILED for ${req.player!.username || req.player!.id}:`, error);
@@ -1508,6 +1552,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
       
       console.log(`✅ [DISPLAY IMAGE] SUCCESS: ${imageUrl} set for ${updatedState.username}`);
+      
+      // 🔄 QUEUE player for DB sync after display image change
+      queuePlayerSync(req.player!.id, updatedState);
       
       res.json({ success: true, player: updatedState });
     } catch (error) {
@@ -1551,6 +1598,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log(`✅ [UPGRADE] Success for ${updatedState.username}`);
       console.log(`📊 [UPGRADE] New upgrade levels:`, Object.keys(updatedState.upgrades).length);
+      
+      // 🔄 QUEUE player for DB sync after upgrade purchase
+      queuePlayerSync(req.player!.id, updatedState);
       
       res.json({ success: true, player: updatedState });
     } catch (error) {
@@ -1661,6 +1711,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             active: true,
             ...playerHealth
           },
+          syncQueues: getAllQueueStatus(), // 🔄 Include queue health
           masterData: masterDataReport,
           lunaLearning: lunaLearningReport,
           uptime: process.uptime(),
@@ -1680,6 +1731,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   console.log('✅ All routes registered successfully');
   console.log('🔧 Timeout protection: 5s max for most operations, 3s for auth');
   console.log('🎯 JSON-FIRST: Player system using telegramId_username folders');
+  console.log('🔄 SYNC QUEUES: JSON changes throttle-synced to Supabase DB');
+  console.log('  - Players: 3s batches (high frequency)');
+  console.log('  - Upgrades: 8s batches (admin changes)');
+  console.log('  - Characters: 8s batches (admin changes)');
+  console.log('  - Levels: 15s batches (less frequent changes)');
   console.log('🔧 Debug routes available at /api/debug (dev only)');
   console.log('📁 Master-data templates available for admin create flows');
   console.log('🌙 Luna Learning System active with AsyncLock deadlock prevention');
@@ -1689,5 +1745,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   console.log('🔄 ENHANCED: Character selection with memory reload retry logic');
   console.log('📤 IMPROVED: Upload endpoint with better JSON parsing');
   console.log('🔍 NEW: Config diff endpoint at GET /api/admin/config-diff');
+  console.log('🔄 NEW: Sync queue endpoints at /api/admin/sync-queues');
   return httpServer;
 }
