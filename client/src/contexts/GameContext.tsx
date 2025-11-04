@@ -39,6 +39,8 @@ interface GameContextType {
   images: ImageConfig[];
   levelConfigs: LevelConfig[];
   theme: ThemeConfig;
+  connectionStatus: 'connected' | 'timeout' | 'offline' | 'connecting';
+  lastError: string | null;
   tap: () => void;
   purchaseUpgrade: (upgradeId: string) => Promise<boolean>;
   selectCharacter: (characterId: string) => Promise<boolean>;
@@ -60,6 +62,7 @@ interface GameContextType {
   resetGame: () => void;
   dispatch: (action: any) => void;
   calculateTapValue: () => number;
+  retryConnection: () => void;
 }
 
 const GameContext = createContext<GameContextType | undefined>(undefined);
@@ -127,6 +130,34 @@ const normalizeImageUrl = (url: string | null): string | null => {
   return `/${url}`;
 };
 
+// 🔧 IMPROVED: Robust API helper with better error handling
+const apiRequest = async (url: string, options: RequestInit = {}, timeoutMs: number = 3000): Promise<Response> => {
+  const sessionToken = localStorage.getItem('sessionToken');
+  const defaultHeaders: Record<string, string> = {
+    'Content-Type': 'application/json'
+  };
+  
+  if (sessionToken) {
+    defaultHeaders['Authorization'] = `Bearer ${sessionToken}`;
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      headers: { ...defaultHeaders, ...options.headers },
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    throw error;
+  }
+};
+
 export function GameProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<GameState>(() => createInitialState());
   const [upgrades, setUpgrades] = useState<UpgradeConfig[]>([]);
@@ -136,7 +167,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = useState<ThemeConfig>(DEFAULT_THEME);
   const [pendingPurchases, setPendingPurchases] = useState<Set<string>>(new Set());
   const [isInitialized, setIsInitialized] = useState(false);
-  const [loadingError, setLoadingError] = useState<string | null>(null);
+  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'timeout' | 'offline' | 'connecting'>('connecting');
+  const [lastError, setLastError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   const calculateTapValue = useCallback(() => {
     const tapPowerUpgrades = upgrades.filter(u => u.type === 'perTap');
@@ -165,170 +198,159 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
   }, [state.boostActive, state.boostExpiresAt]);
 
-  // 🔧 CRITICAL FIX: Prevent timeout errors and handle failures gracefully
-  useEffect(() => {
-    let mounted = true;
-    
-    const loadAllData = async () => {
-      console.log(`🔍 [GAME CONTEXT] Starting data load...`);
+  // 🔧 ROBUST LOADING: Simplified with better error recovery
+  const loadAllData = useCallback(async () => {
+    console.log('🔄 [GAME] Starting data load (attempt ' + (retryCount + 1) + ')...');
+    setConnectionStatus('connecting');
+    setLastError(null);
+
+    const sessionToken = localStorage.getItem('sessionToken');
+    if (!sessionToken) {
+      console.log('❌ [GAME] No session token');
+      setConnectionStatus('offline');
+      setLastError('Not authenticated - please login');
+      setIsInitialized(true);
+      return;
+    }
+
+    try {
+      // Step 1: Test basic connectivity
+      console.log('🏥 [GAME] Testing server connection...');
+      const healthRes = await apiRequest('/api/health', {}, 2000);
+      if (!healthRes.ok) {
+        throw new Error(`Server unreachable (${healthRes.status})`);
+      }
+      console.log('✅ [GAME] Server is responding');
+
+      // Step 2: Validate authentication
+      console.log('🔑 [GAME] Validating session...');
+      const authRes = await apiRequest('/api/auth/me', {}, 3000);
       
-      const sessionToken = localStorage.getItem('sessionToken');
-      if (!sessionToken) {
-        console.log('❌ [GAME CONTEXT] No session token, setting empty state');
-        setIsInitialized(true);
-        return;
+      if (!authRes.ok) {
+        if (authRes.status === 401) {
+          localStorage.removeItem('sessionToken');
+          throw new Error('Session expired - please login again');
+        }
+        throw new Error(`Auth failed (${authRes.status})`);
       }
 
-      try {
-        console.log('🎯 [GAME CONTEXT] Loading from JSON-first system...');
+      const authData = await authRes.json();
+      if (!authData.success || !authData.player) {
+        throw new Error('Invalid auth response');
+      }
+      
+      const player = authData.player;
+      console.log('✅ [GAME] Authentication valid:', player.username);
 
-        // 🔧 REDUCED TIMEOUT: Use shorter timeout to prevent hanging
-        const authRes = await fetch('/api/auth/me', {
-          headers: { 'Authorization': `Bearer ${sessionToken}` },
-          signal: AbortSignal.timeout(5000) // Reduced from 10000
-        });
+      // Step 3: Load game config (with fallbacks)
+      console.log('📦 [GAME] Loading game configuration...');
+      const configResults = await Promise.allSettled([
+        apiRequest('/api/upgrades', {}, 3000).then(r => r.ok ? r.json() : { upgrades: [] }),
+        apiRequest('/api/characters', {}, 3000).then(r => r.ok ? r.json() : { characters: [] }),
+        apiRequest('/api/levels', {}, 3000).then(r => r.ok ? r.json() : { levels: [] }),
+        apiRequest('/api/media', {}, 3000).then(r => r.ok ? r.json() : { media: [] })
+      ]);
 
-        if (!mounted) return;
+      // Extract config data with fallbacks
+      const upgradesData = configResults[0].status === 'fulfilled' ? configResults[0].value : { upgrades: [] };
+      const charactersData = configResults[1].status === 'fulfilled' ? configResults[1].value : { characters: [] };
+      const levelsData = configResults[2].status === 'fulfilled' ? configResults[2].value : { levels: [] };
+      const mediaData = configResults[3].status === 'fulfilled' ? configResults[3].value : { media: [] };
+      
+      const loadedUpgrades = upgradesData.upgrades || [];
+      const loadedCharacters = charactersData.characters || [];
+      const loadedLevels = levelsData.levels || [];
+      const loadedMedia = mediaData.media || [];
 
-        if (!authRes.ok) {
-          console.error(`❌ [GAME CONTEXT] Session invalid: ${authRes.status}`);
-          if (authRes.status === 401) {
-            localStorage.removeItem('sessionToken');
-          }
-          setLoadingError(`Session error (${authRes.status})`);
-          setIsInitialized(true);
-          return;
-        }
+      // Update config state
+      setUpgrades(loadedUpgrades);
+      setCharacters(loadedCharacters);
+      setLevelConfigs(loadedLevels);
+      
+      const imageConfigs: ImageConfig[] = loadedMedia.map((m: any) => ({
+        id: m.id,
+        characterId: m.characterId,
+        url: normalizeImageUrl(m.url),
+        unlockLevel: m.unlockLevel,
+        categories: m.categories || [],
+        poses: m.poses || [],
+        isHidden: m.isHidden || false
+      }));
+      setImages(imageConfigs);
+      
+      console.log('✅ [GAME] Config loaded:', {
+        upgrades: loadedUpgrades.length,
+        characters: loadedCharacters.length,
+        levels: loadedLevels.length,
+        media: imageConfigs.length
+      });
 
-        const authData = await authRes.json();
-        if (!authData.success || !authData.player) {
-          console.error('❌ [GAME CONTEXT] Invalid auth response');
-          setLoadingError('Invalid authentication');
-          setIsInitialized(true);
-          return;
-        }
-        
-        const playerFromAuth = authData.player;
-        console.log(`✅ [GAME CONTEXT] Player loaded: ${playerFromAuth.username}`);
+      // Step 4: Update player state
+      const playerUpgrades = player.upgrades || {};
+      const { baseMaxEnergy, baseEnergyRegen } = calculateBaseEnergyValues(loadedUpgrades, playerUpgrades);
+      
+      setState(prev => ({
+        ...prev,
+        username: player.username,
+        telegramId: player.telegramId,
+        points: typeof player.points === 'string' ? parseFloat(player.points) : (player.points || 0),
+        lustPoints: typeof player.lustPoints === 'string' ? parseFloat(player.lustPoints) : (player.lustPoints || player.points || 0),
+        lustGems: player.lustGems || 0,
+        energy: Math.min(player.energy || baseMaxEnergy, baseMaxEnergy),
+        energyMax: baseMaxEnergy,
+        level: player.level || 1,
+        selectedCharacterId: player.selectedCharacterId || (loadedCharacters[0]?.id || 'shadow'),
+        selectedImageId: player.selectedImageId || null,
+        displayImage: normalizeImageUrl(player.displayImage),
+        upgrades: playerUpgrades,
+        unlockedCharacters: Array.isArray(player.unlockedCharacters) ? player.unlockedCharacters : ['shadow'],
+        unlockedImages: Array.isArray(player.unlockedImages) ? player.unlockedImages : [],
+        passiveIncomeRate: player.passiveIncomeRate || 0,
+        energyRegenRate: baseEnergyRegen,
+        isAdmin: player.isAdmin || false,
+        boostActive: player.boostActive || false,
+        boostMultiplier: player.boostMultiplier || 1.0,
+        boostExpiresAt: player.boostExpiresAt ? new Date(player.boostExpiresAt) : null,
+        boostEnergy: player.boostEnergy || 0,
+        totalTapsToday: player.totalTapsToday || 0,
+        totalTapsAllTime: player.totalTapsAllTime || 0,
+        lastDailyReset: player.lastDailyReset ? new Date(player.lastDailyReset) : new Date(),
+        lastWeeklyReset: player.lastWeeklyReset ? new Date(player.lastWeeklyReset) : new Date()
+      }));
 
-        if (!mounted) return;
-
-        // 🔧 PARALLEL LOADING: Load all config in parallel with shorter timeouts
-        const configPromises = [
-          fetch('/api/upgrades', {
-            headers: { 'Authorization': `Bearer ${sessionToken}` },
-            signal: AbortSignal.timeout(3000) // Reduced timeout
-          }).then(r => r.ok ? r.json() : null).catch(() => null),
-          
-          fetch('/api/characters', {
-            headers: { 'Authorization': `Bearer ${sessionToken}` },
-            signal: AbortSignal.timeout(3000)
-          }).then(r => r.ok ? r.json() : null).catch(() => null),
-          
-          fetch('/api/levels', {
-            headers: { 'Authorization': `Bearer ${sessionToken}` },
-            signal: AbortSignal.timeout(3000)
-          }).then(r => r.ok ? r.json() : null).catch(() => null),
-          
-          fetch('/api/media', {
-            headers: { 'Authorization': `Bearer ${sessionToken}` },
-            signal: AbortSignal.timeout(3000)
-          }).then(r => r.ok ? r.json() : null).catch(() => null)
-        ];
-
-        const [upgradesData, charactersData, levelsData, mediaData] = await Promise.allSettled(
-          configPromises
-        );
-
-        if (!mounted) return;
-
-        // Set config data with fallbacks
-        const upgrades = upgradesData.status === 'fulfilled' && upgradesData.value?.upgrades ? upgradesData.value.upgrades : [];
-        const characters = charactersData.status === 'fulfilled' && charactersData.value?.characters ? charactersData.value.characters : [];
-        const levels = levelsData.status === 'fulfilled' && levelsData.value?.levels ? levelsData.value.levels : [];
-        const media = mediaData.status === 'fulfilled' && mediaData.value?.media ? mediaData.value.media : [];
-        
-        setUpgrades(upgrades);
-        setCharacters(characters);
-        setLevelConfigs(levels);
-        
-        const imageConfigs: ImageConfig[] = media.map((m: any) => ({
-          id: m.id,
-          characterId: m.characterId,
-          url: normalizeImageUrl(m.url),
-          unlockLevel: m.unlockLevel,
-          categories: m.categories || [],
-          poses: m.poses || [],
-          isHidden: m.isHidden || false
-        }));
-        setImages(imageConfigs);
-        
-        console.log('✅ [GAME CONTEXT] Config loaded:', { upgrades: upgrades.length, characters: characters.length, media: imageConfigs.length });
-
-        // Set player state
-        if (upgrades.length > 0) {
-          const player = playerFromAuth;
-          const playerUpgrades = player.upgrades || {};
-          const { baseMaxEnergy, baseEnergyRegen } = calculateBaseEnergyValues(upgrades, playerUpgrades);
-          
-          setState(prev => ({
-            ...prev,
-            username: player.username,
-            telegramId: player.telegramId,
-            points: typeof player.points === 'string' ? parseFloat(player.points) : (player.points || 0),
-            lustPoints: typeof player.lustPoints === 'string' ? parseFloat(player.lustPoints) : (player.lustPoints || player.points || 0),
-            lustGems: player.lustGems || 0,
-            energy: Math.min(player.energy || baseMaxEnergy, baseMaxEnergy),
-            energyMax: baseMaxEnergy,
-            level: player.level || 1,
-            selectedCharacterId: player.selectedCharacterId || (characters[0]?.id || 'shadow'),
-            selectedImageId: player.selectedImageId || null,
-            displayImage: normalizeImageUrl(player.displayImage),
-            upgrades: playerUpgrades,
-            unlockedCharacters: Array.isArray(player.unlockedCharacters) ? player.unlockedCharacters : ['shadow'],
-            unlockedImages: Array.isArray(player.unlockedImages) ? player.unlockedImages : [],
-            passiveIncomeRate: player.passiveIncomeRate || 0,
-            energyRegenRate: baseEnergyRegen,
-            isAdmin: player.isAdmin || false,
-            boostActive: player.boostActive || false,
-            boostMultiplier: player.boostMultiplier || 1.0,
-            boostExpiresAt: player.boostExpiresAt ? new Date(player.boostExpiresAt) : null,
-            boostEnergy: player.boostEnergy || 0,
-            totalTapsToday: player.totalTapsToday || 0,
-            totalTapsAllTime: player.totalTapsAllTime || 0,
-            lastDailyReset: player.lastDailyReset ? new Date(player.lastDailyReset) : new Date(),
-            lastWeeklyReset: player.lastWeeklyReset ? new Date(player.lastWeeklyReset) : new Date()
-          }));
-          
-          console.log('✅ [GAME CONTEXT] Player state loaded successfully');
-        }
-
-        setLoadingError(null);
-        console.log('✅ [GAME CONTEXT] Complete - All data loaded');
-      } catch (error) {
-        if (!mounted) return;
-        console.error('❌ [GAME CONTEXT] Load failed:', error);
-        
-        // 🔧 GRACEFUL DEGRADATION: Set minimal working state
-        if (error instanceof Error && error.name === 'AbortError') {
-          setLoadingError('Connection timeout - using offline mode');
-          // Keep current state, just mark as initialized
+      setConnectionStatus('connected');
+      setLastError(null);
+      setRetryCount(0);
+      console.log('🎉 [GAME] All data loaded successfully');
+      
+    } catch (error) {
+      console.error('❌ [GAME] Load failed:', error);
+      
+      if (error instanceof Error) {
+        if (error.name === 'AbortError' || error.message.includes('timeout')) {
+          setConnectionStatus('timeout');
+          setLastError('Connection timeout - check internet connection');
         } else {
-          setLoadingError(error instanceof Error ? error.message : 'Load failed');
+          setConnectionStatus('offline');
+          setLastError(error.message);
         }
-      } finally {
-        if (mounted) {
-          setIsInitialized(true); // Always initialize, even on error
-        }
+      } else {
+        setConnectionStatus('offline');
+        setLastError('Unknown connection error');
       }
-    };
+    } finally {
+      setIsInitialized(true);
+    }
+  }, [retryCount]);
 
+  const retryConnection = useCallback(() => {
+    setRetryCount(prev => prev + 1);
+  }, []);
+
+  // Initial load
+  useEffect(() => {
     loadAllData();
-    
-    return () => {
-      mounted = false;
-    };
-  }, []); // Single load only
+  }, [loadAllData]);
 
   // Recalculate stats when upgrades change
   useEffect(() => {
@@ -365,9 +387,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     applyTheme(theme);
   }, [theme]);
 
-  // 🔧 FIXED: Reduced sync frequency to prevent spam
+  // 🔧 REDUCED SPAM: Only sync essential data when needed
   useEffect(() => {
-    if (!isInitialized || !state.username) return;
+    if (!isInitialized || !state.username || connectionStatus !== 'connected') return;
     
     let syncCounter = 0;
     const interval = setInterval(() => {
@@ -387,25 +409,19 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
         if (!energyChanged && !pointsChanged) return prev;
 
-        // 🔧 REDUCED SPAM: Only sync every 60 seconds instead of every 10
+        // Only sync every 2 minutes to reduce server load
         syncCounter++;
-        if (syncCounter >= 60) {
+        if (syncCounter >= 120) {
           syncCounter = 0;
           
-          // 🔧 SILENT SYNC: Don't log routine syncs to reduce console spam
-          fetch('/api/player/me', {
+          apiRequest('/api/player/me', {
             method: 'PATCH',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${sessionToken}`
-            },
             body: JSON.stringify({
               energy: Math.round(newEnergy),
               points: Math.round(newPoints),
               lustPoints: Math.round(newLustPoints)
             })
-          })
-          .catch(() => {}); // Silent fail for background sync
+          }, 2000).catch(() => {});
         }
 
         return { ...prev, energy: newEnergy, points: newPoints, lustPoints: newLustPoints };
@@ -413,7 +429,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [isInitialized, state.username]);
+  }, [isInitialized, state.username, connectionStatus]);
 
   const tap = useCallback(async () => {
     setState(prev => {
@@ -426,23 +442,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       const newTotalTapsToday = prev.totalTapsToday + 1;
       const newTotalTapsAllTime = prev.totalTapsAllTime + 1;
 
-      // Log tap to LunaBug if available
-      if ((window as any).LunaBug?.core) {
-        (window as any).LunaBug.core.logEvent('tap_event', {
-          tapValue: actualTapValue,
-          boostActive: prev.boostActive,
-          energyBefore: prev.energy,
-          pointsBefore: prev.points
-        });
-      }
-
       // Immediate sync for taps (user expects instant response)
-      fetch('/api/player/me', {
+      apiRequest('/api/player/me', {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`
-        },
         body: JSON.stringify({
           points: Math.round(newPoints),
           lustPoints: Math.round(newLustPoints),
@@ -450,8 +452,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           totalTapsToday: newTotalTapsToday,
           totalTapsAllTime: newTotalTapsAllTime
         })
-      })
-      .catch(() => {}); // Silent fail
+      }, 2000).catch(() => {});
 
       return {
         ...prev,
@@ -474,49 +475,17 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         setState(prev => ({ ...prev, displayImage: normalizeImageUrl(action.payload) }));
         break;
       case 'REFRESH_FROM_SERVER':
-        const sessionToken = localStorage.getItem('sessionToken');
-        if (sessionToken) {
-          console.log('🔄 [REFRESH] Refreshing from server...');
-          fetch('/api/auth/me', {
-            headers: { 'Authorization': `Bearer ${sessionToken}` },
-            signal: AbortSignal.timeout(5000)
-          })
-          .then(res => res.json())
-          .then(data => {
-            if (data.success && data.player) {
-              const player = data.player;
-              setState(prev => {
-                const { baseMaxEnergy, baseEnergyRegen } = calculateBaseEnergyValues(upgrades, player.upgrades || {});
-                return {
-                  ...prev,
-                  points: typeof player.points === 'string' ? parseFloat(player.points) : (player.points || prev.points),
-                  lustPoints: typeof player.lustPoints === 'string' ? parseFloat(player.lustPoints) : (player.lustPoints || prev.lustPoints),
-                  energy: Math.min(player.energy || prev.energy, baseMaxEnergy),
-                  energyMax: baseMaxEnergy,
-                  energyRegenRate: baseEnergyRegen,
-                  upgrades: player.upgrades || prev.upgrades,
-                  selectedCharacterId: player.selectedCharacterId || prev.selectedCharacterId,
-                  displayImage: normalizeImageUrl(player.displayImage) || prev.displayImage
-                };
-              });
-              console.log('✅ [REFRESH] State refreshed');
-              setLoadingError(null);
-            }
-          })
-          .catch(err => {
-            console.error('🔴 [REFRESH] Failed:', err);
-            setLoadingError('Refresh failed');
-          });
-        }
+        console.log('🔄 [REFRESH] Manual refresh requested');
+        loadAllData();
         break;
       default:
         break;
     }
-  }, [upgrades]);
+  }, [loadAllData]);
 
-  // FIXED: Purchase upgrade with immediate local update
+  // 🔧 IMPROVED: Upgrade purchase with better error handling
   const purchaseUpgrade = useCallback(async (upgradeId: string): Promise<boolean> => {
-    if (pendingPurchases.has(upgradeId)) return false;
+    if (pendingPurchases.has(upgradeId) || connectionStatus !== 'connected') return false;
     
     const upgrade = upgrades.find(u => u.id === upgradeId);
     if (!upgrade) return false;
@@ -531,26 +500,21 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setPendingPurchases(prev => new Set(prev).add(upgradeId));
 
     try {
-      console.log(`🎯 [UPGRADE] Purchasing ${upgradeId} level ${newLevel}`);
+      console.log(`🛒 [UPGRADE] Purchasing ${upgradeId} level ${newLevel}`);
       
-      const response = await fetch('/api/player/upgrades', {
+      const response = await apiRequest('/api/player/upgrades', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`
-        },
-        body: JSON.stringify({ upgradeId, level: newLevel }),
-        signal: AbortSignal.timeout(5000) // Shorter timeout
-      });
+        body: JSON.stringify({ upgradeId, level: newLevel })
+      }, 5000);
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+        throw new Error(`Purchase failed: ${response.status}`);
       }
 
       const result = await response.json();
       const updatedPlayer = result.player;
       
-      // 🔧 IMMEDIATE LOCAL UPDATE
+      // Immediate local update
       setState(prev => {
         const newUpgrades = { ...prev.upgrades, [upgradeId]: newLevel };
         const { baseMaxEnergy, baseEnergyRegen } = calculateBaseEnergyValues(upgrades, newUpgrades);
@@ -566,10 +530,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         };
       });
       
-      console.log(`✅ [UPGRADE] ${upgradeId} level ${newLevel} purchased`);
+      console.log(`✅ [UPGRADE] ${upgradeId} level ${newLevel} purchased successfully`);
       return true;
     } catch (err) {
-      console.error(`🔴 [UPGRADE] Purchase failed:`, err);
+      console.error(`❌ [UPGRADE] Purchase failed:`, err);
+      setLastError(`Upgrade purchase failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
       return false;
     } finally {
       setPendingPurchases(prev => {
@@ -578,23 +543,22 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         return next;
       });
     }
-  }, [state.upgrades, state.points, upgrades, pendingPurchases]);
+  }, [state.upgrades, state.points, upgrades, pendingPurchases, connectionStatus]);
 
   const selectCharacter = useCallback(async (characterId: string): Promise<boolean> => {
-    if (!state.unlockedCharacters.includes(characterId)) return false;
+    if (!state.unlockedCharacters.includes(characterId) || connectionStatus !== 'connected') return false;
 
     try {
-      const response = await fetch('/api/player/select-character', {
+      console.log(`🎭 [CHARACTER] Selecting ${characterId}`);
+      
+      const response = await apiRequest('/api/player/select-character', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`
-        },
-        body: JSON.stringify({ characterId }),
-        signal: AbortSignal.timeout(5000)
-      });
+        body: JSON.stringify({ characterId })
+      }, 5000);
 
-      if (!response.ok) return false;
+      if (!response.ok) {
+        throw new Error(`Selection failed: ${response.status}`);
+      }
 
       const result = await response.json();
       const updatedPlayer = result.player;
@@ -606,12 +570,14 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         displayImage: normalizeImageUrl(updatedPlayer.displayImage)
       }));
 
+      console.log(`✅ [CHARACTER] Successfully selected ${characterId}`);
       return true;
     } catch (error) {
-      console.error('🔴 [SELECT CHARACTER] Error:', error);
+      console.error('❌ [CHARACTER] Selection failed:', error);
+      setLastError(`Character selection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
       return false;
     }
-  }, [state.unlockedCharacters]);
+  }, [state.unlockedCharacters, connectionStatus]);
 
   const selectImage = useCallback((imageId: string) => {
     const selectedImg = images.find(img => img.id === imageId);
@@ -707,7 +673,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setImages([]);
     setLevelConfigs([]);
     setTheme(DEFAULT_THEME);
-    setLoadingError(null);
+    setLastError(null);
+    setConnectionStatus('connecting');
   }, []);
 
   return (
@@ -718,6 +685,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       images,
       levelConfigs,
       theme,
+      connectionStatus,
+      lastError,
       tap,
       purchaseUpgrade,
       selectCharacter,
@@ -738,30 +707,54 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       updateTheme,
       resetGame,
       dispatch,
-      calculateTapValue
+      calculateTapValue,
+      retryConnection
     }}>
       {children}
       
-      {/* 🔍 Minimal debug overlay - only show critical errors */}
-      {process.env.NODE_ENV === 'development' && loadingError && (
-        <div className="fixed bottom-4 right-4 bg-red-900/90 text-white p-3 rounded-lg border border-red-500 max-w-xs text-sm z-50">
-          <div className="font-semibold">🔍 Debug Info:</div>
-          <div className="text-xs">{loadingError}</div>
-          <div className="text-xs">User: {state.username || 'None'}</div>
-          <div className="text-xs">Character: {state.selectedCharacterId || 'None'}</div>
-          <div className="text-xs">Upgrades: {Object.keys(state.upgrades).length}</div>
-          <button 
-            onClick={() => dispatch({ type: 'REFRESH_FROM_SERVER' })}
-            className="mt-2 px-2 py-1 bg-blue-600 rounded text-xs w-full"
-          >
-            🔄 Refresh
-          </button>
-          <button 
-            onClick={() => setLoadingError(null)}
-            className="mt-1 px-2 py-1 bg-gray-600 rounded text-xs w-full"
-          >
-            ❌ Hide
-          </button>
+      {/* 🔧 IMPROVED: Better status overlay */}
+      {(connectionStatus !== 'connected' || lastError) && (
+        <div className="fixed bottom-4 right-4 bg-gray-900/95 text-white p-4 rounded-lg border max-w-sm text-sm z-50">
+          <div className="flex items-center gap-2 mb-2">
+            <div className={`w-2 h-2 rounded-full ${
+              connectionStatus === 'connected' ? 'bg-green-500' :
+              connectionStatus === 'connecting' ? 'bg-yellow-500 animate-pulse' :
+              connectionStatus === 'timeout' ? 'bg-orange-500' :
+              'bg-red-500'
+            }`} />
+            <span className="font-medium">
+              {connectionStatus === 'connected' ? '🟢 Connected' :
+               connectionStatus === 'connecting' ? '🟡 Connecting...' :
+               connectionStatus === 'timeout' ? '🟠 Timeout' :
+               '🔴 Offline'}
+            </span>
+          </div>
+          
+          {lastError && (
+            <div className="text-xs text-gray-300 mb-2">{lastError}</div>
+          )}
+          
+          <div className="text-xs text-gray-400 mb-3">
+            User: {state.username || 'Unknown'} | 
+            Character: {state.selectedCharacterId || 'None'} | 
+            Upgrades: {Object.keys(state.upgrades).length}
+          </div>
+          
+          <div className="flex gap-2">
+            <button 
+              onClick={retryConnection}
+              className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-xs flex-1"
+              disabled={connectionStatus === 'connecting'}
+            >
+              {connectionStatus === 'connecting' ? '⏳ Connecting...' : '🔄 Retry'}
+            </button>
+            <button 
+              onClick={() => setLastError(null)}
+              className="px-3 py-1 bg-gray-600 hover:bg-gray-700 rounded text-xs"
+            >
+              ❌
+            </button>
+          </div>
         </div>
       )}
     </GameContext.Provider>
