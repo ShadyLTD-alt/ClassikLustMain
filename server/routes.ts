@@ -29,8 +29,6 @@ import masterDataService from "./utils/MasterDataService";
 import { playerStateManager, getPlayerState, updatePlayerState, selectCharacterForPlayer, purchaseUpgradeForPlayer, setDisplayImageForPlayer } from "./utils/playerStateManager";
 // 🌙 LUNA LEARNING: Import learning system (now fixed)
 import { lunaLearning } from "./utils/lunaLearningSystem";
-// 🔧 DEBUG: Import debug routes for development troubleshooting
-import debugRoutes from './routes/debug.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -71,10 +69,15 @@ const upload = multer({
 export async function registerRoutes(app: Express): Promise<Server> {
   logger.info('⚡ Registering routes...');
 
-  // 🔧 REGISTER DEBUG ROUTES (development only)
+  // 🔧 REGISTER DEBUG ROUTES (development only) - FIXED IMPORT
   if (process.env.NODE_ENV !== 'production') {
-    app.use('/api/debug', debugRoutes);
-    console.log('🔧 Debug routes registered at /api/debug');
+    try {
+      const debugRoutes = await import('./routes/debug.js');
+      app.use('/api/debug', debugRoutes.default);
+      console.log('🔧 Debug routes registered at /api/debug');
+    } catch (error) {
+      console.warn('⚠️ Debug routes not available:', error instanceof Error ? error.message : 'Unknown');
+    }
   }
 
   // 🔍 DIAGNOSTIC: Enhanced health check with detailed debugging
