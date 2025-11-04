@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { eq, and, lt } from "drizzle-orm";
+import { eq, and, lt, sql } from "drizzle-orm";
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from "@shared/schema";
@@ -258,6 +258,7 @@ export class DatabaseStorage implements IStorage {
       return [];
     }
     
+    // Get upgrade definitions with a proper IN query
     const upgradeDefs = await db
       .select()
       .from(schema.upgrades)
