@@ -20,7 +20,7 @@
   "selectedCharacterId": "shadow",
   "selectedImageId": null,
   "displayImage": null,
-  "isAdmin": false,
+  "isAdmin": true,
   "lastLogin": "2025-11-04T06:33:53.065Z",
   "createdAt": "2025-11-04T06:33:53.065Z",
   "boostActive": false,
