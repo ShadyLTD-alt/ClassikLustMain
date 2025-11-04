@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import GameLayout from "@/components/GameLayout";
 import { useGame } from "@/contexts/GameContext";
 import CharacterSelectionScrollable from "@/components/CharacterSelectionScrollable";
 import UpgradePanel from "@/components/UpgradePanel";
@@ -8,10 +7,10 @@ import LevelUp from "@/components/LevelUp";
 import ChatModal from "@/components/ChatModal";
 import { AdminFAB } from "@/components/AdminFAB";
 import { apiRequest } from "@/lib/queryClient";
-import { User, Crown, Zap, Heart, Gem } from "lucide-react";
+import { User, Crown, Zap, Heart, Gem, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-// 🎆 NEW: Enhanced floating tap effects with better animations
+// 🎆 Enhanced floating tap effects with better animations
 interface TapEffect {
   id: string;
   x: number;
@@ -28,14 +27,20 @@ export default function GameInterfaceV3() {
   const [showChat, setShowChat] = useState(false);
   const [showDebugger, setShowDebugger] = useState(false);
   const [tapEffects, setTapEffects] = useState<TapEffect[]>([]);
+  const [iconsLoaded, setIconsLoaded] = useState({ hearts: false, gems: false });
 
   // Fetch current character data
   const { data: currentCharacter } = useQuery({
     queryKey: ['/api/characters', state?.selectedCharacterId],
     queryFn: async () => {
       if (!state?.selectedCharacterId) return null;
-      const response = await apiRequest('GET', `/api/characters/${state.selectedCharacterId}`);
-      return await response.json();
+      try {
+        const response = await apiRequest('GET', `/api/characters/${state.selectedCharacterId}`);
+        return await response.json();
+      } catch (error) {
+        console.warn('⚠️ [CHARACTER FETCH] Failed to fetch character:', error);
+        return null;
+      }
     },
     enabled: !!state?.selectedCharacterId,
   });
@@ -86,13 +91,59 @@ export default function GameInterfaceV3() {
     return null;
   };
 
+  // 🛡️ Safe icon rendering with fallbacks
+  const HeartIcon = ({ className }: { className?: string }) => {
+    if (iconsLoaded.hearts) {
+      return (
+        <img 
+          src="/uploads/gameui/floatinghearts.png" 
+          alt="♥" 
+          className={className}
+          onError={() => setIconsLoaded(prev => ({ ...prev, hearts: false }))}
+        />
+      );
+    }
+    return <Heart className={className || "w-4 h-4"} />;
+  };
+
+  const GemIcon = ({ className }: { className?: string }) => {
+    if (iconsLoaded.gems) {
+      return (
+        <img 
+          src="/uploads/gameui/lustgems.png" 
+          alt="💎" 
+          className={className}
+          onError={() => setIconsLoaded(prev => ({ ...prev, gems: false }))}
+        />
+      );
+    }
+    return <Gem className={className || "w-4 h-4"} />;
+  };
+
+  // Check if icons exist on mount
+  useState(() => {
+    const checkIcon = async (url: string, key: 'hearts' | 'gems') => {
+      try {
+        const img = new Image();
+        img.onload = () => setIconsLoaded(prev => ({ ...prev, [key]: true }));
+        img.onerror = () => setIconsLoaded(prev => ({ ...prev, [key]: false }));
+        img.src = url;
+      } catch {
+        // Icon doesn't exist, use fallback
+      }
+    };
+    
+    checkIcon('/uploads/gameui/floatinghearts.png', 'hearts');
+    checkIcon('/uploads/gameui/lustgems.png', 'gems');
+  });
+
   const characterImage = getCharacterImage();
   const avatarImage = getAvatarImage();
   const playerUsername = playerData?.player?.username || playerData?.username || 'Player';
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 text-white">
-      {/* 🆕 REDESIGNED TOP BAR */}
+      {/* 🎨 REDESIGNED TOP BAR */}
       <header className="sticky top-0 z-40 w-full bg-gradient-to-r from-gray-900/95 via-purple-900/90 to-gray-900/95 backdrop-blur supports-[backdrop-filter]:bg-black/60 border-b border-purple-500/20">
         <div className="mx-auto max-w-5xl px-4 py-3">
           {/* Top Row: Avatar Section + LustPoints per Hour Center */}
@@ -137,32 +188,18 @@ export default function GameInterfaceV3() {
               
               {/* LustPoints + LustGems */}
               <div className="flex flex-col gap-2">
-                {/* 🎯 LustPoints with floatinghearts.png icon */}
+                {/* 🎯 LustPoints with heart icon */}
                 <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-black/30 border border-purple-500/20 min-w-[120px]">
-                  <img 
-                    src="/uploads/gameui/floatinghearts.png" 
-                    alt="LP" 
-                    className="w-4 h-4 opacity-80"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).style.display = 'none';
-                    }}
-                  />
+                  <HeartIcon className="w-4 h-4 opacity-80" />
                   <div>
                     <div className="text-[10px] text-purple-300 font-semibold tracking-wider">LUST<span className="text-pink-400">POINTS</span></div>
                     <div className="text-white text-sm font-bold tabular-nums leading-tight">{Math.floor(state?.lustPoints || state?.points || 0).toLocaleString()}</div>
                   </div>
                 </div>
                 
-                {/* 🎯 LustGems with lustgems.png icon */}
+                {/* 🎯 LustGems with gem icon */}
                 <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-black/30 border border-cyan-500/20 min-w-[120px]">
-                  <img 
-                    src="/uploads/gameui/lustgems.png" 
-                    alt="LG" 
-                    className="w-4 h-4 opacity-80"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).style.display = 'none';
-                    }}
-                  />
+                  <GemIcon className="w-4 h-4 opacity-80" />
                   <div>
                     <div className="text-[10px] text-cyan-300 font-semibold tracking-wider">LUST<span className="text-cyan-400">GEMS</span></div>
                     <div className="text-white text-sm font-bold tabular-nums leading-tight">{state?.lustGems || 0}</div>
@@ -173,14 +210,7 @@ export default function GameInterfaceV3() {
             
             {/* CENTER: LustPoints per Hour */}
             <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-black/30 border border-purple-500/20">
-              <img 
-                src="/uploads/gameui/floatinghearts.png" 
-                alt="LP/HR" 
-                className="w-4 h-4 opacity-80"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = 'none';
-                }}
-              />
+              <HeartIcon className="w-4 h-4 opacity-80" />
               <div>
                 <div className="text-[10px] text-purple-300 font-semibold tracking-wide">LUSTPOINTS PER HOUR</div>
                 <div className="text-white text-sm font-bold tabular-nums leading-tight">{Math.floor(state?.passiveIncomeRate || 0).toLocaleString()}</div>
@@ -249,7 +279,7 @@ export default function GameInterfaceV3() {
             <div className="relative">
               {/* 🎯 2.5x BIGGER Character Display Area */}
               <div
-                className="w-96 h-96 mx-auto rounded-3xl bg-gradient-to-br from-purple-800/40 via-black/50 to-pink-800/40 border-3 border-purple-500/40 flex items-center justify-center cursor-pointer hover:border-purple-400/60 transition-all active:scale-[0.98] overflow-hidden relative group"
+                className="w-96 h-96 mx-auto rounded-3xl bg-gradient-to-br from-purple-800/40 via-black/50 to-pink-800/40 border-3 border-purple-500/40 flex items-center justify-center cursor-pointer hover:border-purple-400/60 transition-all active:scale-[0.98] overflow-hidden relative group character-frame"
                 onClick={handleTap}
                 style={{
                   boxShadow: '0 12px 48px rgba(168, 85, 247, 0.2), inset 0 2px 0 rgba(255, 255, 255, 0.1)'
@@ -327,7 +357,7 @@ export default function GameInterfaceV3() {
                 )}
               </div>
 
-              {/* 🎯 ENHANCED: Floating tap effects with better animations and icons */}
+              {/* 🎆 ENHANCED: Floating tap effects with better animations and fallback icons */}
               {tapEffects.map(effect => (
                 <div
                   key={effect.id}
@@ -344,17 +374,8 @@ export default function GameInterfaceV3() {
                   }}
                 >
                   {effect.type === 'boost' && <span>⚡</span>}
-                  {effect.type === 'gems' && <Gem className="w-5 h-5" />}
-                  {effect.type === 'points' && (
-                    <img 
-                      src="/uploads/gameui/floatinghearts.png" 
-                      alt="+" 
-                      className="w-5 h-5 opacity-90"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).style.display = 'none';
-                      }}
-                    />
-                  )}
+                  {effect.type === 'gems' && <GemIcon className="w-5 h-5" />}
+                  {effect.type === 'points' && <HeartIcon className="w-5 h-5 opacity-90" />}
                   +{effect.value}
                 </div>
               ))}
@@ -425,35 +446,41 @@ export default function GameInterfaceV3() {
                 boostMultiplier: state?.boostMultiplier,
                 selectedCharacterId: state?.selectedCharacterId,
                 username: playerUsername,
-                isAdmin: state?.isAdmin
+                isAdmin: state?.isAdmin,
+                iconsLoaded
               }, null, 2)}</pre>
             </div>
           </div>
         </div>
       )}
       
-      {/* 🎆 ENHANCED CSS Animation for floating effects with transparency fade */}
+      {/* 🎆 ENHANCED CSS Animation for floating effects with transparency fade and rotation */}
       <style jsx>{`
         @keyframes enhanced-float-up {
           0% {
             opacity: 1;
             transform: translate(-50%, -50%) scale(1) rotate(0deg);
+            filter: drop-shadow(0 0 8px rgba(168, 85, 247, 0.6));
           }
           25% {
             opacity: 1;
             transform: translate(-50%, -80px) scale(1.3) rotate(3deg);
+            filter: drop-shadow(0 0 12px rgba(168, 85, 247, 0.8));
           }
           50% {
             opacity: 0.8;
             transform: translate(-50%, -140px) scale(1.1) rotate(-2deg);
+            filter: drop-shadow(0 0 10px rgba(168, 85, 247, 0.6));
           }
           75% {
             opacity: 0.4;
             transform: translate(-50%, -200px) scale(0.9) rotate(1deg);
+            filter: drop-shadow(0 0 6px rgba(168, 85, 247, 0.4));
           }
           100% {
             opacity: 0;
             transform: translate(-50%, -260px) scale(0.7) rotate(0deg);
+            filter: drop-shadow(0 0 0px rgba(168, 85, 247, 0));
           }
         }
         
@@ -462,12 +489,24 @@ export default function GameInterfaceV3() {
             box-shadow: 0 0 20px rgba(168, 85, 247, 0.3);
           }
           50% {
-            box-shadow: 0 0 30px rgba(168, 85, 247, 0.5);
+            box-shadow: 0 0 30px rgba(168, 85, 247, 0.5), 0 0 50px rgba(236, 72, 153, 0.2);
           }
         }
         
         .character-frame {
           animation: pulse-glow 3s ease-in-out infinite;
+        }
+        
+        /* Loading shimmer for missing icons */
+        .icon-loading {
+          background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+          background-size: 200% 100%;
+          animation: shimmer 1.5s infinite;
+        }
+        
+        @keyframes shimmer {
+          0% { background-position: -200% 0; }
+          100% { background-position: 200% 0; }
         }
       `}</style>
     </div>
