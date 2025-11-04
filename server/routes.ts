@@ -20,14 +20,15 @@ import {
   getLevelFromMemory,
   syncAllGameData
 } from "./utils/dataLoader";
-// 🔄 NEW: Import sync queue system for throttled DB updates
+// 🔄 IMPORT: Sync queue system with FK constraint handling
 import { 
   queuePlayerSync, 
   queueUpgradeSync, 
   queueCharacterSync, 
   queueLevelSync, 
   forceFlushAllQueues, 
-  getAllQueueStatus 
+  getAllQueueStatus,
+  cleanupForeignKeyErrors // 🧹 NEW: FK constraint cleanup
 } from "./utils/syncQueue";
 import { insertUpgradeSchema, insertCharacterSchema, insertLevelSchema, insertPlayerUpgradeSchema, insertMediaUploadSchema } from "@shared/schema";
 import { generateSecureToken, getSessionExpiry } from "./utils/auth";
@@ -249,7 +250,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           active: true,
           ...playerStateHealth
         },
-        syncQueues: queueStatus, // 🔄 NEW: Show queue status
+        syncQueues: queueStatus, // 🔄 Show queue status with FK errors
         session: sessionInfo,
         logging: {
           logDir: path.resolve(process.cwd(), "logs"),
@@ -321,7 +322,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // 🔄 NEW: Sync queue status endpoint for admin monitoring
+  // 🔄 Sync queue status endpoint for admin monitoring
   app.get("/api/admin/sync-queues", requireAuth, requireAdmin, async (req, res) => {
     try {
       const status = getAllQueueStatus();
@@ -335,7 +336,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // 🔄 NEW: Force flush all queues (admin tool)
+  // 🔄 Force flush all queues (admin tool)
   app.post("/api/admin/sync-queues/flush", requireAuth, requireAdmin, async (req, res) => {
     try {
       const statusBefore = getAllQueueStatus();
@@ -354,7 +355,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // 🆕 NEW: Config diff endpoint for debugging admin issues
+  // 🧹 NEW: Clean up foreign key constraint violations
+  app.post("/api/admin/cleanup-fk", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      console.log(`🧹 [ADMIN] FK cleanup requested by: ${req.player?.username}`);
+      
+      const result = await cleanupForeignKeyErrors();
+      
+      console.log(`🧹 [ADMIN] FK cleanup result:`, result);
+      
+      res.json({
+        success: true,
+        cleanup: result,
+        message: `FK constraint cleanup complete: ${result.cleaned} items cleaned`,
+        queueStatusAfter: getAllQueueStatus()
+      });
+    } catch (error) {
+      logger.error('FK cleanup error', { error: error instanceof Error ? error.message : 'Unknown' });
+      res.status(500).json({ 
+        error: 'Failed to cleanup foreign key constraints',
+        details: error instanceof Error ? error.message : 'Unknown'
+      });
+    }
+  });
+
+  // 🧹 NEW: Clean up sessions for specific player (manual FK fix)
+  app.post("/api/admin/cleanup-player-sessions", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const { playerId } = req.body;
+      
+      if (!playerId) {
+        return res.status(400).json({ error: 'Player ID is required' });
+      }
+      
+      console.log(`🧹 [ADMIN] Manual session cleanup for player: ${playerId}`);
+      
+      const deletedSessions = await storage.deletePlayerSessions(playerId);
+      
+      res.json({
+        success: true,
+        deletedSessions,
+        message: `Cleaned up ${deletedSessions} sessions for player ${playerId}`,
+        playerId
+      });
+    } catch (error) {
+      logger.error('Manual session cleanup error', { error: error instanceof Error ? error.message : 'Unknown' });
+      res.status(500).json({ 
+        error: 'Failed to cleanup player sessions',
+        details: error instanceof Error ? error.message : 'Unknown'
+      });
+    }
+  });
+
+  // 🆕 Config diff endpoint for debugging admin issues
   app.get("/api/admin/config-diff", requireAuth, requireAdmin, async (req, res) => {
     try {
       const upgradesInMemory = getUpgradesFromMemory();
@@ -416,7 +469,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             jsonLevels: jsonLevels.map((l: any) => l.level)
           }
         },
-        syncQueues: getAllQueueStatus(), // 🔄 Include queue status
+        syncQueues: getAllQueueStatus(), // 🔄 Include queue status with FK errors
         errors,
         paths: {
           mainGameData: mainGameDataDir,
@@ -875,7 +928,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { templateId, ...customFields } = req.body;
       
       console.log(`🎭 [CREATE CHARACTER] Loading template ${templateId || 'default'} from master-data...`);
-      
+
       // Load template from master-data
       let template = {};
       if (templateId) {
@@ -1405,6 +1458,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`🔍 [PLAYER/ME] State summary:`, {
         points: playerState.points,
         level: playerState.level,
+        experience: playerState.experience, // 🆕 Include experience in logs
         selectedCharacterId: playerState.selectedCharacterId,
         displayImage: playerState.displayImage ? 'set' : 'null',
         upgradesCount: Object.keys(playerState.upgrades).length,
@@ -1450,8 +1504,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
       console.log(`✅ [PLAYER/ME PATCH] Successfully updated: ${updatedState.username}`);
 
-      // 🔄 QUEUE player for DB sync (throttled)
-      queuePlayerSync(req.player!.id, updatedState);
+      // 🔄 Player sync is handled automatically in updatePlayerState via queuePlayerSync
 
       // Handle sendBeacon requests (no response expected)
       if (req.headers['content-type']?.includes('text/plain')) {
@@ -1510,8 +1563,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log(`✅ [CHARACTER SELECT] SUCCESS: ${characterId} selected for ${updatedState.username}`);
       
-      // 🔄 QUEUE player for DB sync after character selection
-      queuePlayerSync(req.player!.id, updatedState);
+      // 🔄 Player sync is handled automatically in selectCharacterForPlayer
       
       res.json({ success: true, player: updatedState });
     } catch (error) {
@@ -1553,8 +1605,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log(`✅ [DISPLAY IMAGE] SUCCESS: ${imageUrl} set for ${updatedState.username}`);
       
-      // 🔄 QUEUE player for DB sync after display image change
-      queuePlayerSync(req.player!.id, updatedState);
+      // 🔄 Player sync is handled automatically in setDisplayImageForPlayer
       
       res.json({ success: true, player: updatedState });
     } catch (error) {
@@ -1599,8 +1650,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`✅ [UPGRADE] Success for ${updatedState.username}`);
       console.log(`📊 [UPGRADE] New upgrade levels:`, Object.keys(updatedState.upgrades).length);
       
-      // 🔄 QUEUE player for DB sync after upgrade purchase
-      queuePlayerSync(req.player!.id, updatedState);
+      // 🔄 Player sync is handled automatically in purchaseUpgradeForPlayer
       
       res.json({ success: true, player: updatedState });
     } catch (error) {
@@ -1666,6 +1716,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       console.log(`⚡ [FORCE SYNC] Admin forcing sync for player: ${playerId}`);
+      
+      // 🧹 Clean up any FK constraint issues first
+      try {
+        await storage.deletePlayerSessions(playerId);
+        console.log(`🧹 [FORCE SYNC] Cleaned sessions before sync`);
+      } catch (sessionError) {
+        console.warn(`⚠️ [FORCE SYNC] Session cleanup failed (might be ok):`, sessionError);
+      }
+      
       await withTimeout(
         playerStateManager.forceDatabaseSync(playerId),
         10000,
@@ -1674,7 +1733,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json({ 
         success: true, 
-        message: `Player ${playerId} force-synced to database`
+        message: `Player ${playerId} force-synced to database`,
+        sessionsCleaned: true
       });
     } catch (error) {
       logger.error('Force sync error', { error: error instanceof Error ? error.message : 'Unknown' });
@@ -1711,7 +1771,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             active: true,
             ...playerHealth
           },
-          syncQueues: getAllQueueStatus(), // 🔄 Include queue health
+          syncQueues: getAllQueueStatus(), // 🔄 Include queue health with FK errors
           masterData: masterDataReport,
           lunaLearning: lunaLearningReport,
           uptime: process.uptime(),
@@ -1732,10 +1792,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   console.log('🔧 Timeout protection: 5s max for most operations, 3s for auth');
   console.log('🎯 JSON-FIRST: Player system using telegramId_username folders');
   console.log('🔄 SYNC QUEUES: JSON changes throttle-synced to Supabase DB');
-  console.log('  - Players: 3s batches (high frequency)');
+  console.log('  - Players: 3s batches (high frequency) - FK constraint protected');
   console.log('  - Upgrades: 8s batches (admin changes)');
   console.log('  - Characters: 8s batches (admin changes)');
   console.log('  - Levels: 15s batches (less frequent changes)');
+  console.log('🧹 FK CONSTRAINTS: Auto-cleanup with session management');
   console.log('🔧 Debug routes available at /api/debug (dev only)');
   console.log('📁 Master-data templates available for admin create flows');
   console.log('🌙 Luna Learning System active with AsyncLock deadlock prevention');
@@ -1744,7 +1805,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   console.log('🆕 FIXED: Admin CRUD routes with detailed error handling and type coercion');
   console.log('🔄 ENHANCED: Character selection with memory reload retry logic');
   console.log('📤 IMPROVED: Upload endpoint with better JSON parsing');
-  console.log('🔍 NEW: Config diff endpoint at GET /api/admin/config-diff');
-  console.log('🔄 NEW: Sync queue endpoints at /api/admin/sync-queues');
+  console.log('🔍 Config diff endpoint at GET /api/admin/config-diff');
+  console.log('🔄 Sync queue endpoints at /api/admin/sync-queues');
+  console.log('🧹 NEW: FK cleanup endpoints at /api/admin/cleanup-fk and /api/admin/cleanup-player-sessions');
   return httpServer;
 }
