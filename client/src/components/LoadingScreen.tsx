@@ -262,3 +262,4 @@ export default function LoadingScreen({ message = 'Loading game...', progress = 
     </div>
   );
 }
+
