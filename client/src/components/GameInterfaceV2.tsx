@@ -7,7 +7,7 @@ import { AdminFAB } from "@/components/AdminFAB";
 import { apiRequest } from "@/lib/queryClient";
 import { User, Crown } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import MenuCore from "@/components/menu-main/MenuCore";
+import MenuCore from "@/components/menu-core/MenuCore";
 
 export default function GameInterfaceV2() {
   const { state, tap } = useGame();
@@ -65,7 +65,7 @@ export default function GameInterfaceV2() {
           <div className="text-sm text-gray-400 mb-4">Tap to earn points!</div>
           
           <div className="relative">
-            {/* Character Display Area */}
+            {/* Character Display Area - NO PROGRESS BAR */}
             <div
               className="w-80 h-80 mx-auto rounded-2xl bg-gradient-to-br from-purple-800/40 via-black/50 to-pink-800/40 border-2 border-purple-500/40 flex items-center justify-center cursor-pointer hover:border-purple-400/60 transition-all active:scale-[0.98] overflow-hidden relative group"
               onClick={handleTap}
@@ -189,7 +189,7 @@ export default function GameInterfaceV2() {
         </div>
       )}
       
-      {/* Modular Menu System */}
+      {/* NEW: Modular Menu System */}
       <MenuCore />
       
       {/* CSS Animation for floating points */}
