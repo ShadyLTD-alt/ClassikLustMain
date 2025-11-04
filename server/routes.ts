@@ -29,6 +29,8 @@ import masterDataService from "./utils/MasterDataService";
 import { playerStateManager, getPlayerState, updatePlayerState, selectCharacterForPlayer, purchaseUpgradeForPlayer, setDisplayImageForPlayer } from "./utils/playerStateManager";
 // 🌙 LUNA LEARNING: Import learning system (now fixed)
 import { lunaLearning } from "./utils/lunaLearningSystem";
+// 🔧 DEBUG: Import debug routes for development troubleshooting
+import debugRoutes from './routes/debug.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -54,7 +56,7 @@ const storageConfig = multer.diskStorage({
 const upload = multer({
   storage: storageConfig,
   limits: { fileSize: 10 * 1024 * 1024 },
-  fileFilter: (_req, file, cb) => {
+  fileFilter: (_req, file, cb) {
     const allowedTypes = /jpeg|jpg|png|gif|webp/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
     const mimetype = allowedTypes.test(file.mimetype);
@@ -68,6 +70,12 @@ const upload = multer({
 
 export async function registerRoutes(app: Express): Promise<Server> {
   logger.info('⚡ Registering routes...');
+
+  // 🔧 REGISTER DEBUG ROUTES (development only)
+  if (process.env.NODE_ENV !== 'production') {
+    app.use('/api/debug', debugRoutes);
+    console.log('🔧 Debug routes registered at /api/debug');
+  }
 
   // 🔍 DIAGNOSTIC: Enhanced health check with detailed debugging
   app.get("/api/health", async (req, res) => {
@@ -366,7 +374,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // 🔍 ENHANCED: Dev auth with better debugging
+  // 🔧 DEV AUTH: Now auto-unlocks all characters in development
   app.post("/api/auth/dev", async (req, res) => {
     if (process.env.NODE_ENV === 'production') {
       return res.status(403).json({ error: 'Development login not available in production' });
@@ -396,6 +404,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!player) {
         console.log(`🔍 [DEV AUTH] Creating new dev player...`);
         const playerData = await masterDataService.createNewPlayerData(devTelegramId, sanitizedUsername);
+        
+        // 🔧 DEV: Auto-unlock all characters
+        const characters = getCharactersFromMemory();
+        playerData.unlockedCharacters = characters.map(c => c.id);
+        if (characters.length > 0) {
+          playerData.selectedCharacterId = characters[0].id;
+        }
+        console.log(`🔓 [DEV AUTH] Auto-unlocked ${characters.length} characters`);
+        
         player = await storage.createPlayer(playerData);
         await savePlayerDataToJSON(player);
         console.log(`🎮 Created new dev player: ${sanitizedUsername} (${devTelegramId}_${sanitizedUsername})`);
@@ -676,7 +693,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // 🎭 FIXED: Character selection with telegramId_username folder JSON - ENHANCED LOGGING
+  // 🎭 CHARACTER SELECT: Now auto-unlocks in development
   app.post("/api/player/select-character", requireAuth, async (req, res) => {
     try {
       const { characterId } = req.body;
@@ -688,17 +705,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: 'Character ID is required' });
       }
 
-      // Enhanced validation and debugging
       const playerState = await getPlayerState(req.player!.id);
       console.log(`🎭 [CHARACTER SELECT] Current character: ${playerState.selectedCharacterId}`);
       console.log(`🎭 [CHARACTER SELECT] Unlocked characters: [${playerState.unlockedCharacters.join(', ')}]`);
       
+      // 🔧 DEV: Auto-unlock character if not unlocked
       if (!playerState.unlockedCharacters.includes(characterId)) {
-        console.log(`❌ [CHARACTER SELECT] Character ${characterId} not in unlocked list`);
-        return res.status(403).json({ error: `Character ${characterId} is not unlocked` });
+        if (process.env.NODE_ENV !== 'production') {
+          console.log(`🔓 [CHARACTER SELECT] DEV: Auto-unlocking ${characterId}`);
+          playerState.unlockedCharacters.push(characterId);
+        } else {
+          console.log(`❌ [CHARACTER SELECT] Character ${characterId} not in unlocked list`);
+          return res.status(403).json({ error: `Character ${characterId} is not unlocked` });
+        }
       }
 
-      // Attempt character selection
       console.log(`🔄 [CHARACTER SELECT] Attempting to select ${characterId}...`);
       const updatedState = await selectCharacterForPlayer(req.player!.id, characterId);
       
@@ -873,92 +894,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: 'Failed to get system health' });
     }
   });
-
-  // 🔍 NEW: Debug endpoint to check specific player folder
-  app.get("/api/debug/player-folder/:playerId", requireAuth, requireAdmin, async (req, res) => {
-    try {
-      const { playerId } = req.params;
-      
-      console.log(`🔍 [DEBUG] Checking player folder for: ${playerId}`);
-      
-      // Get player from DB to get telegramId and username
-      const player = await storage.getPlayer(playerId);
-      if (!player) {
-        return res.status(404).json({ error: 'Player not found in database' });
-      }
-      
-      const playerStateManager_private = playerStateManager as any;
-      const folderName = playerStateManager_private.getFolderName(player.telegramId, player.username);
-      const jsonFileName = playerStateManager_private.getJsonFileName(player.telegramId, player.username);
-      const jsonPath = playerStateManager_private.getJsonPath(player.telegramId, player.username);
-      
-      // Check if folder and file exist
-      const folderPath = path.dirname(jsonPath);
-      
-      let folderExists = false;
-      let fileExists = false;
-      let folderContents: string[] = [];
-      let fileContent: any = null;
-      
-      try {
-        await fs.access(folderPath);
-        folderExists = true;
-        folderContents = await fs.readdir(folderPath).catch(() => []);
-        
-        try {
-          await fs.access(jsonPath);
-          fileExists = true;
-          const data = await fs.readFile(jsonPath, 'utf8');
-          fileContent = JSON.parse(data);
-        } catch {}
-      } catch {}
-      
-      const debugInfo = {
-        playerId,
-        player: {
-          id: player.id,
-          telegramId: player.telegramId,
-          username: player.username
-        },
-        expectedStructure: {
-          folderName,
-          jsonFileName,
-          fullPath: jsonPath
-        },
-        actualState: {
-          folderExists,
-          fileExists,
-          folderContents,
-          fileContentPreview: fileContent ? {
-            username: fileContent.username,
-            telegramId: fileContent.telegramId,
-            selectedCharacterId: fileContent.selectedCharacterId,
-            points: fileContent.points,
-            level: fileContent.level
-          } : null
-        }
-      };
-      
-      console.log(`🔍 [DEBUG] Player folder debug:`, debugInfo);
-      
-      res.json({
-        success: true,
-        debug: debugInfo
-      });
-    } catch (error) {
-      console.error(`🔴 [DEBUG] Player folder check failed:`, error);
-      res.status(500).json({ error: 'Debug check failed' });
-    }
-  });
   
   const httpServer = createServer(app);
   
   console.log('✅ All routes registered successfully');
   console.log('🎯 JSON-FIRST: Player system using telegramId_username folders: main-gamedata/player-data/{telegramId}_{username}/player_{username}.json');
+  console.log('🔧 Debug routes available at /api/debug (dev only)');
   console.log('📁 Master-data templates available for admin create flows');
   console.log('🌙 Luna Learning System active (JSON parsing fixed)');
   console.log('📦 Migration endpoint available: POST /api/admin/migrate-player-files');
-  console.log('🔍 Debug endpoint available: GET /api/debug/player-folder/{playerId}');
   console.log('🔇 Winston logging active with enhanced error tracking');
   return httpServer;
 }
