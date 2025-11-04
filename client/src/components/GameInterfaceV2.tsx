@@ -3,25 +3,16 @@ import { useQuery } from "@tanstack/react-query";
 import GameLayout from "@/components/GameLayout";
 import { useGame } from "@/contexts/GameContext";
 import CharacterSelectionScrollable from "@/components/CharacterSelectionScrollable";
-import UpgradePanel from "@/components/UpgradePanel";
-import LevelUp from "@/components/LevelUp";
-import ChatModal from "@/components/ChatModal";
-import TasksAchievementsMenuV2 from "@/components/TasksAchievementsMenuV2";
 import { AdminFAB } from "@/components/AdminFAB";
 import { apiRequest } from "@/lib/queryClient";
-import { User, Crown, Trophy, Zap } from "lucide-react";
+import { User, Crown } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
-import { Badge } from "@/components/ui/badge";
+import MenuCore from "@/components/menu-main/MenuCore";
 
 export default function GameInterfaceV2() {
   const { state, tap } = useGame();
   const [showCharacters, setShowCharacters] = useState(false);
-  const [showUpgrades, setShowUpgrades] = useState(false);
-  const [showLevel, setShowLevel] = useState(false);
-  const [showChat, setShowChat] = useState(false);
   const [showDebugger, setShowDebugger] = useState(false);
-  const [showTasks, setShowTasks] = useState(false); // 🏆 NEW: Tasks & Achievements state
   const [tapEffects, setTapEffects] = useState<Array<{id: string, x: number, y: number, value: number}>>([]);
 
   // Fetch current character data
@@ -33,26 +24,6 @@ export default function GameInterfaceV2() {
       return await response.json();
     },
     enabled: !!state?.selectedCharacterId,
-  });
-
-  // 🏆 NEW: Fetch tasks for notification badges
-  const { data: tasksData } = useQuery({
-    queryKey: ['/api/tasks'],
-    queryFn: async () => {
-      const response = await apiRequest('GET', '/api/tasks');
-      return await response.json();
-    },
-    refetchInterval: 30000, // Refetch every 30 seconds
-  });
-
-  // 🏅 NEW: Fetch achievements for notification badges
-  const { data: achievementsData } = useQuery({
-    queryKey: ['/api/achievements'],
-    queryFn: async () => {
-      const response = await apiRequest('GET', '/api/achievements');
-      return await response.json();
-    },
-    refetchInterval: 60000, // Refetch every minute
   });
 
   const handleTap = (event: React.MouseEvent<HTMLDivElement>) => {
@@ -85,42 +56,16 @@ export default function GameInterfaceV2() {
     return null;
   };
 
-  // 🏆 NEW: Calculate claimable rewards
-  const tasks = tasksData?.tasks || [];
-  const achievements = achievementsData?.achievements || [];
-  const claimableTasks = tasks.filter((t: any) => !t.isClaimed && t.isCompleted).length;
-  const claimableAchievements = achievements.filter((a: any) => !a.isClaimed && a.isUnlocked).length;
-  const totalClaimable = claimableTasks + claimableAchievements;
-
   const characterImage = getCharacterImage();
 
   return (
-    <GameLayout
-      onOpenCharacters={() => setShowCharacters(true)}
-      onOpenUpgrades={() => setShowUpgrades(true)}
-      onOpenLevel={() => setShowLevel(true)}
-      onOpenChat={() => setShowChat(true)}
-    >
+    <GameLayout>
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center relative">
           <div className="text-sm text-gray-400 mb-4">Tap to earn points!</div>
           
-          {/* 🆕 NEW: Experience progress bar above character */}
-          {state && state.level && (
-            <div className="mb-4 mx-auto max-w-md">
-              <div className="flex items-center justify-between text-sm text-gray-300 mb-2">
-                <span>Level {state.level}</span>
-                <span>{state.experience || 0} / {(state.level + 1) * 1000} XP</span>
-              </div>
-              <Progress 
-                value={((state.experience || 0) / ((state.level + 1) * 1000)) * 100} 
-                className="h-2 bg-black/40"
-              />
-            </div>
-          )}
-          
           <div className="relative">
-            {/* Character Display Area - RESTORED TAP HANDLER */}
+            {/* Character Display Area */}
             <div
               className="w-80 h-80 mx-auto rounded-2xl bg-gradient-to-br from-purple-800/40 via-black/50 to-pink-800/40 border-2 border-purple-500/40 flex items-center justify-center cursor-pointer hover:border-purple-400/60 transition-all active:scale-[0.98] overflow-hidden relative group"
               onClick={handleTap}
@@ -188,7 +133,7 @@ export default function GameInterfaceV2() {
               )}
             </div>
 
-            {/* Floating +points animations - NOW WITH BOOST STYLING */}
+            {/* Floating +points animations */}
             {tapEffects.map(effect => (
               <div
                 key={effect.id}
@@ -209,33 +154,13 @@ export default function GameInterfaceV2() {
         </div>
       </div>
 
-      {/* 🏆 NEW: Tasks & Achievements Button - FLOATING BOTTOM */}
-      <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-40">
-        <Button
-          onClick={() => setShowTasks(true)}
-          className="bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-black font-bold px-6 py-3 rounded-full shadow-2xl border-2 border-yellow-400/50 relative"
-        >
-          <Trophy className="w-5 h-5 mr-2" />
-          Tasks & Achievements
-          {totalClaimable > 0 && (
-            <Badge 
-              className="absolute -top-2 -right-2 bg-red-500 text-white border-2 border-red-400 min-w-[24px] h-6 rounded-full p-0 flex items-center justify-center text-xs font-bold animate-pulse"
-            >
-              {totalClaimable > 99 ? '99+' : totalClaimable}
-            </Badge>
-          )}
-        </Button>
-      </div>
-
       {/* USE EXISTING AdminFAB */}
       <AdminFAB onOpenDebugger={() => setShowDebugger(true)} />
 
-      {/* Modals - USING SCROLLABLE CHARACTER SELECTOR FOR PROPER GALLERY */}
+      {/* Character Selection Modal */}
       {showCharacters && <CharacterSelectionScrollable isOpen={showCharacters} onClose={() => setShowCharacters(false)} />}
-      {showUpgrades && <UpgradePanel isOpen={showUpgrades} onClose={() => setShowUpgrades(false)} />}
-      {showLevel && <LevelUp isOpen={showLevel} onClose={() => setShowLevel(false)} />}
-      {showChat && <ChatModal isOpen={showChat} onClose={() => setShowChat(false)} />}
-      {showTasks && <TasksAchievementsMenuV2 isOpen={showTasks} onClose={() => setShowTasks(false)} />} {/* 🏆 NEW */}
+      
+      {/* Debug Panel */}
       {showDebugger && (
         <div className="fixed inset-0 z-50 bg-black/80 text-white p-4 overflow-y-auto">
           <div className="max-w-4xl mx-auto">
@@ -248,14 +173,14 @@ export default function GameInterfaceV2() {
               <div className="text-blue-400 mt-2">Game State:</div>
               <pre className="text-xs mt-1 text-gray-300">{JSON.stringify({
                 level: state?.level,
-                lustPoints: state?.lustPoints,
+                lustPoints: state?.lustPoints || state?.points,
                 lustGems: state?.lustGems,
                 energy: state?.energy,
                 boostActive: state?.boostActive,
                 boostMultiplier: state?.boostMultiplier,
                 selectedCharacterId: state?.selectedCharacterId,
                 isAdmin: state?.isAdmin,
-                experience: state?.experience, // 🆕 NEW: Show experience in debug
+                experience: state?.experience,
                 upgradesCount: Object.keys(state?.upgrades || {}).length,
                 unlockedCharacters: (state?.unlockedCharacters || []).length
               }, null, 2)}</pre>
@@ -263,6 +188,9 @@ export default function GameInterfaceV2() {
           </div>
         </div>
       )}
+      
+      {/* Modular Menu System */}
+      <MenuCore />
       
       {/* CSS Animation for floating points */}
       <style jsx>{`
