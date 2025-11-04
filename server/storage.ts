@@ -78,10 +78,13 @@ export interface IStorage {
   updateLevel(level: number, updates: Partial<Level>): Promise<Level | undefined>;
   deleteLevel(level: number): Promise<boolean>;
   
+  // 🔄 UPDATED: New JSON-based player upgrade methods
   getPlayerUpgrades(playerId: string): Promise<(PlayerUpgrade & { upgrade: Upgrade })[]>;
   getPlayerUpgrade(playerId: string, upgradeId: string): Promise<PlayerUpgrade | undefined>;
   setPlayerUpgrade(data: InsertPlayerUpgrade): Promise<PlayerUpgrade>;
   updatePlayerUpgrade(playerId: string, upgradeId: string, level: number): Promise<PlayerUpgrade | undefined>;
+  getPlayerUpgradesJSON(playerId: string): Promise<Record<string, number>>;
+  setPlayerUpgradesJSON(playerId: string, upgrades: Record<string, number>): Promise<PlayerUpgrade>;
   
   getPlayerLevelUps(playerId: string): Promise<PlayerLevelUp[]>;
   getPlayerLevelUp(playerId: string, level: number): Promise<PlayerLevelUp | undefined>;
@@ -230,55 +233,167 @@ export class DatabaseStorage implements IStorage {
     return result.rowCount ? result.rowCount > 0 : false;
   }
 
+  // 🔄 UPDATED: JSON-based player upgrades methods
   async getPlayerUpgrades(playerId: string): Promise<(PlayerUpgrade & { upgrade: Upgrade })[]> {
-    const results = await db
+    console.log(`🔍 [STORAGE] Getting player upgrades for: ${playerId}`);
+    
+    // Get the player's upgrade record (should be just 1 row)
+    const playerUpgradeRecord = await db
       .select()
       .from(schema.playerUpgrades)
-      .leftJoin(schema.upgrades, eq(schema.playerUpgrades.upgradeId, schema.upgrades.id))
-      .where(eq(schema.playerUpgrades.playerId, playerId));
+      .where(eq(schema.playerUpgrades.playerId, playerId))
+      .limit(1);
     
-    return results.map(row => ({
-      ...row.playerUpgrades,
-      upgrade: row.upgrades!,
-    }));
+    if (playerUpgradeRecord.length === 0) {
+      console.log(`🔍 [STORAGE] No upgrade record found for player: ${playerId}`);
+      return [];
+    }
+    
+    const upgradesData = playerUpgradeRecord[0].upgrades as Record<string, number>;
+    console.log(`🔍 [STORAGE] Player upgrades data:`, upgradesData);
+    
+    // Get all upgrade definitions that this player has
+    const upgradeIds = Object.keys(upgradesData || {});
+    if (upgradeIds.length === 0) {
+      return [];
+    }
+    
+    const upgradeDefs = await db
+      .select()
+      .from(schema.upgrades)
+      .where(sql`${schema.upgrades.id} = ANY(${upgradeIds})`);
+    
+    // Map to the expected format
+    const results: (PlayerUpgrade & { upgrade: Upgrade })[] = [];
+    
+    for (const upgradeDef of upgradeDefs) {
+      const level = upgradesData[upgradeDef.id] || 0;
+      if (level > 0) {
+        results.push({
+          ...playerUpgradeRecord[0],
+          upgrade: upgradeDef
+        } as PlayerUpgrade & { upgrade: Upgrade });
+      }
+    }
+    
+    console.log(`✅ [STORAGE] Found ${results.length} upgrades for player`);
+    return results;
   }
 
   async getPlayerUpgrade(playerId: string, upgradeId: string): Promise<PlayerUpgrade | undefined> {
     const result = await db
       .select()
       .from(schema.playerUpgrades)
-      .where(and(
-        eq(schema.playerUpgrades.playerId, playerId),
-        eq(schema.playerUpgrades.upgradeId, upgradeId)
-      ))
+      .where(eq(schema.playerUpgrades.playerId, playerId))
       .limit(1);
+    
+    if (result.length === 0) return undefined;
+    
+    const upgradesData = result[0].upgrades as Record<string, number>;
+    const level = upgradesData[upgradeId] || 0;
+    
+    if (level === 0) return undefined;
+    
     return result[0];
   }
 
   async setPlayerUpgrade(data: InsertPlayerUpgrade): Promise<PlayerUpgrade> {
-    const existing = await this.getPlayerUpgrade(data.playerId, data.upgradeId);
-    if (existing) {
-      const result = await db
-        .update(schema.playerUpgrades)
-        .set({ level: data.level, type: data.type, updatedAt: new Date() })
-        .where(eq(schema.playerUpgrades.id, existing.id))
-        .returning();
-      return result[0];
+    console.log(`🔧 [STORAGE] setPlayerUpgrade called - this method is deprecated for JSON structure`);
+    console.log(`🔧 [STORAGE] Use setPlayerUpgradesJSON() or updatePlayerUpgrade() instead`);
+    
+    // For backward compatibility, try to work with the old interface
+    // This assumes data.upgrades contains the full upgrades object
+    if (data.upgrades) {
+      return await this.setPlayerUpgradesJSON(data.playerId, data.upgrades as Record<string, number>);
     }
-    const result = await db.insert(schema.playerUpgrades).values(data).returning();
-    return result[0];
+    
+    throw new Error('setPlayerUpgrade requires upgrades JSON data in new schema');
   }
 
   async updatePlayerUpgrade(playerId: string, upgradeId: string, level: number): Promise<PlayerUpgrade | undefined> {
-    const existing = await this.getPlayerUpgrade(playerId, upgradeId);
-    if (!existing) return undefined;
+    console.log(`🔧 [STORAGE] Updating single upgrade: ${upgradeId} = ${level} for player: ${playerId}`);
     
+    try {
+      // Get existing upgrades
+      const existing = await db
+        .select()
+        .from(schema.playerUpgrades)
+        .where(eq(schema.playerUpgrades.playerId, playerId))
+        .limit(1);
+      
+      let currentUpgrades: Record<string, number> = {};
+      
+      if (existing.length > 0) {
+        currentUpgrades = (existing[0].upgrades as Record<string, number>) || {};
+      }
+      
+      // Update the specific upgrade
+      const newUpgrades = { ...currentUpgrades, [upgradeId]: level };
+      console.log(`🔧 [STORAGE] New upgrades object:`, newUpgrades);
+      
+      // Upsert the record
+      const result = await this.setPlayerUpgradesJSON(playerId, newUpgrades);
+      console.log(`✅ [STORAGE] Upgrade updated successfully`);
+      
+      return result;
+    } catch (error) {
+      console.error(`❌ [STORAGE] Failed to update player upgrade:`, error);
+      return undefined;
+    }
+  }
+
+  // 🆕 NEW: Direct JSON methods for cleaner API
+  async getPlayerUpgradesJSON(playerId: string): Promise<Record<string, number>> {
     const result = await db
-      .update(schema.playerUpgrades)
-      .set({ level, updatedAt: new Date() })
-      .where(eq(schema.playerUpgrades.id, existing.id))
-      .returning();
-    return result[0];
+      .select()
+      .from(schema.playerUpgrades)
+      .where(eq(schema.playerUpgrades.playerId, playerId))
+      .limit(1);
+    
+    if (result.length === 0) {
+      return {};
+    }
+    
+    return (result[0].upgrades as Record<string, number>) || {};
+  }
+
+  async setPlayerUpgradesJSON(playerId: string, upgrades: Record<string, number>): Promise<PlayerUpgrade> {
+    console.log(`🔧 [STORAGE] Setting player upgrades JSON for: ${playerId}`, upgrades);
+    
+    try {
+      // Try to update existing record
+      const updateResult = await db
+        .update(schema.playerUpgrades)
+        .set({ 
+          upgrades: upgrades,
+          updatedAt: new Date() 
+        })
+        .where(eq(schema.playerUpgrades.playerId, playerId))
+        .returning();
+      
+      if (updateResult.length > 0) {
+        console.log(`✅ [STORAGE] Updated existing upgrade record`);
+        return updateResult[0];
+      }
+      
+      // Create new record if none exists
+      console.log(`🆕 [STORAGE] Creating new upgrade record`);
+      const insertResult = await db
+        .insert(schema.playerUpgrades)
+        .values({
+          playerId,
+          upgrades,
+          updatedAt: new Date()
+        })
+        .returning();
+      
+      console.log(`✅ [STORAGE] Created new upgrade record`);
+      return insertResult[0];
+      
+    } catch (error) {
+      console.error(`❌ [STORAGE] Failed to set player upgrades:`, error);
+      throw error;
+    }
   }
 
   async getPlayerLevelUps(playerId: string): Promise<PlayerLevelUp[]> {
