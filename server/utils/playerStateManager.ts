@@ -34,6 +34,13 @@ interface PlayerState {
   boostExpiresAt: Date | null;
   totalTapsToday: number;
   totalTapsAllTime: number;
+  // 🏆 NEW: Task and Achievement tracking fields
+  lpEarnedToday?: number;
+  upgradesPurchasedToday?: number;
+  consecutiveDays?: number;
+  claimedTasks?: string[];
+  claimedAchievements?: string[];
+  achievementUnlockDates?: Record<string, string>;
   lastDailyReset: Date;
   lastWeeklyReset: Date;
   lastSync: { timestamp: number; hash: string };
@@ -41,7 +48,7 @@ interface PlayerState {
   updatedAt: Date;
 }
 
-// 🚨 SIMPLIFIED: No more locks, event emitters, or complex state management
+// 😨 SIMPLIFIED: No more locks, event emitters, or complex state management
 class SimplePlayerStateManager {
   private readonly playersRoot: string;
   private readonly backupsDir: string;
@@ -103,7 +110,7 @@ class SimplePlayerStateManager {
     return crypto.createHash('md5').update(JSON.stringify(critical)).digest('hex');
   }
 
-  // 🚨 SIMPLIFIED: Direct JSON load with Luna timing
+  // 😨 SIMPLIFIED: Direct JSON load with Luna timing
   async loadPlayer(playerId: string): Promise<PlayerState> {
     return lunaTimeOperation(`loadPlayer_${playerId}`, this._loadPlayer(playerId));
   }
@@ -141,6 +148,13 @@ class SimplePlayerStateManager {
         state = {
           ...parsed,
           experience: parsed.experience || 0, // 🆕 ENSURE experience field
+          // 🏆 ENSURE task/achievement tracking fields
+          lpEarnedToday: parsed.lpEarnedToday || 0,
+          upgradesPurchasedToday: parsed.upgradesPurchasedToday || 0,
+          consecutiveDays: parsed.consecutiveDays || 1,
+          claimedTasks: parsed.claimedTasks || [],
+          claimedAchievements: parsed.claimedAchievements || [],
+          achievementUnlockDates: parsed.achievementUnlockDates || {},
           boostExpiresAt: parsed.boostExpiresAt ? new Date(parsed.boostExpiresAt) : null,
           lastDailyReset: new Date(parsed.lastDailyReset || Date.now()),
           lastWeeklyReset: new Date(parsed.lastWeeklyReset || Date.now()),
@@ -178,6 +192,13 @@ class SimplePlayerStateManager {
           boostExpiresAt: player.boostExpiresAt ? new Date(player.boostExpiresAt) : null,
           totalTapsToday: player.totalTapsToday || 0,
           totalTapsAllTime: player.totalTapsAllTime || 0,
+          // 🏆 INITIALIZE: Task and achievement tracking
+          lpEarnedToday: 0,
+          upgradesPurchasedToday: 0,
+          consecutiveDays: 1,
+          claimedTasks: [],
+          claimedAchievements: [],
+          achievementUnlockDates: {},
           lastDailyReset: player.lastDailyReset ? new Date(player.lastDailyReset) : new Date(),
           lastWeeklyReset: player.lastWeeklyReset ? new Date(player.lastWeeklyReset) : new Date(),
           lastSync: { timestamp: Date.now(), hash: '' },
@@ -202,7 +223,7 @@ class SimplePlayerStateManager {
     }
   }
 
-  // 🚨 SIMPLIFIED: Direct JSON save without locks
+  // 😨 SIMPLIFIED: Direct JSON save without locks
   private async savePlayerJson(state: PlayerState): Promise<void> {
     try {
       const jsonPath = this.getJsonPath(state.telegramId, state.username);
@@ -223,7 +244,7 @@ class SimplePlayerStateManager {
     }
   }
 
-  // 🚨 SIMPLIFIED: Update player with Luna timing
+  // 😨 SIMPLIFIED: Update player with Luna timing
   async updatePlayer(playerId: string, updates: Partial<PlayerState>): Promise<PlayerState> {
     return lunaTimeOperation(`updatePlayer_${playerId}`, this._updatePlayer(playerId, updates));
   }
@@ -329,6 +350,8 @@ class SimplePlayerStateManager {
         selectedCharacterId: state.selectedCharacterId,
         displayImage: state.displayImage,
         unlockedCharacters: state.unlockedCharacters, // 🆕 SYNC UNLOCKED CHARACTERS
+        totalTapsAllTime: state.totalTapsAllTime,
+        totalTapsToday: state.totalTapsToday,
         boostActive: state.boostActive,
         boostMultiplier: state.boostMultiplier,
         lastLogin: new Date()
@@ -364,7 +387,7 @@ class SimplePlayerStateManager {
 // Global singleton instance
 export const playerStateManager = new SimplePlayerStateManager();
 
-// 🚨 SIMPLIFIED: Helper functions with Luna timing
+// 😨 SIMPLIFIED: Helper functions with Luna timing
 export async function getPlayerState(playerId: string): Promise<PlayerState> {
   return lunaTimeOperation('getPlayerState', playerStateManager.loadPlayer(playerId));
 }
@@ -428,7 +451,7 @@ export async function setDisplayImageForPlayer(playerId: string, imageUrl: strin
   });
 }
 
-// 🆕 ENHANCED: Upgrade purchase with experience gain for level-up menu fix
+// 🆕 ENHANCED: Upgrade purchase with experience gain for level-up menu fix + task tracking
 export async function purchaseUpgradeForPlayer(playerId: string, upgradeId: string, newLevel: number, cost: number): Promise<PlayerState> {
   return lunaTimeOperation('purchaseUpgradeForPlayer', async () => {
     console.log(`🛒 [UPGRADE] Player ${playerId} purchasing ${upgradeId} level ${newLevel} for ${cost} points`);
@@ -447,6 +470,8 @@ export async function purchaseUpgradeForPlayer(playerId: string, upgradeId: stri
       points: Math.round(currentState.points - cost),
       lustPoints: Math.round((currentState.lustPoints || currentState.points) - cost),
       experience: (currentState.experience || 0) + experienceGain, // 🆕 ADD EXPERIENCE
+      // 🏆 Track daily upgrade purchases for task system
+      upgradesPurchasedToday: (currentState.upgradesPurchasedToday || 0) + 1,
       upgrades: {
         ...currentState.upgrades,
         [upgradeId]: newLevel
@@ -455,6 +480,7 @@ export async function purchaseUpgradeForPlayer(playerId: string, upgradeId: stri
     
     console.log(`✅ [UPGRADE] SUCCESS: ${upgradeId} level ${newLevel} purchased for ${updatedState.username}`);
     console.log(`🏆 [UPGRADE] New experience: ${updatedState.experience} XP`);
+    console.log(`🏆 [UPGRADE] Daily purchases: ${updatedState.upgradesPurchasedToday}`);
     return updatedState;
   });
 }
