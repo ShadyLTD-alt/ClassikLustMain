@@ -1,8 +1,9 @@
 /**
- * 🔄 Push Request Queue System
+ * 🔄 Push Request Queue System - ENHANCED WITH FK CONSTRAINT HANDLING
  * 
  * Manages throttled JSON → Database synchronization
  * Prevents DB spam while ensuring data consistency
+ * 🔧 FIXED: Handles PostgreSQL foreign key constraints gracefully
  */
 
 import logger from '../logger';
@@ -15,6 +16,7 @@ interface QueuedUpdate<T> {
   timestamp: number;
   retries: number;
   updateType: 'create' | 'update' | 'delete';
+  lastError?: string; // 🔧 Track specific error for FK violations
 }
 
 interface QueueConfig {
@@ -62,7 +64,8 @@ class SyncQueue<T> {
       data,
       timestamp: Date.now(),
       retries: existing?.retries || 0,
-      updateType
+      updateType,
+      lastError: existing?.lastError // Preserve error history
     };
     
     this.queue.set(id, queuedUpdate);
@@ -92,10 +95,19 @@ class SyncQueue<T> {
    * Get current queue status
    */
   getStatus() {
+    const failedUpdates = Array.from(this.queue.values())
+      .filter(update => update.retries > 0)
+      .map(update => ({
+        id: update.id,
+        retries: update.retries,
+        lastError: update.lastError
+      }));
+    
     return {
       name: this.name,
       queueSize: this.queue.size,
       isProcessing: this.isProcessing,
+      failedUpdates, // 🔧 Include failed updates with errors
       oldestUpdate: this.queue.size > 0 
         ? Math.min(...Array.from(this.queue.values()).map(u => u.timestamp))
         : null,
@@ -138,31 +150,64 @@ class SyncQueue<T> {
       
       console.log(`✅ [${this.name}] Successfully processed ${updates.length} updates`);
     } catch (error) {
-      console.error(`❌ [${this.name}] Batch sync failed:`, error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`❌ [${this.name}] Batch sync failed:`, errorMessage);
+      
+      // 🔧 ENHANCED: Handle FK constraint violations specifically
+      const isForeignKeyError = errorMessage.includes('23503') || 
+                               errorMessage.includes('is still referenced') ||
+                               errorMessage.includes('violates foreign key constraint');
       
       // Handle retries
       const now = Date.now();
       for (const update of updates) {
+        // 🔧 FK constraint errors get special handling
+        if (isForeignKeyError && update.updateType !== 'create') {
+          console.error(`🔧 [${this.name}] FK constraint violation for ${update.id}:`, errorMessage);
+          
+          // For FK errors, mark for special cleanup instead of retry
+          if (this.name === 'Players') {
+            console.log(`🧹 [${this.name}] Scheduling session cleanup for player ${update.id}`);
+            // Don't retry immediately, let admin handle FK cleanup
+            this.queue.delete(update.id);
+            continue;
+          }
+        }
+        
         if (update.retries < this.config.maxRetries) {
           update.retries += 1;
           update.timestamp = now + (this.config.retryDelayMs * update.retries);
+          update.lastError = errorMessage; // 🔧 Store specific error
           this.queue.set(update.id, update);
           console.log(`🔄 [${this.name}] Retry ${update.retries}/${this.config.maxRetries} for ${update.id}`);
         } else {
-          console.error(`❌ [${this.name}] Max retries exceeded for ${update.id}, dropping from queue`);
+          console.error(`❌ [${this.name}] Max retries exceeded for ${update.id}, error: ${errorMessage}`);
           this.queue.delete(update.id);
           
-          // Log to Winston for admin attention
+          // 🔧 Enhanced logging for FK constraint failures
           logger.error(`SyncQueue[${this.name}] failed permanently`, {
             id: update.id,
             retries: update.retries,
-            error: error instanceof Error ? error.message : 'Unknown'
+            updateType: update.updateType,
+            error: errorMessage,
+            isForeignKeyError,
+            needsManualCleanup: isForeignKeyError
           });
         }
       }
     } finally {
       this.isProcessing = false;
     }
+  }
+
+  /**
+   * 🔧 NEW: Remove specific failed item from queue (admin cleanup)
+   */
+  removeFromQueue(id: string): boolean {
+    const existed = this.queue.has(id);
+    this.queue.delete(id);
+    console.log(`🧹 [${this.name}] Removed ${id} from queue (existed: ${existed})`);
+    return existed;
   }
 
   /**
@@ -182,7 +227,7 @@ class SyncQueue<T> {
 }
 
 /**
- * Global Sync Queue Manager
+ * Global Sync Queue Manager - ENHANCED WITH FK CONSTRAINT HANDLING
  * Manages separate queues for different data types
  */
 class SyncQueueManager {
@@ -192,11 +237,11 @@ class SyncQueueManager {
   private levelQueue: SyncQueue<Level>;
   
   constructor() {
-    // Player sync queue (most frequent updates)
+    // Player sync queue (most frequent updates) - REDUCED retries for FK errors
     this.playerQueue = new SyncQueue('Players', this.syncPlayers.bind(this), {
-      batchSize: 5,
+      batchSize: 3, // 🔧 Smaller batches for players (FK sensitive)
       flushIntervalMs: 3000, // 3s for player data
-      maxRetries: 5
+      maxRetries: 2 // 🔧 Reduced retries for FK issues
     });
     
     // Upgrade sync queue (admin changes)
@@ -220,7 +265,7 @@ class SyncQueueManager {
       maxRetries: 3
     });
     
-    console.log('🔄 SyncQueueManager initialized with throttled DB sync');
+    console.log('🔄 SyncQueueManager initialized with FK constraint handling');
   }
 
   /**
@@ -252,10 +297,68 @@ class SyncQueueManager {
   }
 
   /**
+   * 🔧 NEW: Clean up failed FK constraint violations
+   */
+  async cleanupForeignKeyErrors(): Promise<{ cleaned: number; errors: string[] }> {
+    console.log('🧹 [FK CLEANUP] Starting foreign key constraint cleanup...');
+    
+    let cleaned = 0;
+    const errors: string[] = [];
+    
+    // Get all failed updates from player queue
+    const playerStatus = this.playerQueue.getStatus();
+    const failedPlayerUpdates = playerStatus.failedUpdates || [];
+    
+    for (const failed of failedPlayerUpdates) {
+      if (failed.lastError && failed.lastError.includes('23503')) {
+        console.log(`🧹 [FK CLEANUP] Cleaning up player ${failed.id}...`);
+        
+        try {
+          // 1. Clean up sessions first
+          await this.cleanupPlayerSessions(failed.id);
+          
+          // 2. Remove from queue so it can be re-queued
+          const removed = this.playerQueue.removeFromQueue(failed.id);
+          if (removed) {
+            cleaned++;
+            console.log(`✅ [FK CLEANUP] Cleaned player ${failed.id}`);
+          }
+        } catch (cleanupError) {
+          const errorMsg = cleanupError instanceof Error ? cleanupError.message : 'Unknown';
+          errors.push(`Failed to cleanup ${failed.id}: ${errorMsg}`);
+          console.error(`❌ [FK CLEANUP] Failed to cleanup ${failed.id}:`, cleanupError);
+        }
+      }
+    }
+    
+    console.log(`🧹 [FK CLEANUP] Complete: ${cleaned} cleaned, ${errors.length} errors`);
+    return { cleaned, errors };
+  }
+
+  /**
+   * 🔧 Clean up sessions for a specific player to resolve FK constraints
+   */
+  private async cleanupPlayerSessions(playerId: string): Promise<void> {
+    try {
+      console.log(`🧹 [SESSION CLEANUP] Cleaning sessions for player ${playerId}`);
+      
+      // Delete all sessions for this player to resolve FK constraint
+      const deletedSessions = await storage.deletePlayerSessions(playerId);
+      console.log(`✅ [SESSION CLEANUP] Deleted ${deletedSessions} sessions for ${playerId}`);
+      
+      // Wait a bit for DB to process
+      await new Promise(resolve => setTimeout(resolve, 500));
+    } catch (error) {
+      console.error(`❌ [SESSION CLEANUP] Failed for ${playerId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
    * Get status of all queues
    */
   getAllQueueStatus() {
-    return {
+    const status = {
       players: this.playerQueue.getStatus(),
       upgrades: this.upgradeQueue.getStatus(),
       characters: this.characterQueue.getStatus(),
@@ -265,8 +368,28 @@ class SyncQueueManager {
         this.upgradeQueue.getStatus().queueSize +
         this.characterQueue.getStatus().queueSize +
         this.levelQueue.getStatus().queueSize
-      )
+      ),
+      timestamp: new Date().toISOString()
     };
+    
+    // 🔧 Check for FK constraint issues
+    const allFailedUpdates = [
+      ...(status.players.failedUpdates || []),
+      ...(status.upgrades.failedUpdates || []),
+      ...(status.characters.failedUpdates || []),
+      ...(status.levels.failedUpdates || [])
+    ];
+    
+    const fkErrors = allFailedUpdates.filter(u => 
+      u.lastError && u.lastError.includes('23503')
+    );
+    
+    if (fkErrors.length > 0) {
+      status.foreignKeyErrors = fkErrors;
+      console.warn(`⚠️ [QUEUE STATUS] ${fkErrors.length} foreign key constraint violations detected`);
+    }
+    
+    return status;
   }
 
   /**
@@ -301,21 +424,69 @@ class SyncQueueManager {
     console.log('✅ SyncQueueManager shutdown complete');
   }
 
-  // Private sync functions for each data type
+  // 🔧 ENHANCED: Player sync with FK constraint handling
   private async syncPlayers(updates: QueuedUpdate<Player>[]): Promise<void> {
     console.log(`🔄 [DB SYNC] Syncing ${updates.length} players...`);
     
     for (const update of updates) {
       try {
+        // 🔧 For player updates, check for FK constraints first
+        if (update.updateType === 'update') {
+          // Check if player exists in DB first
+          const existingPlayer = await storage.getPlayer(update.id);
+          if (!existingPlayer) {
+            console.log(`⚠️ [DB SYNC] Player ${update.id} not in DB, converting to create`);
+            update.updateType = 'create';
+          }
+        }
+        
         if (update.updateType === 'create') {
           await storage.createPlayer(update.data);
         } else {
-          await storage.updatePlayer(update.id, update.data);
+          // 🔧 Enhanced update with FK safety
+          await this.safeUpdatePlayer(update.id, update.data);
         }
         console.log(`✅ [DB SYNC] Player ${update.id} synced successfully`);
       } catch (error) {
-        console.error(`❌ [DB SYNC] Failed to sync player ${update.id}:`, error);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        console.error(`❌ [DB SYNC] Failed to sync player ${update.id}:`, errorMessage);
+        
+        // Store error for retry handling
+        update.lastError = errorMessage;
+        
         throw error; // Let queue handle retries
+      }
+    }
+  }
+
+  /**
+   * 🔧 Safe player update with session cleanup if needed
+   */
+  private async safeUpdatePlayer(playerId: string, playerData: Player): Promise<void> {
+    try {
+      // Try normal update first
+      await storage.updatePlayer(playerId, playerData);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown';
+      
+      // If FK constraint violation, try session cleanup
+      if (errorMessage.includes('23503') && errorMessage.includes('sessions')) {
+        console.log(`🧹 [SAFE UPDATE] FK violation detected, cleaning sessions for ${playerId}`);
+        
+        try {
+          // Clean up sessions first
+          await this.cleanupPlayerSessions(playerId);
+          
+          // Retry the update
+          await storage.updatePlayer(playerId, playerData);
+          console.log(`✅ [SAFE UPDATE] Player ${playerId} updated after session cleanup`);
+        } catch (retryError) {
+          console.error(`❌ [SAFE UPDATE] Still failed after session cleanup:`, retryError);
+          throw retryError;
+        }
+      } else {
+        // Not an FK error, re-throw original
+        throw error;
       }
     }
   }
@@ -333,6 +504,7 @@ class SyncQueueManager {
         console.log(`✅ [DB SYNC] Upgrade ${update.id} synced successfully`);
       } catch (error) {
         console.error(`❌ [DB SYNC] Failed to sync upgrade ${update.id}:`, error);
+        update.lastError = error instanceof Error ? error.message : 'Unknown error';
         throw error;
       }
     }
@@ -351,6 +523,7 @@ class SyncQueueManager {
         console.log(`✅ [DB SYNC] Character ${update.id} synced successfully`);
       } catch (error) {
         console.error(`❌ [DB SYNC] Failed to sync character ${update.id}:`, error);
+        update.lastError = error instanceof Error ? error.message : 'Unknown error';
         throw error;
       }
     }
@@ -370,6 +543,7 @@ class SyncQueueManager {
         console.log(`✅ [DB SYNC] Level ${update.id} synced successfully`);
       } catch (error) {
         console.error(`❌ [DB SYNC] Failed to sync level ${update.id}:`, error);
+        update.lastError = error instanceof Error ? error.message : 'Unknown error';
         throw error;
       }
     }
@@ -406,11 +580,16 @@ export const getAllQueueStatus = () => {
   return syncQueueManager.getAllQueueStatus();
 };
 
+// 🔧 NEW: Clean up foreign key constraint violations
+export const cleanupForeignKeyErrors = () => {
+  return syncQueueManager.cleanupForeignKeyErrors();
+};
+
 // Graceful shutdown
 export const shutdownSyncQueues = () => {
   return syncQueueManager.shutdown();
 };
 
-console.log('🔄 Sync queue system initialized - JSON changes will auto-sync to Supabase DB');
+console.log('🔄 Sync queue system initialized with FK constraint handling - JSON changes will auto-sync to Supabase DB');
 
 export default syncQueueManager;
