@@ -1,0 +1,89 @@
+[
+  {
+    "id": "template-first-tap",
+    "name": "Template First Tap",
+    "description": "Example first tap achievement",
+    "category": "gameplay",
+    "requirementType": "tapCount",
+    "target": 1,
+    "rewardType": "lp",
+    "rewardAmount": 25,
+    "icon": "👣",
+    "rarity": "common",
+    "sortOrder": 0,
+    "isSecret": false,
+    "isActive": false
+  },
+  {
+    "id": "template-milestone",
+    "name": "Template Milestone",
+    "description": "Example milestone achievement",
+    "category": "progression",
+    "requirementType": "levelReached",
+    "target": 10,
+    "rewardType": "lg",
+    "rewardAmount": 100,
+    "icon": "🏆",
+    "rarity": "rare",
+    "sortOrder": 1,
+    "isSecret": false,
+    "isActive": false
+  },
+  {
+    "id": "template-collector",
+    "name": "Template Collector",
+    "description": "Example collection achievement",
+    "category": "collection",
+    "requirementType": "charactersUnlocked",
+    "target": 5,
+    "rewardType": "lg",
+    "rewardAmount": 200,
+    "rewardData": {
+      "specialTitle": "Collector",
+      "characterUnlock": "special-character-id"
+    },
+    "icon": "🎭",
+    "rarity": "epic",
+    "sortOrder": 2,
+    "isSecret": false,
+    "isActive": false
+  },
+  {
+    "id": "template-legendary",
+    "name": "Template Legendary",
+    "description": "Example legendary achievement",
+    "category": "special",
+    "requirementType": "lpTotal",
+    "target": 1000000,
+    "rewardType": "lg",
+    "rewardAmount": 1000,
+    "rewardData": {
+      "specialTitle": "Legend",
+      "bonusMultiplier": 1.5,
+      "characterUnlock": "legendary-character-id"
+    },
+    "icon": "👑",
+    "rarity": "legendary",
+    "sortOrder": 99,
+    "isSecret": false,
+    "isActive": false
+  },
+  {
+    "id": "template-secret",
+    "name": "??? Secret ???",
+    "description": "Hidden until unlocked",
+    "category": "special",
+    "requirementType": "consecutiveDays",
+    "target": 7,
+    "rewardType": "lg",
+    "rewardAmount": 500,
+    "rewardData": {
+      "specialTitle": "Dedicated"
+    },
+    "icon": "❓",
+    "rarity": "legendary",
+    "sortOrder": 999,
+    "isSecret": true,
+    "isActive": false
+  }
+]

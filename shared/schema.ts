@@ -67,10 +67,81 @@ export const levels = pgTable("levels", {
   level: integer("level").primaryKey(),
   cost: integer("cost").notNull().default(100), // Points cost to level up
   experienceRequired: integer("experienceRequired"), // Optional/dormant XP system
+  pointsReward: integer("pointsReward").default(0).notNull(), // Bonus points on level up
   requirements: jsonb("requirements").notNull().default("[]").$type<Array<{ upgradeId: string; minLevel: number }>>(),
   unlocks: jsonb("unlocks").notNull().default("[]").$type<string[]>(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
+
+// 🏆 NEW: Tasks (Daily/Weekly recurring objectives)
+export const tasks = pgTable("tasks", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description").notNull(),
+  category: text("category").notNull(), // 'daily', 'weekly', 'event'
+  requirementType: text("requirementType").notNull(), // 'tapCount', 'lpEarned', 'energyUsed', etc.
+  target: integer("target").notNull(),
+  rewardType: text("rewardType").notNull(), // 'lp', 'lg', 'energy', 'boost'
+  rewardAmount: integer("rewardAmount").notNull(),
+  icon: text("icon"), // emoji or icon name
+  resetType: text("resetType").notNull().default('daily'), // 'daily', 'weekly', 'never'
+  sortOrder: integer("sortOrder").default(0).notNull(),
+  isActive: boolean("isActive").default(true).notNull(),
+  isHidden: boolean("isHidden").default(false).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+// 🏅 NEW: Achievements (Permanent unlocks)
+export const achievements = pgTable("achievements", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description").notNull(),
+  category: text("category").notNull(), // 'gameplay', 'collection', 'progression', 'special'
+  requirementType: text("requirementType").notNull(), // 'tapCount', 'lpTotal', 'levelReached', etc.
+  target: integer("target").notNull(),
+  rewardType: text("rewardType").notNull(), // 'lp', 'lg', 'character', 'title'
+  rewardAmount: integer("rewardAmount").notNull(),
+  rewardData: jsonb("rewardData").$type<Record<string, any>>(), // Additional reward info (e.g., characterId)
+  icon: text("icon"), // emoji or icon name
+  rarity: text("rarity").default('common').notNull(), // 'common', 'rare', 'epic', 'legendary'
+  sortOrder: integer("sortOrder").default(0).notNull(),
+  isSecret: boolean("isSecret").default(false).notNull(), // Hidden until unlocked
+  isActive: boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+// 📊 NEW: Player task progress (resets based on task resetType)
+export const playerTaskProgress = pgTable("playerTaskProgress", {
+  id: varchar("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  playerId: varchar("playerId").notNull().references(() => players.id, { onDelete: 'cascade' }),
+  taskId: text("taskId").notNull().references(() => tasks.id, { onDelete: 'cascade' }),
+  progress: integer("progress").default(0).notNull(),
+  isCompleted: boolean("isCompleted").default(false).notNull(),
+  isClaimed: boolean("isClaimed").default(false).notNull(),
+  completedAt: timestamp("completedAt"),
+  claimedAt: timestamp("claimedAt"),
+  lastResetAt: timestamp("lastResetAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+}, (table) => ({
+  // One progress entry per player per task
+  playerTaskUnique: unique().on(table.playerId, table.taskId),
+}));
+
+// 🏆 NEW: Player achievement progress (permanent)
+export const playerAchievementProgress = pgTable("playerAchievementProgress", {
+  id: varchar("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  playerId: varchar("playerId").notNull().references(() => players.id, { onDelete: 'cascade' }),
+  achievementId: text("achievementId").notNull().references(() => achievements.id, { onDelete: 'cascade' }),
+  progress: integer("progress").default(0).notNull(),
+  isUnlocked: boolean("isUnlocked").default(false).notNull(),
+  isClaimed: boolean("isClaimed").default(false).notNull(),
+  unlockedAt: timestamp("unlockedAt"),
+  claimedAt: timestamp("claimedAt"),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+}, (table) => ({
+  // One progress entry per player per achievement
+  playerAchievementUnique: unique().on(table.playerId, table.achievementId),
+}));
 
 // Fixed playerUpgrades to mirror JSON structure exactly
 export const playerUpgrades = pgTable("playerUpgrades", {
@@ -143,6 +214,25 @@ export const insertLevelSchema = createInsertSchema(levels).omit({
   createdAt: true
 });
 
+// 📋 NEW: Task and Achievement schemas
+export const insertTaskSchema = createInsertSchema(tasks).omit({
+  createdAt: true,
+});
+
+export const insertAchievementSchema = createInsertSchema(achievements).omit({
+  createdAt: true,
+});
+
+export const insertPlayerTaskProgressSchema = createInsertSchema(playerTaskProgress).omit({
+  id: true,
+  updatedAt: true,
+});
+
+export const insertPlayerAchievementProgressSchema = createInsertSchema(playerAchievementProgress).omit({
+  id: true,
+  updatedAt: true,
+});
+
 export const insertPlayerUpgradeSchema = createInsertSchema(playerUpgrades).omit({
   id: true,
   updatedAt: true,
@@ -183,6 +273,19 @@ export type InsertCharacter = z.infer<typeof insertCharacterSchema>;
 
 export type Level = typeof levels.$inferSelect;
 export type InsertLevel = z.infer<typeof insertLevelSchema>;
+
+// 📋 NEW: Task and Achievement types
+export type Task = typeof tasks.$inferSelect;
+export type InsertTask = z.infer<typeof insertTaskSchema>;
+
+export type Achievement = typeof achievements.$inferSelect;
+export type InsertAchievement = z.infer<typeof insertAchievementSchema>;
+
+export type PlayerTaskProgress = typeof playerTaskProgress.$inferSelect;
+export type InsertPlayerTaskProgress = z.infer<typeof insertPlayerTaskProgressSchema>;
+
+export type PlayerAchievementProgress = typeof playerAchievementProgress.$inferSelect;
+export type InsertPlayerAchievementProgress = z.infer<typeof insertPlayerAchievementProgressSchema>;
 
 export type PlayerUpgrade = typeof playerUpgrades.$inferSelect;
 export type InsertPlayerUpgrade = z.infer<typeof insertPlayerUpgradeSchema>;
