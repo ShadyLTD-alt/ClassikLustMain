@@ -27,7 +27,7 @@ import logger from "./logger";
 import masterDataService from "./utils/MasterDataService";
 // 🎯 JSON-FIRST: Import new player state manager WITH FIXED EXPORTS
 import { playerStateManager, getPlayerState, updatePlayerState, selectCharacterForPlayer, purchaseUpgradeForPlayer, setDisplayImageForPlayer } from "./utils/playerStateManager";
-// 🌙 LUNA LEARNING: Import learning system (now fixed)
+// 🌙 LUNA LEARNING: Import enhanced learning system
 import { lunaLearning } from "./utils/lunaLearningSystem";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -49,6 +49,12 @@ const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number = 5000, ope
     return await Promise.race([promise, timeoutPromise]);
   } catch (error) {
     logger.error(`Timeout in ${operation}`, { error: error instanceof Error ? error.message : 'Unknown' });
+    
+    // 🌙 TRAIN LUNA ON TIMEOUT PATTERNS
+    if (error instanceof Error && error.message.includes('timed out')) {
+      lunaLearning.recordOperationTiming(operation, timeoutMs);
+    }
+    
     throw error;
   }
 };
@@ -85,12 +91,55 @@ const upload = multer({
 export async function registerRoutes(app: Express): Promise<Server> {
   logger.info('⚡ Registering routes...');
 
-  // 🔧 REGISTER DEBUG ROUTES (development only) - FIXED IMPORT
+  // 🔧 REGISTER DEBUG ROUTES (development only)
   if (process.env.NODE_ENV !== 'production') {
     try {
       const debugRoutes = await import('./routes/debug');
       app.use('/api/debug', debugRoutes.default);
       console.log('🔧 Debug routes registered at /api/debug');
+      
+      // 🆕 NEW: Raw player file debug route
+      app.get('/api/debug/raw-player', requireAuth, async (req, res) => {
+        try {
+          const playerId = req.player!.id;
+          const player = await storage.getPlayer(playerId);
+          
+          if (!player) {
+            return res.status(404).json({ error: 'Player not found' });
+          }
+          
+          const folder = `${player.telegramId}_${player.username}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+          const filename = `player_${player.username.replace(/[^a-zA-Z0-9_-]/g, '_')}.json`;
+          const fullPath = path.join(process.cwd(), 'main-gamedata', 'player-data', folder, filename);
+          
+          const exists = fs.existsSync(fullPath);
+          let data = null;
+          let parseError = null;
+          
+          if (exists) {
+            try {
+              const content = await fs.promises.readFile(fullPath, 'utf8');
+              data = JSON.parse(content);
+            } catch (err) {
+              parseError = err instanceof Error ? err.message : 'Parse error';
+            }
+          }
+          
+          res.json({
+            exists,
+            path: fullPath,
+            folder,
+            filename,
+            keys: data ? Object.keys(data) : [],
+            parseError,
+            fileSize: exists ? fs.statSync(fullPath).size : 0
+          });
+          
+        } catch (error) {
+          res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
+        }
+      });
+      
     } catch (error) {
       console.warn('⚠️ Debug routes not available:', error instanceof Error ? error.message : 'Unknown');
     }
@@ -149,6 +198,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           logDir: path.resolve(process.cwd(), "logs"),
           fallbackActive: !fs.existsSync(path.resolve(process.cwd(), "logs")),
           lastHealthCheck: timestamp
+        },
+        luna: {
+          safeModeActive: lunaLearning.getSafeModeConfig().enabled,
+          asyncLockBypassed: lunaLearning.shouldBypassAsyncLock(),
+          maxOperationTimeMs: lunaLearning.getMaxOperationTime()
         }
       });
     } catch (error) {
@@ -158,6 +212,245 @@ export async function registerRoutes(app: Express): Promise<Server> {
         timestamp: new Date().toISOString(),
         error: error instanceof Error ? error.message : 'Health check failed'
       });
+    }
+  });
+
+  // 🌙 LUNA LEARNING ENDPOINTS
+  app.get("/api/luna/learning-report", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const summary = await withTimeout(
+        lunaLearning.getLearningSummary(),
+        5000,
+        'luna learning summary'
+      );
+      const checklist = await withTimeout(
+        lunaLearning.getPreventionChecklist(),
+        5000,
+        'luna prevention checklist'
+      );
+      const scan = await withTimeout(
+        lunaLearning.runPreventionScan(),
+        5000,
+        'luna prevention scan'
+      );
+      
+      res.json({
+        success: true,
+        luna: {
+          learning: summary,
+          preventionChecklist: checklist,
+          currentScan: scan,
+          operationMetrics: lunaLearning.getOperationMetrics(),
+          message: "Luna's enhanced knowledge including AsyncLock deadlock prevention"
+        }
+      });
+    } catch (error) {
+      logger.error('Luna learning report error', { error: error instanceof Error ? error.message : 'Unknown' });
+      res.status(500).json({ error: 'Failed to generate Luna learning report' });
+    }
+  });
+
+  // 🌙 LUNA EMERGENCY MODE ENDPOINT
+  app.post("/api/luna/emergency-mode", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      await lunaLearning.activateEmergencyMode();
+      res.json({
+        success: true,
+        message: 'Luna emergency mode activated - all known problematic modules bypassed',
+        safeModeConfig: lunaLearning.getSafeModeConfig()
+      });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to activate emergency mode' });
+    }
+  });
+
+  // 🆕 NEW: ADMIN UPGRADE ROUTES (JSON-first with memory refresh)
+  app.post("/api/admin/upgrades", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const upgrade = req.body;
+      console.log(`🔧 [ADMIN] Creating upgrade: ${upgrade.name || upgrade.id}`);
+      
+      // 1. Save to main-gamedata JSON (runtime source)
+      await saveUpgradeToJSON(upgrade);
+      
+      // 2. Save to database (background, non-blocking)
+      storage.createUpgrade(upgrade).catch(err => {
+        console.error(`🔴 [ADMIN] DB save failed for upgrade ${upgrade.id}:`, err);
+      });
+      
+      // 3. Refresh memory cache
+      await masterDataService.reloadUpgrades();
+      
+      // 4. Return fresh data for UI refresh
+      const upgrades = getUpgradesFromMemory();
+      console.log(`✅ [ADMIN] Upgrade ${upgrade.id} created and memory refreshed`);
+      
+      res.json({ success: true, upgrades, message: `Upgrade ${upgrade.name} created successfully` });
+    } catch (error) {
+      logger.error('Admin create upgrade error', { error: error instanceof Error ? error.message : 'Unknown' });
+      res.status(500).json({ error: 'Failed to create upgrade' });
+    }
+  });
+
+  app.patch("/api/admin/upgrades/:id", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const updates = req.body;
+      console.log(`🔧 [ADMIN] Editing upgrade: ${id}`, Object.keys(updates));
+      
+      // Get current upgrade
+      const currentUpgrade = getUpgradeFromMemory(id);
+      if (!currentUpgrade) {
+        return res.status(404).json({ error: 'Upgrade not found' });
+      }
+      
+      const updatedUpgrade = { ...currentUpgrade, ...updates, updatedAt: new Date() };
+      
+      // 1. Save to main-gamedata JSON (runtime source)
+      await saveUpgradeToJSON(updatedUpgrade);
+      
+      // 2. Update database (background, non-blocking)
+      storage.updateUpgrade(id, updates).catch(err => {
+        console.error(`🔴 [ADMIN] DB update failed for upgrade ${id}:`, err);
+      });
+      
+      // 3. Refresh memory cache
+      await masterDataService.reloadUpgrades();
+      
+      // 4. Return fresh data
+      const upgrades = getUpgradesFromMemory();
+      console.log(`✅ [ADMIN] Upgrade ${id} updated and memory refreshed`);
+      
+      res.json({ success: true, upgrades, message: `Upgrade ${currentUpgrade.name} updated successfully` });
+    } catch (error) {
+      logger.error('Admin update upgrade error', { error: error instanceof Error ? error.message : 'Unknown' });
+      res.status(500).json({ error: 'Failed to update upgrade' });
+    }
+  });
+
+  // 🆕 NEW: ADMIN CHARACTER ROUTES
+  app.post("/api/admin/characters", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const character = req.body;
+      console.log(`🎭 [ADMIN] Creating character: ${character.name || character.id}`);
+      
+      // 1. Save to main-gamedata JSON
+      await saveCharacterToJSON(character);
+      
+      // 2. Save to database (background)
+      storage.createCharacter(character).catch(err => {
+        console.error(`🔴 [ADMIN] DB save failed for character ${character.id}:`, err);
+      });
+      
+      // 3. Refresh memory cache
+      await masterDataService.reloadCharacters();
+      
+      // 4. Return fresh data
+      const characters = getCharactersFromMemory();
+      console.log(`✅ [ADMIN] Character ${character.id} created and memory refreshed`);
+      
+      res.json({ success: true, characters, message: `Character ${character.name} created successfully` });
+    } catch (error) {
+      logger.error('Admin create character error', { error: error instanceof Error ? error.message : 'Unknown' });
+      res.status(500).json({ error: 'Failed to create character' });
+    }
+  });
+
+  app.patch("/api/admin/characters/:id", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const updates = req.body;
+      console.log(`🎭 [ADMIN] Editing character: ${id}`, Object.keys(updates));
+      
+      const currentCharacter = getCharacterFromMemory(id);
+      if (!currentCharacter) {
+        return res.status(404).json({ error: 'Character not found' });
+      }
+      
+      const updatedCharacter = { ...currentCharacter, ...updates, updatedAt: new Date() };
+      
+      // 1. Save to JSON
+      await saveCharacterToJSON(updatedCharacter);
+      
+      // 2. Update database (background)
+      storage.updateCharacter(id, updates).catch(err => {
+        console.error(`🔴 [ADMIN] DB update failed for character ${id}:`, err);
+      });
+      
+      // 3. Refresh memory
+      await masterDataService.reloadCharacters();
+      
+      // 4. Return fresh data
+      const characters = getCharactersFromMemory();
+      console.log(`✅ [ADMIN] Character ${id} updated and memory refreshed`);
+      
+      res.json({ success: true, characters, message: `Character ${currentCharacter.name} updated successfully` });
+    } catch (error) {
+      logger.error('Admin update character error', { error: error instanceof Error ? error.message : 'Unknown' });
+      res.status(500).json({ error: 'Failed to update character' });
+    }
+  });
+
+  // 🆕 NEW: ADMIN LEVEL ROUTES
+  app.post("/api/admin/levels", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const level = req.body;
+      console.log(`🏆 [ADMIN] Creating level: ${level.level}`);
+      
+      // 1. Save to JSON
+      await saveLevelToJSON(level);
+      
+      // 2. Save to database (background)
+      storage.createLevel(level).catch(err => {
+        console.error(`🔴 [ADMIN] DB save failed for level ${level.level}:`, err);
+      });
+      
+      // 3. Refresh memory
+      await masterDataService.reloadLevels();
+      
+      // 4. Return fresh data
+      const levels = getLevelsFromMemory();
+      console.log(`✅ [ADMIN] Level ${level.level} created and memory refreshed`);
+      
+      res.json({ success: true, levels, message: `Level ${level.level} created successfully` });
+    } catch (error) {
+      logger.error('Admin create level error', { error: error instanceof Error ? error.message : 'Unknown' });
+      res.status(500).json({ error: 'Failed to create level' });
+    }
+  });
+
+  app.patch("/api/admin/levels/:level", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const levelNum = parseInt(req.params.level);
+      const updates = req.body;
+      console.log(`🏆 [ADMIN] Editing level: ${levelNum}`, Object.keys(updates));
+      
+      const currentLevel = getLevelFromMemory(levelNum);
+      if (!currentLevel) {
+        return res.status(404).json({ error: 'Level not found' });
+      }
+      
+      const updatedLevel = { ...currentLevel, ...updates, updatedAt: new Date() };
+      
+      // 1. Save to JSON
+      await saveLevelToJSON(updatedLevel);
+      
+      // 2. Update database (background)
+      storage.updateLevel(levelNum, updates).catch(err => {
+        console.error(`🔴 [ADMIN] DB update failed for level ${levelNum}:`, err);
+      });
+      
+      // 3. Refresh memory
+      await masterDataService.reloadLevels();
+      
+      // 4. Return fresh data
+      const levels = getLevelsFromMemory();
+      console.log(`✅ [ADMIN] Level ${levelNum} updated and memory refreshed`);
+      
+      res.json({ success: true, levels, message: `Level ${levelNum} updated successfully` });
+    } catch (error) {
+      logger.error('Admin update level error', { error: error instanceof Error ? error.message : 'Unknown' });
+      res.status(500).json({ error: 'Failed to update level' });
     }
   });
 
@@ -187,40 +480,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       logger.error('Player file migration error', { error: error instanceof Error ? error.message : 'Unknown' });
       res.status(500).json({ error: 'Failed to migrate player files' });
-    }
-  });
-
-  // 🌙 LUNA LEARNING ENDPOINT (now fixed)
-  app.get("/api/luna/learning-report", requireAuth, requireAdmin, async (req, res) => {
-    try {
-      const summary = await withTimeout(
-        lunaLearning.getLearningSummary(),
-        5000,
-        'luna learning summary'
-      );
-      const checklist = await withTimeout(
-        lunaLearning.getPreventionChecklist(),
-        5000,
-        'luna prevention checklist'
-      );
-      const scan = await withTimeout(
-        lunaLearning.runPreventionScan(),
-        5000,
-        'luna prevention scan'
-      );
-      
-      res.json({
-        success: true,
-        luna: {
-          learning: summary,
-          preventionChecklist: checklist,
-          currentScan: scan,
-          message: "Luna's accumulated knowledge from error patterns (JSON parsing fixed)"
-        }
-      });
-    } catch (error) {
-      logger.error('Luna learning report error', { error: error instanceof Error ? error.message : 'Unknown' });
-      res.status(500).json({ error: 'Failed to generate Luna learning report' });
     }
   });
 
@@ -808,7 +1067,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // 🎭 CHARACTER SELECT: Now with timeout protection and enhanced debugging
+  // 🎭 CHARACTER SELECT: Fixed with atomic unlocked + selected update
   app.post("/api/player/select-character", requireAuth, async (req, res) => {
     try {
       const { characterId } = req.body;
@@ -820,26 +1079,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: 'Character ID is required' });
       }
 
-      const playerState = await withTimeout(
-        getPlayerState(req.player!.id),
-        3000,
-        'get player state for character select'
-      );
-      console.log(`🎭 [CHARACTER SELECT] Current character: ${playerState.selectedCharacterId}`);
-      console.log(`🎭 [CHARACTER SELECT] Unlocked characters: [${playerState.unlockedCharacters.join(', ')}]`);
-      
-      // 🔧 DEV: Auto-unlock character if not unlocked
-      if (!playerState.unlockedCharacters.includes(characterId)) {
-        if (process.env.NODE_ENV !== 'production') {
-          console.log(`🔓 [CHARACTER SELECT] DEV: Auto-unlocking ${characterId}`);
-          playerState.unlockedCharacters.push(characterId);
-        } else {
-          console.log(`❌ [CHARACTER SELECT] Character ${characterId} not in unlocked list`);
-          return res.status(403).json({ error: `Character ${characterId} is not unlocked` });
-        }
-      }
-
-      console.log(`🔄 [CHARACTER SELECT] Attempting to select ${characterId}...`);
+      console.log(`🔄 [CHARACTER SELECT] Calling selectCharacterForPlayer...`);
       const updatedState = await withTimeout(
         selectCharacterForPlayer(req.player!.id, characterId),
         5000,
@@ -957,7 +1197,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ 
         success: true, 
         health,
-        message: 'JSON-first player state system status',
+        message: 'Simplified JSON-first player state system (AsyncLock removed)',
         requestedBy: req.player?.username
       });
     } catch (error) {
@@ -977,7 +1217,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ 
         success: true, 
         report,
-        message: "Luna's Master Data Integrity Report"
+        message: "Luna's Master Data Integrity Report with AsyncLock prevention active"
       });
     } catch (error) {
       logger.error('Master data report error', { error: error instanceof Error ? error.message : 'Unknown' });
@@ -1058,11 +1298,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   console.log('✅ All routes registered successfully');
   console.log('🔧 Timeout protection: 5s max for most operations, 3s for auth');
-  console.log('🎯 JSON-FIRST: Player system using telegramId_username folders: main-gamedata/player-data/{telegramId}_{username}/player_{username}.json');
+  console.log('🎯 JSON-FIRST: Player system using telegramId_username folders');
   console.log('🔧 Debug routes available at /api/debug (dev only)');
   console.log('📁 Master-data templates available for admin create flows');
-  console.log('🌙 Luna Learning System active (JSON parsing fixed)');
+  console.log('🌙 Luna Learning System active with AsyncLock deadlock prevention');
   console.log('📦 Migration endpoint available: POST /api/admin/migrate-player-files');
   console.log('🔇 Winston logging active with enhanced error tracking');
+  console.log('🆕 NEW: Admin CRUD routes for upgrades/characters/levels with JSON-first sync');
   return httpServer;
 }

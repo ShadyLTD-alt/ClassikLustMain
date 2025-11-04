@@ -4,6 +4,9 @@ import crypto from 'crypto';
 import { storage } from '../storage';
 import logger from '../logger';
 
+// 🌙 IMPORT LUNA'S TIMING HELPER
+import { lunaTimeOperation } from './lunaLearningSystem';
+
 interface PlayerState {
   id: string;
   telegramId: string;
@@ -96,8 +99,12 @@ class SimplePlayerStateManager {
     return crypto.createHash('md5').update(JSON.stringify(critical)).digest('hex');
   }
 
-  // 🚨 SIMPLIFIED: Direct JSON load without locks or complex error handling
+  // 🚨 SIMPLIFIED: Direct JSON load with Luna timing
   async loadPlayer(playerId: string): Promise<PlayerState> {
+    return lunaTimeOperation(`loadPlayer_${playerId}`, this._loadPlayer(playerId));
+  }
+  
+  private async _loadPlayer(playerId: string): Promise<PlayerState> {
     console.log(`📂 [SIMPLE] Loading player ${playerId}...`);
     
     // Check cache first
@@ -198,21 +205,27 @@ class SimplePlayerStateManager {
       // Ensure directory exists
       await fs.mkdir(dir, { recursive: true });
       
-      // Write directly (no temp files, no locks)
-      await fs.writeFile(jsonPath, JSON.stringify(state, null, 2), 'utf8');
+      // 🛡️ LUNA LEARNED: Atomic writes (temp + rename)
+      const tempPath = `${jsonPath}.tmp`;
+      await fs.writeFile(tempPath, JSON.stringify(state, null, 2), 'utf8');
+      await fs.rename(tempPath, jsonPath);
       
-      console.log(`💾 [SIMPLE] Saved JSON for ${state.username}`);
+      console.log(`💾 [SIMPLE] Atomically saved JSON for ${state.username}`);
     } catch (error) {
       console.error(`🔴 [SIMPLE] Failed to save JSON:`, error);
       throw error;
     }
   }
 
-  // 🚨 SIMPLIFIED: Update player without locks or complex state management
+  // 🚨 SIMPLIFIED: Update player with Luna timing
   async updatePlayer(playerId: string, updates: Partial<PlayerState>): Promise<PlayerState> {
+    return lunaTimeOperation(`updatePlayer_${playerId}`, this._updatePlayer(playerId, updates));
+  }
+  
+  private async _updatePlayer(playerId: string, updates: Partial<PlayerState>): Promise<PlayerState> {
     console.log(`🔄 [SIMPLE] Updating player ${playerId}:`, Object.keys(updates));
     
-    const current = await this.loadPlayer(playerId);
+    const current = await this._loadPlayer(playerId);
     
     const newState: PlayerState = {
       ...current,
@@ -239,14 +252,24 @@ class SimplePlayerStateManager {
     try {
       console.log(`🔄 [BG SYNC] Starting background sync for ${state.username}`);
       
+      // 🔧 NEW: Use new JSON-based playerUpgrades storage
+      await storage.setPlayerUpgradesJSON(playerId, state.upgrades);
+      console.log(`✅ [BG SYNC] Upgrades synced for ${state.username}: ${Object.keys(state.upgrades).length} upgrades`);
+      
       // Update main player data
       await storage.updatePlayer(playerId, {
         points: Math.round(state.points),
         lustPoints: Math.round(state.lustPoints || state.points),
+        lustGems: Math.round(state.lustGems || 0),
         energy: Math.round(state.energy),
+        energyMax: Math.round(state.energyMax),
+        level: state.level,
         selectedCharacterId: state.selectedCharacterId,
         displayImage: state.displayImage,
-        upgrades: state.upgrades
+        unlockedCharacters: state.unlockedCharacters, // 🔧 ENSURE THIS SYNCS
+        boostActive: state.boostActive,
+        boostMultiplier: state.boostMultiplier,
+        lastLogin: new Date()
       });
       
       console.log(`✅ [BG SYNC] Database updated for ${state.username}`);
@@ -309,7 +332,6 @@ class SimplePlayerStateManager {
     await this.syncToDatabaseBackground(playerId, state);
   }
 
-  // Stub methods for compatibility
   getCachedState(playerId: string): PlayerState | null {
     return this.cache.get(playerId) || null;
   }
@@ -333,82 +355,91 @@ class SimplePlayerStateManager {
 // Global singleton instance
 export const playerStateManager = new SimplePlayerStateManager();
 
-// 🚨 SIMPLIFIED: Helper functions without complex operations
+// 🚨 SIMPLIFIED: Helper functions with Luna timing
 export async function getPlayerState(playerId: string): Promise<PlayerState> {
-  console.time(`[GET] ${playerId}`);
-  try {
-    const result = await playerStateManager.loadPlayer(playerId);
-    console.timeEnd(`[GET] ${playerId}`);
-    return result;
-  } catch (error) {
-    console.timeEnd(`[GET] ${playerId}`);
-    throw error;
-  }
+  return lunaTimeOperation('getPlayerState', playerStateManager.loadPlayer(playerId));
 }
 
 export async function updatePlayerState(playerId: string, updates: Partial<PlayerState>): Promise<PlayerState> {
-  console.time(`[UPDATE] ${playerId}`);
-  try {
-    const result = await playerStateManager.updatePlayer(playerId, updates);
-    console.timeEnd(`[UPDATE] ${playerId}`);
-    return result;
-  } catch (error) {
-    console.timeEnd(`[UPDATE] ${playerId}`);
-    throw error;
-  }
+  return lunaTimeOperation('updatePlayerState', playerStateManager.updatePlayer(playerId, updates));
 }
 
+// 🔧 FIXED: Character selection with atomic unlockedCharacters + selectedCharacterId update
 export async function selectCharacterForPlayer(playerId: string, characterId: string): Promise<PlayerState> {
-  console.log(`🎭 [CHARACTER] Selecting ${characterId} for ${playerId}`);
-  
-  const currentState = await getPlayerState(playerId);
-  
-  if (!currentState.unlockedCharacters.includes(characterId)) {
-    if (process.env.NODE_ENV === 'production') {
-      throw new Error(`Character ${characterId} is not unlocked`);
-    } else {
-      // Auto-unlock in development
-      console.log(`🔓 [DEV] Auto-unlocking character ${characterId}`);
-      currentState.unlockedCharacters.push(characterId);
+  return lunaTimeOperation('selectCharacterForPlayer', async () => {
+    console.log(`🎭 [CHARACTER] Player ${playerId} selecting character: ${characterId}`);
+    
+    const currentState = await getPlayerState(playerId);
+    console.log(`🎭 [CHARACTER] Current character: ${currentState.selectedCharacterId}`);
+    console.log(`🎭 [CHARACTER] Unlocked characters: [${currentState.unlockedCharacters.join(', ')}]`);
+    
+    let updatedUnlockedCharacters = [...currentState.unlockedCharacters];
+    
+    // Check if character is unlocked
+    if (!currentState.unlockedCharacters.includes(characterId)) {
+      if (process.env.NODE_ENV === 'production') {
+        console.log(`❌ [CHARACTER] Character ${characterId} not unlocked in production`);
+        throw new Error(`Character ${characterId} is not unlocked`);
+      } else {
+        // Auto-unlock in development
+        console.log(`🔓 [CHARACTER] DEV: Auto-unlocking character ${characterId}`);
+        updatedUnlockedCharacters.push(characterId);
+      }
     }
-  }
-  
-  return await updatePlayerState(playerId, {
-    selectedCharacterId: characterId,
-    selectedImageId: null,
-    displayImage: null,
-    unlockedCharacters: currentState.unlockedCharacters
+    
+    // 🔧 ATOMIC UPDATE: Both selectedCharacterId and unlockedCharacters together
+    const updatedState = await updatePlayerState(playerId, {
+      selectedCharacterId: characterId,
+      selectedImageId: null, // Clear when character changes
+      displayImage: null, // Clear when character changes  
+      unlockedCharacters: updatedUnlockedCharacters // Persist unlock
+    });
+    
+    console.log(`✅ [CHARACTER] SUCCESS: ${characterId} selected for ${updatedState.username}`);
+    console.log(`🎭 [CHARACTER] Updated unlocked list: [${updatedState.unlockedCharacters.join(', ')}]`);
+    
+    return updatedState;
   });
 }
 
 export async function setDisplayImageForPlayer(playerId: string, imageUrl: string): Promise<PlayerState> {
-  console.log(`🖼️ [IMAGE] Setting ${imageUrl} for ${playerId}`);
-  
-  if (!imageUrl || !imageUrl.startsWith('/uploads/')) {
-    throw new Error('Invalid image URL');
-  }
-  
-  return await updatePlayerState(playerId, {
-    displayImage: imageUrl
+  return lunaTimeOperation('setDisplayImageForPlayer', async () => {
+    console.log(`🖼️ [IMAGE] Player ${playerId} setting display image: ${imageUrl}`);
+    
+    if (!imageUrl || !imageUrl.startsWith('/uploads/')) {
+      throw new Error('Invalid image URL');
+    }
+    
+    const updatedState = await updatePlayerState(playerId, {
+      displayImage: imageUrl
+    });
+    
+    console.log(`✅ [IMAGE] SUCCESS: Display image set for ${updatedState.username}`);
+    return updatedState;
   });
 }
 
 export async function purchaseUpgradeForPlayer(playerId: string, upgradeId: string, newLevel: number, cost: number): Promise<PlayerState> {
-  console.log(`🛒 [UPGRADE] ${upgradeId} level ${newLevel} for ${playerId} (cost: ${cost})`);
-  
-  const currentState = await getPlayerState(playerId);
-  
-  if (currentState.points < cost) {
-    throw new Error(`Insufficient points: has ${currentState.points}, needs ${cost}`);
-  }
-  
-  return await updatePlayerState(playerId, {
-    points: Math.round(currentState.points - cost),
-    lustPoints: Math.round(currentState.lustPoints - cost),
-    upgrades: {
-      ...currentState.upgrades,
-      [upgradeId]: newLevel
+  return lunaTimeOperation('purchaseUpgradeForPlayer', async () => {
+    console.log(`🛒 [UPGRADE] Player ${playerId} purchasing ${upgradeId} level ${newLevel} for ${cost} points`);
+    
+    const currentState = await getPlayerState(playerId);
+    
+    if (currentState.points < cost) {
+      throw new Error(`Insufficient points: has ${currentState.points}, needs ${cost}`);
     }
+    
+    const updatedState = await updatePlayerState(playerId, {
+      points: Math.round(currentState.points - cost),
+      lustPoints: Math.round(currentState.lustPoints - cost),
+      upgrades: {
+        ...currentState.upgrades,
+        [upgradeId]: newLevel
+      }
+    });
+    
+    console.log(`✅ [UPGRADE] SUCCESS: ${upgradeId} level ${newLevel} purchased for ${updatedState.username}`);
+    return updatedState;
   });
 }
 
