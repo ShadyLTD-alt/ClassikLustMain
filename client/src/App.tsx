@@ -6,7 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { GameProvider } from "@/contexts/GameContext";
 import Game from "@/pages/Game";
 import LoginScreen from "@/components/LoginScreen";
-import { LoadingScreen } from "@/components/LoadingScreen";
+import LoadingScreen from "@/components/LoadingScreen"; // ✅ FIXED: Default import instead of named import
 import { useState, useEffect } from "react";
 // 🔇 Suppress ResizeObserver errors
 import "@/utils/suppressResizeObserverErrors";
