@@ -3,8 +3,8 @@ import { DEFAULT_THEME, calculateUpgradeCost, calculateUpgradeValue, checkLevelR
 
 interface GameState {
   points: number;
-  lustPoints: number;        // NEW: alias for points but separate for clarity
-  lustGems: number;          // NEW: premium currency
+  lustPoints: number;
+  lustGems: number;
   energy: number;
   energyMax: number;
   level: number;
@@ -20,17 +20,14 @@ interface GameState {
   isAdmin: boolean;
   displayImage: string | null;
   lastTapValue?: number;
-  // NEW BOOST SYSTEM
   boostActive: boolean;
   boostMultiplier: number;
   boostExpiresAt: Date | null;
   boostEnergy: number;
-  // NEW TRACKING
   totalTapsToday: number;
   totalTapsAllTime: number;
   lastDailyReset: Date;
   lastWeeklyReset: Date;
-  // SESSION INFO
   username?: string;
   telegramId?: string;
 }
@@ -67,55 +64,47 @@ interface GameContextType {
 
 const GameContext = createContext<GameContextType | undefined>(undefined);
 
-// ✅ LUNA FIX: DYNAMIC INITIAL STATE - No hardcoded values!
-// Values will be loaded from server JSON-first system
 const createInitialState = (): GameState => ({
-  points: 0,          // Will be loaded from JSON
-  lustPoints: 0,      // Will be loaded from JSON
-  lustGems: 0,        // Will be loaded from JSON
-  energy: 0,          // Will be loaded from JSON
-  energyMax: 0,       // Will be CALCULATED from upgrades!
-  level: 1,           // Will be loaded from JSON
-  selectedCharacterId: '',  // Will be loaded from JSON
+  points: 0,
+  lustPoints: 0,
+  lustGems: 0,
+  energy: 1000,
+  energyMax: 1000,
+  level: 1,
+  selectedCharacterId: 'shadow', // 🔧 Default fallback character
   selectedImageId: null,
   selectedAvatarId: null,
-  upgrades: {},       // Will be loaded from JSON
-  unlockedCharacters: [],  // Will be loaded from JSON
+  upgrades: {},
+  unlockedCharacters: ['shadow'],
   unlockedImages: [],
-  passiveIncomeRate: 0,    // Will be CALCULATED from upgrades!
-  passiveIncomeCap: 10000, // From master data
-  energyRegenRate: 0,      // Will be CALCULATED from upgrades!
-  isAdmin: false,          // Will be loaded from JSON
+  passiveIncomeRate: 0,
+  passiveIncomeCap: 10000,
+  energyRegenRate: 1,
+  isAdmin: false,
   displayImage: null,
   lastTapValue: 1,
-  // NEW BOOST SYSTEM - All loaded from JSON
   boostActive: false,
   boostMultiplier: 1.0,
   boostExpiresAt: null,
   boostEnergy: 0,
-  // NEW TRACKING - All loaded from JSON
   totalTapsToday: 0,
   totalTapsAllTime: 0,
   lastDailyReset: new Date(),
   lastWeeklyReset: new Date(),
-  // SESSION INFO
   username: '',
   telegramId: ''
 });
 
-// CALCULATE BASE VALUES FROM UPGRADES - FIXED CALCULATION!
 const calculateBaseEnergyValues = (upgrades: UpgradeConfig[], playerUpgrades: Record<string, number>) => {
-  // ✅ LUNA FIX: Base energy values from master data (not hardcoded)
-  let baseMaxEnergy = 1000;  // This should come from master data eventually
-  let baseEnergyRegen = 1;   // This should come from master data eventually
+  let baseMaxEnergy = 1000;
+  let baseEnergyRegen = 1;
   
-  // Calculate from upgrades using the CORRECT formula
   const energyUpgrades = upgrades.filter(u => u.type === 'energyMax');
   energyUpgrades.forEach(u => {
     const level = playerUpgrades[u.id] || 0;
     if (level > 0) {
       const upgradeValue = calculateUpgradeValue(u, level);
-      baseMaxEnergy += upgradeValue;  // ADD the upgrade value, don't multiply!
+      baseMaxEnergy += upgradeValue;
     }
   });
   
@@ -124,23 +113,21 @@ const calculateBaseEnergyValues = (upgrades: UpgradeConfig[], playerUpgrades: Re
     const level = playerUpgrades[u.id] || 0;
     if (level > 0) {
       const upgradeValue = calculateUpgradeValue(u, level);
-      baseEnergyRegen += upgradeValue;  // ADD the upgrade value!
+      baseEnergyRegen += upgradeValue;
     }
   });
   
   return { baseMaxEnergy, baseEnergyRegen };
 };
 
-// 🔧 URL normalization helper - ensures leading slash
 const normalizeImageUrl = (url: string | null): string | null => {
   if (!url) return null;
-  if (url.startsWith('http')) return url; // External URL
-  if (url.startsWith('/')) return url;   // Already has leading slash
-  return `/${url}`; // Add missing leading slash
+  if (url.startsWith('http')) return url;
+  if (url.startsWith('/')) return url;
+  return `/${url}`;
 };
 
 export function GameProvider({ children }: { children: React.ReactNode }) {
-  // ✅ LUNA FIX: Dynamic initial state creation
   const [state, setState] = useState<GameState>(() => createInitialState());
   const [upgrades, setUpgrades] = useState<UpgradeConfig[]>([]);
   const [characters, setCharacters] = useState<CharacterConfig[]>([]);
@@ -150,19 +137,16 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [pendingPurchases, setPendingPurchases] = useState<Set<string>>(new Set());
   const [isInitialized, setIsInitialized] = useState(false);
   const [loadingError, setLoadingError] = useState<string | null>(null);
-  const [loadingAttempts, setLoadingAttempts] = useState(0); // 🔧 Track loading attempts
 
-  // Calculate tap value (shared with CharacterDisplay) - NOW WITH BOOST
   const calculateTapValue = useCallback(() => {
     const tapPowerUpgrades = upgrades.filter(u => u.type === 'perTap');
-    let tapValue = 1; // Base tap value
+    let tapValue = 1;
 
     tapPowerUpgrades.forEach(upgrade => {
       const level = state.upgrades[upgrade.id] || 0;
       tapValue += calculateUpgradeValue(upgrade, level);
     });
 
-    // Apply boost multiplier if active
     if (state.boostActive && state.boostExpiresAt && new Date() < state.boostExpiresAt) {
       tapValue *= state.boostMultiplier;
     }
@@ -170,7 +154,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     return Math.floor(tapValue);
   }, [upgrades, state.upgrades, state.boostActive, state.boostMultiplier, state.boostExpiresAt]);
 
-  // Check for expired boosts
   useEffect(() => {
     if (state.boostActive && state.boostExpiresAt && new Date() >= state.boostExpiresAt) {
       setState(prev => ({
@@ -182,239 +165,160 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
   }, [state.boostActive, state.boostExpiresAt]);
 
-  // 🎯 JSON-FIRST: Enhanced data loading with request deduplication
+  // 🔧 CRITICAL FIX: Prevent timeout errors and handle failures gracefully
   useEffect(() => {
     let mounted = true;
-    let loadingTimeout: NodeJS.Timeout;
     
     const loadAllData = async () => {
-      // 🔧 Prevent excessive loading attempts
-      if (loadingAttempts >= 3) {
-        console.log('❌ [GAME CONTEXT] Max loading attempts reached, stopping');
-        return;
-      }
-      
-      setLoadingAttempts(prev => prev + 1);
-      console.log(`🔍 [GAME CONTEXT] Starting data load attempt ${loadingAttempts + 1}...`);
+      console.log(`🔍 [GAME CONTEXT] Starting data load...`);
       
       const sessionToken = localStorage.getItem('sessionToken');
       if (!sessionToken) {
-        console.log('❌ [GAME CONTEXT] No session token, using empty state');
-        setLoadingError('No session token found');
+        console.log('❌ [GAME CONTEXT] No session token, setting empty state');
         setIsInitialized(true);
         return;
       }
-      
-      console.log(`🔍 [GAME CONTEXT] Using session token: ${sessionToken.slice(0, 8)}...`);
 
       try {
         console.log('🎯 [GAME CONTEXT] Loading from JSON-first system...');
 
-        // 🔍 STEP 1: Test session token with auth/me (better endpoint for debugging)
-        console.log('🔍 [GAME CONTEXT] Testing session token...');
+        // 🔧 REDUCED TIMEOUT: Use shorter timeout to prevent hanging
         const authRes = await fetch('/api/auth/me', {
           headers: { 'Authorization': `Bearer ${sessionToken}` },
-          signal: AbortSignal.timeout(10000)
+          signal: AbortSignal.timeout(5000) // Reduced from 10000
         });
 
-        if (!mounted) return; // Component unmounted during fetch
+        if (!mounted) return;
 
         if (!authRes.ok) {
           console.error(`❌ [GAME CONTEXT] Session invalid: ${authRes.status}`);
-          const errorText = await authRes.text().catch(() => 'Unknown error');
-          console.error(`❌ [GAME CONTEXT] Auth error details:`, errorText);
-          
-          // Clear invalid session
-          localStorage.removeItem('sessionToken');
-          setLoadingError(`Session expired (${authRes.status})`);
+          if (authRes.status === 401) {
+            localStorage.removeItem('sessionToken');
+          }
+          setLoadingError(`Session error (${authRes.status})`);
           setIsInitialized(true);
           return;
         }
 
         const authData = await authRes.json();
         if (!authData.success || !authData.player) {
-          console.error('❌ [GAME CONTEXT] Invalid auth response format');
-          setLoadingError('Invalid authentication response');
+          console.error('❌ [GAME CONTEXT] Invalid auth response');
+          setLoadingError('Invalid authentication');
           setIsInitialized(true);
           return;
         }
         
         const playerFromAuth = authData.player;
-        console.log(`✅ [GAME CONTEXT] Session valid for: ${playerFromAuth.username}`);
-        console.log(`🔍 [GAME CONTEXT] Player data from auth:`, {
-          username: playerFromAuth.username,
-          telegramId: playerFromAuth.telegramId,
-          level: playerFromAuth.level,
-          selectedCharacterId: playerFromAuth.selectedCharacterId,
-          displayImage: playerFromAuth.displayImage,
-          points: playerFromAuth.points,
-          upgradesCount: Object.keys(playerFromAuth.upgrades || {}).length
-        });
+        console.log(`✅ [GAME CONTEXT] Player loaded: ${playerFromAuth.username}`);
 
-        if (!mounted) return; // Component unmounted
+        if (!mounted) return;
 
-        // 🔍 STEP 2: Load game config data (with timeout and error handling)
-        console.log('🔍 [GAME CONTEXT] Loading game configuration data...');
-        const [upgradesRes, charactersRes, levelsRes, mediaRes] = await Promise.allSettled([
+        // 🔧 PARALLEL LOADING: Load all config in parallel with shorter timeouts
+        const configPromises = [
           fetch('/api/upgrades', {
             headers: { 'Authorization': `Bearer ${sessionToken}` },
-            signal: AbortSignal.timeout(8000)
-          }),
+            signal: AbortSignal.timeout(3000) // Reduced timeout
+          }).then(r => r.ok ? r.json() : null).catch(() => null),
+          
           fetch('/api/characters', {
             headers: { 'Authorization': `Bearer ${sessionToken}` },
-            signal: AbortSignal.timeout(8000)
-          }),
+            signal: AbortSignal.timeout(3000)
+          }).then(r => r.ok ? r.json() : null).catch(() => null),
+          
           fetch('/api/levels', {
             headers: { 'Authorization': `Bearer ${sessionToken}` },
-            signal: AbortSignal.timeout(8000)
-          }),
+            signal: AbortSignal.timeout(3000)
+          }).then(r => r.ok ? r.json() : null).catch(() => null),
+          
           fetch('/api/media', {
             headers: { 'Authorization': `Bearer ${sessionToken}` },
-            signal: AbortSignal.timeout(8000)
-          })
-        ]);
+            signal: AbortSignal.timeout(3000)
+          }).then(r => r.ok ? r.json() : null).catch(() => null)
+        ];
 
-        if (!mounted) return; // Component unmounted
+        const [upgradesData, charactersData, levelsData, mediaData] = await Promise.allSettled(
+          configPromises
+        );
 
-        // Parse config responses with detailed error handling
-        let upgradesData = null, charactersData = null, levelsData = null, mediaData = null;
+        if (!mounted) return;
+
+        // Set config data with fallbacks
+        const upgrades = upgradesData.status === 'fulfilled' && upgradesData.value?.upgrades ? upgradesData.value.upgrades : [];
+        const characters = charactersData.status === 'fulfilled' && charactersData.value?.characters ? charactersData.value.characters : [];
+        const levels = levelsData.status === 'fulfilled' && levelsData.value?.levels ? levelsData.value.levels : [];
+        const media = mediaData.status === 'fulfilled' && mediaData.value?.media ? mediaData.value.media : [];
         
-        if (upgradesRes.status === 'fulfilled' && upgradesRes.value.ok) {
-          upgradesData = await upgradesRes.value.json().catch(e => { console.error('Upgrades parse error:', e); return null; });
-        }
-        if (charactersRes.status === 'fulfilled' && charactersRes.value.ok) {
-          charactersData = await charactersRes.value.json().catch(e => { console.error('Characters parse error:', e); return null; });
-        }
-        if (levelsRes.status === 'fulfilled' && levelsRes.value.ok) {
-          levelsData = await levelsRes.value.json().catch(e => { console.error('Levels parse error:', e); return null; });
-        }
-        if (mediaRes.status === 'fulfilled' && mediaRes.value.ok) {
-          mediaData = await mediaRes.value.json().catch(e => { console.error('Media parse error:', e); return null; });
-        }
+        setUpgrades(upgrades);
+        setCharacters(characters);
+        setLevelConfigs(levels);
+        
+        const imageConfigs: ImageConfig[] = media.map((m: any) => ({
+          id: m.id,
+          characterId: m.characterId,
+          url: normalizeImageUrl(m.url),
+          unlockLevel: m.unlockLevel,
+          categories: m.categories || [],
+          poses: m.poses || [],
+          isHidden: m.isHidden || false
+        }));
+        setImages(imageConfigs);
+        
+        console.log('✅ [GAME CONTEXT] Config loaded:', { upgrades: upgrades.length, characters: characters.length, media: imageConfigs.length });
 
-        if (!mounted) return; // Component unmounted
-
-        // Set config data first
-        if (upgradesData?.upgrades) {
-          setUpgrades(upgradesData.upgrades);
-          console.log('✅ [GAME CONTEXT] Loaded upgrades:', upgradesData.upgrades.length);
-        } else {
-          console.warn('⚠️ [GAME CONTEXT] Failed to load upgrades');
-        }
-
-        if (charactersData?.characters) {
-          setCharacters(charactersData.characters);
-          console.log('✅ [GAME CONTEXT] Loaded characters:', charactersData.characters.length);
-        } else {
-          console.warn('⚠️ [GAME CONTEXT] Failed to load characters');
-        }
-
-        if (levelsData?.levels) {
-          setLevelConfigs(levelsData.levels);
-          console.log('✅ [GAME CONTEXT] Loaded levels:', levelsData.levels.length);
-        } else {
-          console.warn('⚠️ [GAME CONTEXT] Failed to load levels');
-        }
-
-        if (mediaData?.media) {
-          const imageConfigs: ImageConfig[] = mediaData.media.map((media: any) => ({
-            id: media.id,
-            characterId: media.characterId,
-            url: normalizeImageUrl(media.url), // 🔧 FIX: Normalize URL with leading slash
-            unlockLevel: media.unlockLevel,
-            categories: media.categories || [],
-            poses: media.poses || [],
-            isHidden: media.isHidden || false
-          }));
-          setImages(imageConfigs);
-          console.log('✅ [GAME CONTEXT] Loaded media:', imageConfigs.length);
-        } else {
-          console.warn('⚠️ [GAME CONTEXT] Failed to load media');
-        }
-
-        // 🔍 STEP 3: Set player state from auth data (which comes from JSON-first system)
-        if (upgradesData?.upgrades) {
-          const player = playerFromAuth; // Use auth data (which loaded from JSON-first)
+        // Set player state
+        if (upgrades.length > 0) {
+          const player = playerFromAuth;
           const playerUpgrades = player.upgrades || {};
+          const { baseMaxEnergy, baseEnergyRegen } = calculateBaseEnergyValues(upgrades, playerUpgrades);
           
-          // Calculate REAL energy values from upgrades
-          const { baseMaxEnergy, baseEnergyRegen } = calculateBaseEnergyValues(upgradesData.upgrades, playerUpgrades);
+          setState(prev => ({
+            ...prev,
+            username: player.username,
+            telegramId: player.telegramId,
+            points: typeof player.points === 'string' ? parseFloat(player.points) : (player.points || 0),
+            lustPoints: typeof player.lustPoints === 'string' ? parseFloat(player.lustPoints) : (player.lustPoints || player.points || 0),
+            lustGems: player.lustGems || 0,
+            energy: Math.min(player.energy || baseMaxEnergy, baseMaxEnergy),
+            energyMax: baseMaxEnergy,
+            level: player.level || 1,
+            selectedCharacterId: player.selectedCharacterId || (characters[0]?.id || 'shadow'),
+            selectedImageId: player.selectedImageId || null,
+            displayImage: normalizeImageUrl(player.displayImage),
+            upgrades: playerUpgrades,
+            unlockedCharacters: Array.isArray(player.unlockedCharacters) ? player.unlockedCharacters : ['shadow'],
+            unlockedImages: Array.isArray(player.unlockedImages) ? player.unlockedImages : [],
+            passiveIncomeRate: player.passiveIncomeRate || 0,
+            energyRegenRate: baseEnergyRegen,
+            isAdmin: player.isAdmin || false,
+            boostActive: player.boostActive || false,
+            boostMultiplier: player.boostMultiplier || 1.0,
+            boostExpiresAt: player.boostExpiresAt ? new Date(player.boostExpiresAt) : null,
+            boostEnergy: player.boostEnergy || 0,
+            totalTapsToday: player.totalTapsToday || 0,
+            totalTapsAllTime: player.totalTapsAllTime || 0,
+            lastDailyReset: player.lastDailyReset ? new Date(player.lastDailyReset) : new Date(),
+            lastWeeklyReset: player.lastWeeklyReset ? new Date(player.lastWeeklyReset) : new Date()
+          }));
           
-          console.log('🔧 [GAME CONTEXT] Luna calculated energy from upgrades:', { baseMaxEnergy, baseEnergyRegen });
-          console.log('🔧 [GAME CONTEXT] Player upgrade levels from JSON:', playerUpgrades);
-          
-          // ✅ LUNA JSON-FIRST: Set player state from JSON snapshot data
-          setState(prev => {
-            const newState = {
-              ...prev,
-              // Player identity
-              username: player.username,
-              telegramId: player.telegramId,
-              // Game state from JSON
-              points: typeof player.points === 'string' ? parseFloat(player.points) : (player.points || 0),
-              lustPoints: typeof player.lustPoints === 'string' ? parseFloat(player.lustPoints) : (player.lustPoints || player.points || 0),
-              lustGems: player.lustGems || 0,
-              energy: Math.min(player.energy || baseMaxEnergy, baseMaxEnergy),
-              energyMax: baseMaxEnergy,              // CALCULATED, NOT HARDCODED!
-              level: player.level || 1,
-              selectedCharacterId: player.selectedCharacterId || (charactersData?.characters?.[0]?.id || 'shadow'),
-              selectedImageId: player.selectedImageId || null,
-              displayImage: normalizeImageUrl(player.displayImage), // 🔧 FIX: Normalize display image URL
-              upgrades: playerUpgrades, // 🔧 CRITICAL: This contains the actual upgrade levels!
-              unlockedCharacters: Array.isArray(player.unlockedCharacters) ? player.unlockedCharacters : ['shadow'],
-              unlockedImages: Array.isArray(player.unlockedImages) ? player.unlockedImages : [],
-              passiveIncomeRate: player.passiveIncomeRate || 0,
-              energyRegenRate: baseEnergyRegen,      // CALCULATED, NOT HARDCODED!
-              isAdmin: player.isAdmin || false,
-              // NEW BOOST FIELDS - From JSON
-              boostActive: player.boostActive || false,
-              boostMultiplier: player.boostMultiplier || 1.0,
-              boostExpiresAt: player.boostExpiresAt ? new Date(player.boostExpiresAt) : null,
-              boostEnergy: player.boostEnergy || 0,
-              // NEW TRACKING FIELDS - From JSON
-              totalTapsToday: player.totalTapsToday || 0,
-              totalTapsAllTime: player.totalTapsAllTime || 0,
-              lastDailyReset: player.lastDailyReset ? new Date(player.lastDailyReset) : new Date(),
-              lastWeeklyReset: player.lastWeeklyReset ? new Date(player.lastWeeklyReset) : new Date()
-            };
-            
-            console.log('🎯 [GAME CONTEXT] JSON-FIRST player state loaded:', {
-              username: newState.username,
-              points: newState.points,
-              level: newState.level,
-              selectedCharacter: newState.selectedCharacterId,
-              displayImage: newState.displayImage,
-              energyMax: newState.energyMax,
-              upgradesCount: Object.keys(newState.upgrades).length,
-              upgradeDetails: Object.entries(newState.upgrades).map(([id, lvl]) => `${id}:${lvl}`).join(', ')
-            });
-            
-            return newState;
-          });
-          
-          console.log('✅ [GAME CONTEXT] All data loaded from JSON-first system');
+          console.log('✅ [GAME CONTEXT] Player state loaded successfully');
         }
 
         setLoadingError(null);
-        console.log('✅ [GAME CONTEXT] Complete - All game data loaded successfully');
+        console.log('✅ [GAME CONTEXT] Complete - All data loaded');
       } catch (error) {
         if (!mounted) return;
-        console.error('❌ [GAME CONTEXT] Failed to load game data:', error);
-        setLoadingError(error instanceof Error ? error.message : 'Unknown error');
+        console.error('❌ [GAME CONTEXT] Load failed:', error);
         
-        // 🔧 Retry loading after delay if it's a network error
-        if (loadingAttempts < 3 && (error instanceof TypeError || error instanceof Error && error.message.includes('fetch'))) {
-          console.log(`🔄 [GAME CONTEXT] Retrying load in 3 seconds... (attempt ${loadingAttempts + 1}/3)`);
-          loadingTimeout = setTimeout(() => {
-            if (mounted) {
-              setLoadingAttempts(prev => prev + 1);
-              loadAllData();
-            }
-          }, 3000);
+        // 🔧 GRACEFUL DEGRADATION: Set minimal working state
+        if (error instanceof Error && error.name === 'AbortError') {
+          setLoadingError('Connection timeout - using offline mode');
+          // Keep current state, just mark as initialized
+        } else {
+          setLoadingError(error instanceof Error ? error.message : 'Load failed');
         }
       } finally {
         if (mounted) {
-          setIsInitialized(true);
+          setIsInitialized(true); // Always initialize, even on error
         }
       }
     };
@@ -423,11 +327,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     
     return () => {
       mounted = false;
-      if (loadingTimeout) clearTimeout(loadingTimeout);
     };
-  }, []); // 🔧 Empty dependency array prevents re-runs
+  }, []); // Single load only
 
-  // Recalculate passive income, max energy, and regen when upgrades change
+  // Recalculate stats when upgrades change
   useEffect(() => {
     if (!isInitialized || upgrades.length === 0) return;
 
@@ -439,26 +342,18 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         newPassiveRate += calculateUpgradeValue(u, lvl);
       });
 
-      // Calculate energy values from upgrades
       const { baseMaxEnergy, baseEnergyRegen } = calculateBaseEnergyValues(upgrades, prev.upgrades);
 
-      // Only update if values changed
       if (newPassiveRate !== prev.passiveIncomeRate || 
           baseMaxEnergy !== prev.energyMax || 
           baseEnergyRegen !== prev.energyRegenRate) {
-        
-        console.log('🔧 [GAME CONTEXT] Recalculating upgrade effects:', {
-          passiveRate: `${prev.passiveIncomeRate} → ${newPassiveRate}`,
-          energyMax: `${prev.energyMax} → ${baseMaxEnergy}`,
-          energyRegen: `${prev.energyRegenRate} → ${baseEnergyRegen}`
-        });
         
         return {
           ...prev,
           passiveIncomeRate: newPassiveRate,
           energyMax: baseMaxEnergy,
           energyRegenRate: baseEnergyRegen,
-          energy: Math.min(prev.energy, baseMaxEnergy) // Cap current energy to new max
+          energy: Math.min(prev.energy, baseMaxEnergy)
         };
       }
 
@@ -470,7 +365,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     applyTheme(theme);
   }, [theme]);
 
-  // 🎯 JSON-FIRST: Optimized autosync - less frequent, smarter batching
+  // 🔧 FIXED: Reduced sync frequency to prevent spam
   useEffect(() => {
     if (!isInitialized || !state.username) return;
     
@@ -481,27 +376,23 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         let newPoints = prev.points;
         let newLustPoints = prev.lustPoints;
 
-        // Passive income calculation
         if (prev.passiveIncomeRate > 0 && prev.points < prev.passiveIncomeCap) {
           const incomePerSecond = prev.passiveIncomeRate / 3600;
           newPoints = Math.min(prev.passiveIncomeCap, prev.points + incomePerSecond);
-          newLustPoints = newPoints; // Keep in sync
+          newLustPoints = newPoints;
         }
 
         const energyChanged = newEnergy !== prev.energy;
         const pointsChanged = newPoints !== prev.points;
 
-        if (!energyChanged && !pointsChanged) {
-          return prev;
-        }
+        if (!energyChanged && !pointsChanged) return prev;
 
-        // 🔧 REDUCED: Only sync every 30 seconds instead of 10 (reduces spam)
+        // 🔧 REDUCED SPAM: Only sync every 60 seconds instead of every 10
         syncCounter++;
-        if (syncCounter >= 30) {
+        if (syncCounter >= 60) {
           syncCounter = 0;
           
-          console.log(`🔄 [GAME CONTEXT] Auto-syncing for ${prev.username}... (energy: ${energyChanged}, points: ${pointsChanged})`);
-          
+          // 🔧 SILENT SYNC: Don't log routine syncs to reduce console spam
           fetch('/api/player/me', {
             method: 'PATCH',
             headers: {
@@ -512,19 +403,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
               energy: Math.round(newEnergy),
               points: Math.round(newPoints),
               lustPoints: Math.round(newLustPoints)
-              // 🔧 REMOVED: Don't include unchanged fields to reduce overwrites
             })
           })
-          .then(response => {
-            if (response.ok) {
-              console.log(`✅ [GAME CONTEXT] Auto-sync successful for ${prev.username}`);
-            } else {
-              console.error(`❌ [GAME CONTEXT] Auto-sync failed: ${response.status}`);
-            }
-          })
-          .catch(err => {
-            console.error('❌ [GAME CONTEXT] Auto-sync error:', err);
-          });
+          .catch(() => {}); // Silent fail for background sync
         }
 
         return { ...prev, energy: newEnergy, points: newPoints, lustPoints: newLustPoints };
@@ -532,15 +413,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [isInitialized, state.username]); // 🔧 Don't include sessionToken to prevent re-creation
+  }, [isInitialized, state.username]);
 
   const tap = useCallback(async () => {
     setState(prev => {
       if (prev.energy < 1) return prev;
 
-      // Calculate actual tap value (with boost)
       const actualTapValue = calculateTapValue();
-
       const newPoints = prev.points + actualTapValue;
       const newLustPoints = prev.lustPoints + actualTapValue;
       const newEnergy = prev.energy - 1;
@@ -552,13 +431,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         (window as any).LunaBug.core.logEvent('tap_event', {
           tapValue: actualTapValue,
           boostActive: prev.boostActive,
-          boostMultiplier: prev.boostMultiplier,
           energyBefore: prev.energy,
           pointsBefore: prev.points
         });
       }
 
-      // 🎯 JSON-FIRST: Immediate sync for taps (critical user action)
+      // Immediate sync for taps (user expects instant response)
       fetch('/api/player/me', {
         method: 'PATCH',
         headers: {
@@ -573,12 +451,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           totalTapsAllTime: newTotalTapsAllTime
         })
       })
-      .then(response => {
-        if (!response.ok) {
-          console.error(`❌ [TAP] Sync failed: ${response.status}`);
-        }
-      })
-      .catch(err => console.error('❌ [TAP] Sync error:', err));
+      .catch(() => {}); // Silent fail
 
       return {
         ...prev,
@@ -597,43 +470,21 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       case 'SET_POINTS':
         setState(prev => ({ ...prev, points: action.payload, lustPoints: action.payload }));
         break;
-      case 'SET_LUSTGEMS':
-        setState(prev => ({ ...prev, lustGems: action.payload }));
-        break;
-      case 'SET_BOOST':
-        setState(prev => ({
-          ...prev,
-          boostActive: action.payload.active,
-          boostMultiplier: action.payload.multiplier,
-          boostExpiresAt: action.payload.expiresAt ? new Date(action.payload.expiresAt) : null
-        }));
-        break;
-      case 'SET_ENERGY':
-        setState(prev => ({ ...prev, energy: action.payload }));
-        break;
-      case 'RECALCULATE_ENERGY':
-        // Force recalculate energy from upgrades
-        if (upgrades.length > 0) {
-          const { baseMaxEnergy, baseEnergyRegen } = calculateBaseEnergyValues(upgrades, state.upgrades);
-          console.log('🔄 [GAME CONTEXT] Luna force recalculating energy:', { baseMaxEnergy, baseEnergyRegen });
-          setState(prev => ({ ...prev, energyMax: baseMaxEnergy, energyRegenRate: baseEnergyRegen, energy: Math.min(prev.energy, baseMaxEnergy) }));
-        }
-        break;
-      case 'UPDATE_DISPLAY_IMAGE': // 🆕 NEW: Handle display image updates from external components
+      case 'UPDATE_DISPLAY_IMAGE':
         setState(prev => ({ ...prev, displayImage: normalizeImageUrl(action.payload) }));
         break;
-      case 'REFRESH_FROM_SERVER': // 🔄 NEW: Refresh state from server (for after purchase)
-        console.log('🔄 [GAME CONTEXT] Refreshing state from server...');
+      case 'REFRESH_FROM_SERVER':
         const sessionToken = localStorage.getItem('sessionToken');
         if (sessionToken) {
+          console.log('🔄 [REFRESH] Refreshing from server...');
           fetch('/api/auth/me', {
-            headers: { 'Authorization': `Bearer ${sessionToken}` }
+            headers: { 'Authorization': `Bearer ${sessionToken}` },
+            signal: AbortSignal.timeout(5000)
           })
           .then(res => res.json())
           .then(data => {
             if (data.success && data.player) {
               const player = data.player;
-              console.log('🔄 [REFRESH] Player data refreshed from server');
               setState(prev => {
                 const { baseMaxEnergy, baseEnergyRegen } = calculateBaseEnergyValues(upgrades, player.upgrades || {});
                 return {
@@ -643,24 +494,27 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
                   energy: Math.min(player.energy || prev.energy, baseMaxEnergy),
                   energyMax: baseMaxEnergy,
                   energyRegenRate: baseEnergyRegen,
-                  level: player.level || prev.level,
+                  upgrades: player.upgrades || prev.upgrades,
                   selectedCharacterId: player.selectedCharacterId || prev.selectedCharacterId,
-                  displayImage: normalizeImageUrl(player.displayImage) || prev.displayImage,
-                  upgrades: player.upgrades || prev.upgrades, // 🔧 CRITICAL: Update upgrade levels!
-                  unlockedCharacters: player.unlockedCharacters || prev.unlockedCharacters
+                  displayImage: normalizeImageUrl(player.displayImage) || prev.displayImage
                 };
               });
+              console.log('✅ [REFRESH] State refreshed');
+              setLoadingError(null);
             }
           })
-          .catch(err => console.error('🔴 [REFRESH] Failed to refresh from server:', err));
+          .catch(err => {
+            console.error('🔴 [REFRESH] Failed:', err);
+            setLoadingError('Refresh failed');
+          });
         }
         break;
       default:
         break;
     }
-  }, [upgrades, state.upgrades]);
+  }, [upgrades]);
 
-  // 🎯 JSON-FIRST: FIXED upgrade purchase with proper state update
+  // FIXED: Purchase upgrade with immediate local update
   const purchaseUpgrade = useCallback(async (upgradeId: string): Promise<boolean> => {
     if (pendingPurchases.has(upgradeId)) return false;
     
@@ -677,8 +531,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setPendingPurchases(prev => new Set(prev).add(upgradeId));
 
     try {
-      console.log(`🎯 [UPGRADE] ${state.username} purchasing upgrade ${upgradeId} level ${newLevel} for ${cost} points`);
-      console.log(`🎯 [UPGRADE] Current state: points=${state.points}, current_level=${currentLevel}`);
+      console.log(`🎯 [UPGRADE] Purchasing ${upgradeId} level ${newLevel}`);
       
       const response = await fetch('/api/player/upgrades', {
         method: 'POST',
@@ -687,54 +540,36 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`
         },
         body: JSON.stringify({ upgradeId, level: newLevel }),
-        signal: AbortSignal.timeout(10000)
+        signal: AbortSignal.timeout(5000) // Shorter timeout
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error(`❌ [UPGRADE] Purchase failed:`, errorData);
-        throw new Error(errorData.error || `HTTP ${response.status}`);
+        throw new Error(`HTTP ${response.status}`);
       }
 
       const result = await response.json();
       const updatedPlayer = result.player;
       
-      console.log(`✅ [UPGRADE] Server response:`, {
-        points: updatedPlayer.points,
-        upgrades: Object.entries(updatedPlayer.upgrades || {}).map(([id, lvl]) => `${id}:${lvl}`).join(', ')
-      });
-      
-      // 🔧 CRITICAL FIX: Update local state immediately with ALL server data
+      // 🔧 IMMEDIATE LOCAL UPDATE
       setState(prev => {
-        const newUpgrades = updatedPlayer.upgrades || prev.upgrades;
+        const newUpgrades = { ...prev.upgrades, [upgradeId]: newLevel };
         const { baseMaxEnergy, baseEnergyRegen } = calculateBaseEnergyValues(upgrades, newUpgrades);
-        
-        console.log(`🔧 [UPGRADE] Updating local state:`, {
-          pointsBefore: prev.points,
-          pointsAfter: updatedPlayer.points,
-          upgradesBefore: Object.entries(prev.upgrades).map(([id, lvl]) => `${id}:${lvl}`).join(', '),
-          upgradesAfter: Object.entries(newUpgrades).map(([id, lvl]) => `${id}:${lvl}`).join(', '),
-          energyMaxBefore: prev.energyMax,
-          energyMaxAfter: baseMaxEnergy
-        });
         
         return {
           ...prev,
-          points: typeof updatedPlayer.points === 'string' ? parseFloat(updatedPlayer.points) : updatedPlayer.points,
-          lustPoints: typeof updatedPlayer.lustPoints === 'string' ? parseFloat(updatedPlayer.lustPoints) : (updatedPlayer.lustPoints || updatedPlayer.points),
-          upgrades: newUpgrades, // 🔧 CRITICAL: Update upgrade levels immediately!
+          points: updatedPlayer.points,
+          lustPoints: updatedPlayer.lustPoints || updatedPlayer.points,
+          upgrades: newUpgrades,
           energyMax: baseMaxEnergy,
           energyRegenRate: baseEnergyRegen,
-          energy: Math.min(prev.energy, baseMaxEnergy),
-          // Also update any other fields that might have changed
-          passiveIncomeRate: updatedPlayer.passiveIncomeRate !== undefined ? updatedPlayer.passiveIncomeRate : prev.passiveIncomeRate
+          energy: Math.min(prev.energy, baseMaxEnergy)
         };
       });
       
-      console.log(`✅ [UPGRADE] ${state.username} upgrade ${upgradeId} purchase complete - local state updated`);
+      console.log(`✅ [UPGRADE] ${upgradeId} level ${newLevel} purchased`);
       return true;
     } catch (err) {
-      console.error(`🔴 [UPGRADE] Purchase failed for ${state.username}:`, err);
+      console.error(`🔴 [UPGRADE] Purchase failed:`, err);
       return false;
     } finally {
       setPendingPurchases(prev => {
@@ -743,18 +578,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         return next;
       });
     }
-  }, [state.upgrades, state.points, state.username, upgrades, pendingPurchases]);
+  }, [state.upgrades, state.points, upgrades, pendingPurchases]);
 
-  // 🎯 JSON-FIRST: Enhanced character selection with state update
   const selectCharacter = useCallback(async (characterId: string): Promise<boolean> => {
-    if (!state.unlockedCharacters.includes(characterId)) {
-      console.log(`❌ [SELECT CHARACTER] Character ${characterId} not unlocked for ${state.username}`);
-      return false;
-    }
+    if (!state.unlockedCharacters.includes(characterId)) return false;
 
     try {
-      console.log(`🎭 [SELECT CHARACTER] ${state.username} selecting character ${characterId}`);
-      
       const response = await fetch('/api/player/select-character', {
         method: 'POST',
         headers: {
@@ -762,40 +591,34 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`
         },
         body: JSON.stringify({ characterId }),
-        signal: AbortSignal.timeout(10000)
+        signal: AbortSignal.timeout(5000)
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error(`❌ [SELECT CHARACTER] Failed to save character selection:`, errorData);
-        return false;
-      }
+      if (!response.ok) return false;
 
       const result = await response.json();
       const updatedPlayer = result.player;
       
-      // 🔧 IMMEDIATE: Update local state for instant UI feedback
       setState(prev => ({
         ...prev,
         selectedCharacterId: updatedPlayer.selectedCharacterId,
         selectedImageId: updatedPlayer.selectedImageId,
-        displayImage: normalizeImageUrl(updatedPlayer.displayImage) // 🔧 FIX: Normalize URL
+        displayImage: normalizeImageUrl(updatedPlayer.displayImage)
       }));
 
-      console.log(`✅ [SELECT CHARACTER] ${state.username} character selection successful: ${characterId}`);
       return true;
     } catch (error) {
-      console.error(`🔴 [SELECT CHARACTER] Error for ${state.username}:`, error);
+      console.error('🔴 [SELECT CHARACTER] Error:', error);
       return false;
     }
-  }, [state.unlockedCharacters, state.username]);
+  }, [state.unlockedCharacters]);
 
   const selectImage = useCallback((imageId: string) => {
     const selectedImg = images.find(img => img.id === imageId);
     setState(prev => ({ 
       ...prev, 
       selectedImageId: imageId,
-      displayImage: normalizeImageUrl(selectedImg?.url || prev.displayImage) // 🔧 FIX: Normalize URL
+      displayImage: normalizeImageUrl(selectedImg?.url || prev.displayImage)
     }));
   }, [images]);
 
@@ -820,7 +643,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setState(prev => ({ ...prev, isAdmin: !prev.isAdmin }));
   }, []);
 
-  // Simplified update methods
   const updateUpgradeConfig = useCallback((upgrade: UpgradeConfig) => {
     setUpgrades(prev => {
       const index = prev.findIndex(u => u.id === upgrade.id);
@@ -836,11 +658,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const addImage = useCallback((image: ImageConfig) => {
-    setImages(prev => [...prev, { ...image, url: normalizeImageUrl(image.url) }]); // 🔧 FIX: Normalize URL
+    setImages(prev => [...prev, { ...image, url: normalizeImageUrl(image.url) }]);
   }, []);
 
   const updateImage = useCallback((image: ImageConfig) => {
-    setImages(prev => prev.map(img => img.id === image.id ? { ...image, url: normalizeImageUrl(image.url) } : img)); // 🔧 FIX: Normalize URL
+    setImages(prev => prev.map(img => img.id === image.id ? { ...image, url: normalizeImageUrl(image.url) } : img));
   }, []);
 
   const removeImage = useCallback((imageId: string) => {
@@ -886,7 +708,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setLevelConfigs([]);
     setTheme(DEFAULT_THEME);
     setLoadingError(null);
-    setLoadingAttempts(0); // 🔧 Reset attempts
   }, []);
 
   return (
@@ -921,23 +742,25 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }}>
       {children}
       
-      {/* 🔍 Debug info overlay in development */}
-      {process.env.NODE_ENV === 'development' && (loadingError || !state.selectedCharacterId) && (
-        <div className="fixed bottom-4 right-4 bg-red-900/90 text-white p-3 rounded-lg border border-red-500 max-w-md text-sm z-50">
+      {/* 🔍 Minimal debug overlay - only show critical errors */}
+      {process.env.NODE_ENV === 'development' && loadingError && (
+        <div className="fixed bottom-4 right-4 bg-red-900/90 text-white p-3 rounded-lg border border-red-500 max-w-xs text-sm z-50">
           <div className="font-semibold">🔍 Debug Info:</div>
-          {loadingError && <div>Loading Error: {loadingError}</div>}
-          <div>Initialized: {isInitialized ? '✅' : '❌'}</div>
-          <div>Username: {state.username || 'None'}</div>
-          <div>Session: {localStorage.getItem('sessionToken') ? 'Present' : 'Missing'}</div>
-          <div>Attempts: {loadingAttempts}/3</div>
-          <div>Selected Character: {state.selectedCharacterId || 'None'}</div>
-          <div>Display Image: {state.displayImage ? 'Set' : 'None'}</div>
-          <div>Upgrades: {Object.keys(state.upgrades).length}</div>
-          {Object.keys(state.upgrades).length > 0 && (
-            <div className="text-xs mt-1">{Object.entries(state.upgrades).map(([id, lvl]) => `${id}:${lvl}`).join(', ')}</div>
-          )}
-          <button onClick={() => dispatch({ type: 'REFRESH_FROM_SERVER' })} className="mt-2 px-2 py-1 bg-blue-600 rounded text-xs">
-            🔄 Refresh from Server
+          <div className="text-xs">{loadingError}</div>
+          <div className="text-xs">User: {state.username || 'None'}</div>
+          <div className="text-xs">Character: {state.selectedCharacterId || 'None'}</div>
+          <div className="text-xs">Upgrades: {Object.keys(state.upgrades).length}</div>
+          <button 
+            onClick={() => dispatch({ type: 'REFRESH_FROM_SERVER' })}
+            className="mt-2 px-2 py-1 bg-blue-600 rounded text-xs w-full"
+          >
+            🔄 Refresh
+          </button>
+          <button 
+            onClick={() => setLoadingError(null)}
+            className="mt-1 px-2 py-1 bg-gray-600 rounded text-xs w-full"
+          >
+            ❌ Hide
           </button>
         </div>
       )}
