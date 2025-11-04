@@ -73,7 +73,7 @@ const getAchievementsFromJSON = async () => {
     const achievementsFile = path.join(achievementsDir, 'permanent-achievements.json');
     
     let achievements = [];
-    if (fs.existsExists(achievementsFile)) {
+    if (fs.existsSync(achievementsFile)) {
       const data = await fs.promises.readFile(achievementsFile, 'utf8');
       achievements = JSON.parse(data);
     }
@@ -811,80 +811,470 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // 🆕 Config diff endpoint for debugging admin issues
-  app.get("/api/admin/config-diff", requireAuth, requireAdmin, async (req, res) => {
+  // 🔧 DEV AUTH: Now auto-unlocks all characters in development
+  app.post("/api/auth/dev", async (req, res) => {
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(403).json({ error: 'Development login not available in production' });
+    }
+
     try {
-      const upgradesInMemory = getUpgradesFromMemory();
-      const charactersInMemory = getCharactersFromMemory();
-      const levelsInMemory = getLevelsFromMemory();
+      const { username } = req.body;
+      console.log(`🔍 [DEV AUTH] Login request for username: ${username}`);
       
-      const mainGameDataDir = path.join(process.cwd(), 'main-gamedata');
-      let jsonUpgrades = [];
-      let jsonCharacters = [];
-      let jsonLevels = [];
-      let errors = [];
+      if (!username || username.trim().length === 0) {
+        return res.status(400).json({ error: 'Username is required' });
+      }
+
+      const sanitizedUsername = username.trim().substring(0, 50);
+      const devTelegramId = `dev_${sanitizedUsername.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
       
-      try {
-        const upgradesFile = path.join(mainGameDataDir, 'upgrades', 'upgrades-master.json');
-        if (fs.existsSync(upgradesFile)) {
-          const data = await fs.promises.readFile(upgradesFile, 'utf8');
-          jsonUpgrades = JSON.parse(data);
-        } else {
-          errors.push('upgrades-master.json not found');
+      console.log(`🔍 [DEV AUTH] Generated telegramId: ${devTelegramId}`);
+
+      let player = await withTimeout(
+        storage.getPlayerByTelegramId(devTelegramId),
+        3000,
+        'get player by telegram id'
+      );
+      console.log(`🔍 [DEV AUTH] Player lookup result:`, {
+        found: !!player,
+        id: player?.id,
+        username: player?.username,
+        telegramId: player?.telegramId
+      });
+
+      if (!player) {
+        console.log(`🔍 [DEV AUTH] Creating new dev player...`);
+        const playerData = await masterDataService.createNewPlayerData(devTelegramId, sanitizedUsername);
+        
+        // 🔧 DEV: Auto-unlock all characters
+        const characters = getCharactersFromMemory();
+        playerData.unlockedCharacters = characters.map(c => c.id);
+        if (characters.length > 0) {
+          playerData.selectedCharacterId = characters[0].id;
         }
-      } catch (err) {
-        errors.push(`Upgrades JSON error: ${err instanceof Error ? err.message : 'Unknown'}`);
+        console.log(`🔓 [DEV AUTH] Auto-unlocked ${characters.length} characters`);
+        
+        player = await withTimeout(
+          storage.createPlayer(playerData),
+          5000,
+          'create new dev player'
+        );
+        await savePlayerDataToJSON(player);
+        console.log(`🎮 Created new dev player: ${sanitizedUsername} (${devTelegramId}_${sanitizedUsername})`);
+      } else {
+        console.log(`🔍 [DEV AUTH] Updating existing player login time...`);
+        await withTimeout(
+          storage.updatePlayer(player.id, { lastLogin: new Date() }),
+          3000,
+          'update player login time'
+        );
+        await savePlayerDataToJSON(player);
+      }
+
+      const sessionToken = generateSecureToken();
+      console.log(`🔍 [DEV AUTH] Generated session token: ${sessionToken.slice(0, 8)}...`);
+      
+      await withTimeout(
+        storage.createSession({
+          playerId: player.id,
+          token: sessionToken,
+          expiresAt: getSessionExpiry(),
+        }),
+        3000,
+        'create session'
+      );
+      
+      console.log(`✅ [DEV AUTH] Session created for player ${player.username}`);
+      logger.info('Dev auth successful', { username: player.username, playerId: player.id });
+
+      res.json({ success: true, player, sessionToken });
+    } catch (error) {
+      console.error(`🔴 [DEV AUTH] Failed:`, error);
+      logger.error('Dev auth error', { error: error instanceof Error ? error.message : 'Unknown error' });
+      res.status(500).json({ error: 'Authentication failed', details: (error as Error).message });
+    }
+  });
+
+  app.post("/api/auth/telegram", async (req, res) => {
+    try {
+      const { initData } = req.body;
+      const botToken = process.env.TELEGRAM_BOT_TOKEN;
+
+      if (!botToken) {
+        return res.status(500).json({ error: 'Telegram authentication not configured' });
+      }
+
+      if (!initData) {
+        return res.status(400).json({ error: 'Missing initData' });
+      }
+
+      const validator = new AuthDataValidator({ botToken });
+      const dataMap = new Map(new URLSearchParams(initData).entries());
+      const validationResult = await validator.validate(dataMap);
+
+      if (!validationResult || !validationResult.id) {
+        return res.status(401).json({ error: 'Invalid Telegram authentication' });
+      }
+
+      const telegramId = validationResult.id.toString();
+      const username = (validationResult as any).username || (validationResult as any).first_name || 'TelegramUser';
+
+      let player = await withTimeout(
+        storage.getPlayerByTelegramId(telegramId),
+        3000,
+        'get telegram player'
+      );
+
+      if (!player) {
+        const playerData = await masterDataService.createNewPlayerData(telegramId, username);
+        player = await withTimeout(
+          storage.createPlayer(playerData),
+          5000,
+          'create telegram player'
+        );
+        await savePlayerDataToJSON(player);
+        console.log(`🎮 Created new Telegram player: ${username} (${telegramId}_${username})`);
+      } else {
+        await withTimeout(
+          storage.updatePlayer(player.id, { lastLogin: new Date() }),
+          3000,
+          'update telegram player login'
+        );
+        await savePlayerDataToJSON(player);
+      }
+
+      const sessionToken = generateSecureToken();
+      await withTimeout(
+        storage.createSession({
+          playerId: player.id,
+          token: sessionToken,
+          expiresAt: getSessionExpiry(),
+        }),
+        3000,
+        'create telegram session'
+      );
+
+      res.json({ success: true, player, sessionToken });
+    } catch (error) {
+      logger.error('Telegram auth error', { error: error instanceof Error ? error.message : 'Unknown error' });
+      res.status(500).json({ error: 'Authentication failed', details: (error as Error).message });
+    }
+  });
+
+  // 🔍 DIAGNOSTIC: Enhanced auth/me endpoint with detailed logging
+  app.get("/api/auth/me", requireAuth, async (req, res) => {
+    try {
+      console.log(`🔍 [AUTH/ME] Request from player: ${req.player?.username || req.player?.id}`);
+      console.log(`🔍 [AUTH/ME] Player data:`, {
+        id: req.player?.id,
+        telegramId: req.player?.telegramId,
+        username: req.player?.username,
+        isAdmin: req.player?.isAdmin
+      });
+      
+      // 🎯 JSON-FIRST: Load from telegramId_username folder JSON
+      const playerState = await withTimeout(
+        getPlayerState(req.player!.id),
+        5000,
+        'get player state'
+      );
+      console.log(`✅ [AUTH/ME] Loaded player state for: ${playerState.username}`);
+      
+      res.json({ success: true, player: playerState });
+    } catch (error) {
+      console.error(`🔴 [AUTH/ME] Failed to load player ${req.player?.username}:`, error);
+      logger.error('Auth/me error', { 
+        playerId: req.player?.id,
+        username: req.player?.username,
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      });
+      res.status(500).json({ error: 'Failed to fetch player data' });
+    }
+  });
+
+  // Get all upgrades (from memory)
+  app.get("/api/upgrades", requireAuth, async (_req, res) => {
+    try {
+      const upgrades = getUpgradesFromMemory();
+      res.json({ upgrades });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  });
+
+  // Get all characters (from memory)
+  app.get("/api/characters", requireAuth, async (_req, res) => {
+    try {
+      const characters = getCharactersFromMemory();
+      res.json({ characters });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  });
+
+  // Get specific character
+  app.get("/api/characters/:id", requireAuth, async (req, res) => {
+    try {
+      const character = getCharacterFromMemory(req.params.id);
+      if (!character) {
+        return res.status(404).json({ error: 'Character not found' });
+      }
+      res.json(character);
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  });
+
+  // Get all levels (from memory) 
+  app.get("/api/levels", requireAuth, async (_req, res) => {
+    try {
+      const levels = getLevelsFromMemory();
+      res.json({ levels });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  });
+
+  // 🎯 JSON-FIRST: Get player data (from telegramId_username folder) - ENHANCED DEBUGGING
+  app.get("/api/player/me", requireAuth, async (req, res) => {
+    try {
+      console.log(`🔍 [PLAYER/ME] Request from: ${req.player?.username || req.player?.id}`);
+      
+      const playerState = await withTimeout(
+        getPlayerState(req.player!.id),
+        5000,
+        'get player state'
+      );
+      console.log(`✅ [PLAYER/ME] Successfully loaded state for: ${playerState.username}`);
+      console.log(`🔍 [PLAYER/ME] State summary:`, {
+        points: playerState.points,
+        level: playerState.level,
+        experience: playerState.experience, // 🆕 Include experience in logs
+        selectedCharacterId: playerState.selectedCharacterId,
+        displayImage: playerState.displayImage ? 'set' : 'null',
+        upgradesCount: Object.keys(playerState.upgrades || {}).length, // 🚨 SAFE: Add || {} to prevent crash
+        unlockedCharacters: (playerState.unlockedCharacters || []).length // 🚨 SAFE: Add || [] to prevent crash
+      });
+      
+      res.json({ player: playerState });
+    } catch (error) {
+      console.error(`🔴 [PLAYER/ME] Failed for ${req.player?.username}:`, error);
+      logger.error('Player fetch error', { 
+        playerId: req.player?.id,
+        username: req.player?.username,
+        error: error instanceof Error ? error.message : 'Unknown' 
+      });
+      res.status(500).json({ error: 'Failed to fetch player data' });
+    }
+  });
+
+  // 🎯 JSON-FIRST: Update player data (immediate telegramId_username JSON + queued DB sync)
+  app.patch("/api/player/me", requireAuth, async (req, res) => {
+    try {
+      const updates = req.body;
+      console.log(`🔍 [PLAYER/ME PATCH] Update request from: ${req.player?.username}`, Object.keys(updates));
+      
+      // Security: prevent admin escalation
+      if (updates.isAdmin !== undefined) {
+        delete updates.isAdmin;
+      }
+
+      // Round integer fields to prevent PostgreSQL errors
+      const integerFields = ['points', 'energy', 'energyMax', 'level', 'experience', 'passiveIncomeRate'];
+      for (const field of integerFields) {
+        if (updates[field] !== undefined && typeof updates[field] === 'number') {
+          updates[field] = Math.round(updates[field]);
+        }
+      }
+
+      // Apply updates via JSON-first manager
+      const updatedState = await withTimeout(
+        updatePlayerState(req.player!.id, updates),
+        5000,
+        'update player state'
+      );
+      console.log(`✅ [PLAYER/ME PATCH] Successfully updated: ${updatedState.username}`);
+
+      // 🔄 Player sync is handled automatically in updatePlayerState via queuePlayerSync
+
+      // Handle sendBeacon requests (no response expected)
+      if (req.headers['content-type']?.includes('text/plain')) {
+        res.status(204).end();
+      } else {
+        res.json({ player: updatedState });
       }
       
-      try {
-        const charactersDir = path.join(mainGameDataDir, 'characters');
-        if (fs.existsSync(charactersDir)) {
-          const files = await fs.promises.readdir(charactersDir);
-          for (const file of files.filter(f => f.endsWith('.json'))) {
-            const data = await fs.promises.readFile(path.join(charactersDir, file), 'utf8');
-            jsonCharacters.push(JSON.parse(data));
+    } catch (error) {
+      console.error(`🔴 [PLAYER/ME PATCH] Failed for ${req.player?.username}:`, error);
+      logger.error('Player update error', { 
+        playerId: req.player?.id,
+        username: req.player?.username,
+        error: error instanceof Error ? error.message : 'Unknown' 
+      });
+      res.status(500).json({ error: 'Failed to update player' });
+    }
+  });
+
+  // 🎭 CHARACTER SELECT: Enhanced with retry logic for memory reload
+  app.post("/api/player/select-character", requireAuth, async (req, res) => {
+    try {
+      const { characterId } = req.body;
+      
+      console.log(`🎭 [CHARACTER SELECT] Player ${req.player!.username || req.player!.id} selecting: ${characterId}`);
+      
+      if (!characterId) {
+        console.log(`❌ [CHARACTER SELECT] No characterId provided`);
+        return res.status(400).json({ error: 'Character ID is required' });
+      }
+
+      // Check if character exists in memory first
+      let character = getCharacterFromMemory(characterId);
+      if (!character) {
+        console.log(`⚠️ [CHARACTER SELECT] Character ${characterId} not found in memory, reloading...`);
+        try {
+          await masterDataService.reloadCharacters();
+          character = getCharacterFromMemory(characterId);
+          if (!character) {
+            console.log(`❌ [CHARACTER SELECT] Character ${characterId} still not found after reload`);
+            return res.status(404).json({ error: `Character '${characterId}' not found` });
           }
-        } else {
-          errors.push('characters directory not found');
+          console.log(`✅ [CHARACTER SELECT] Character ${characterId} found after reload`);
+        } catch (reloadError) {
+          console.error(`🔴 [CHARACTER SELECT] Character reload failed:`, reloadError);
+          return res.status(500).json({ error: 'Failed to reload character data' });
         }
-      } catch (err) {
-        errors.push(`Characters JSON error: ${err instanceof Error ? err.message : 'Unknown'}`);
       }
+
+      console.log(`🔄 [CHARACTER SELECT] Calling selectCharacterForPlayer...`);
+      const updatedState = await withTimeout(
+        selectCharacterForPlayer(req.player!.id, characterId),
+        5000,
+        'select character for player'
+      );
+      
+      console.log(`✅ [CHARACTER SELECT] SUCCESS: ${characterId} selected for ${updatedState.username}`);
+      
+      // 🔄 Player sync is handled automatically in selectCharacterForPlayer
+      
+      res.json({ success: true, player: updatedState });
+    } catch (error) {
+      console.error(`🔴 [CHARACTER SELECT] FAILED for ${req.player!.username || req.player!.id}:`, error);
+      logger.error('Character selection error', { 
+        playerId: req.player?.id,
+        username: req.player?.username,
+        characterId: req.body.characterId,
+        error: error instanceof Error ? error.message : 'Unknown' 
+      });
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to select character' });
+    }
+  });
+
+  // 🖼️ FIXED: Set display image with telegramId_username folder JSON - ENHANCED LOGGING + TIMEOUT
+  app.post("/api/player/set-display-image", requireAuth, async (req, res) => {
+    try {
+      const { imageUrl } = req.body;
+      
+      console.log(`🖼️ [DISPLAY IMAGE] Player ${req.player!.username || req.player!.id} setting: ${imageUrl}`);
+      
+      if (!imageUrl || typeof imageUrl !== 'string') {
+        console.log(`❌ [DISPLAY IMAGE] Invalid or missing imageUrl:`, imageUrl);
+        return res.status(400).json({ error: 'Valid image URL is required' });
+      }
+
+      // Security: ensure URL is from uploads
+      if (!imageUrl.startsWith('/uploads/')) {
+        console.log(`❌ [DISPLAY IMAGE] URL not from uploads directory: ${imageUrl}`);
+        return res.status(400).json({ error: 'Image URL must be from uploads directory' });
+      }
+      
+      console.log(`🔄 [DISPLAY IMAGE] Attempting to set display image...`);
+      const updatedState = await withTimeout(
+        setDisplayImageForPlayer(req.player!.id, imageUrl),
+        5000,
+        'set display image for player'
+      );
+      
+      console.log(`✅ [DISPLAY IMAGE] SUCCESS: ${imageUrl} set for ${updatedState.username}`);
+      
+      // 🔄 Player sync is handled automatically in setDisplayImageForPlayer
+      
+      res.json({ success: true, player: updatedState });
+    } catch (error) {
+      console.error(`🔴 [DISPLAY IMAGE] FAILED:`, error);
+      logger.error('Display image error', { 
+        playerId: req.player?.id,
+        username: req.player?.username,
+        imageUrl: req.body.imageUrl,
+        error: error instanceof Error ? error.message : 'Unknown' 
+      });
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to set display image' });
+    }
+  });
+
+  // 🎯 JSON-FIRST: Purchase upgrade - FIXED WITH TIMEOUT AND BETTER ERROR HANDLING
+  app.post("/api/player/upgrades", requireAuth, async (req, res) => {
+    try {
+      const { upgradeId, level } = req.body;
+      console.log(`🛒 [UPGRADE] Player ${req.player?.username} purchasing ${upgradeId} level ${level}`);
+      
+      const upgrade = getUpgradeFromMemory(upgradeId);
+      
+      if (!upgrade) {
+        console.log(`❌ [UPGRADE] Invalid upgrade: ${upgradeId}`);
+        return res.status(400).json({ error: 'Invalid upgrade' });
+      }
+
+      if (level > upgrade.maxLevel) {
+        console.log(`❌ [UPGRADE] Level ${level} exceeds max ${upgrade.maxLevel} for ${upgradeId}`);
+        return res.status(400).json({ error: 'Level exceeds maximum' });
+      }
+
+      const cost = upgrade.baseCost * Math.pow(upgrade.costMultiplier, level - 1);
+      console.log(`💰 [UPGRADE] Cost calculated: ${cost} for ${upgradeId} level ${level}`);
+      
+      const updatedState = await withTimeout(
+        purchaseUpgradeForPlayer(req.player!.id, upgradeId, level, cost),
+        5000,
+        'purchase upgrade for player'
+      );
+      
+      console.log(`✅ [UPGRADE] Success for ${updatedState.username}`);
+      console.log(`📊 [UPGRADE] New upgrade levels:`, Object.keys(updatedState.upgrades || {}).length); // 🚨 SAFE: Add || {} to prevent crash
+      
+      // 🔄 Player sync is handled automatically in purchaseUpgradeForPlayer
+      
+      res.json({ success: true, player: updatedState });
+    } catch (error) {
+      console.error(`🔴 [UPGRADE] Failed for ${req.player?.username}:`, error);
+      logger.error('Upgrade purchase error', { 
+        playerId: req.player?.id,
+        username: req.player?.username,
+        upgradeId: req.body.upgradeId,
+        error: error instanceof Error ? error.message : 'Unknown' 
+      });
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to purchase upgrade' });
+    }
+  });
+
+  // 🚀 ENHANCED: Admin get all data (upgrades, characters, levels)
+  app.get("/api/admin/all", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const [upgrades, characters, levels] = await Promise.all([
+        storage.getUpgrades(true), // Include hidden
+        storage.getCharacters(true), // Include hidden
+        storage.getLevels()
+      ]);
       
       res.json({
         success: true,
-        comparison: {
-          upgrades: {
-            memoryCount: upgradesInMemory.length,
-            jsonCount: jsonUpgrades.length,
-            memoryIds: upgradesInMemory.map(u => u.id),
-            jsonIds: jsonUpgrades.map((u: any) => u.id)
-          },
-          characters: {
-            memoryCount: charactersInMemory.length,
-            jsonCount: jsonCharacters.length,
-            memoryIds: charactersInMemory.map(c => c.id),
-            jsonIds: jsonCharacters.map((c: any) => c.id)
-          },
-          levels: {
-            memoryCount: levelsInMemory.length,
-            jsonCount: jsonLevels.length,
-            memoryLevels: levelsInMemory.map(l => l.level),
-            jsonLevels: jsonLevels.map((l: any) => l.level)
-          }
-        },
-        syncQueues: getAllQueueStatus(), // 🔄 Include queue status with FK errors
-        errors,
-        paths: {
-          mainGameData: mainGameDataDir,
-          upgrades: path.join(mainGameDataDir, 'upgrades', 'upgrades-master.json'),
-          characters: path.join(mainGameDataDir, 'characters'),
-          levels: path.join(mainGameDataDir, 'levels', 'levels.json')
-        }
+        upgrades,
+        characters,
+        levels,
+        syncQueues: getAllQueueStatus() // 🔄 Include queue health for admin
       });
     } catch (error) {
-      logger.error('Config diff error', { error: error instanceof Error ? error.message : 'Unknown' });
-      res.status(500).json({ error: 'Failed to generate config diff' });
+      logger.error('Admin get all error', { error: error instanceof Error ? error.message : 'Unknown' });
+      res.status(500).json({ error: 'Failed to fetch admin data' });
     }
   });
 
@@ -1110,7 +1500,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       queueCharacterSync(id, updatedCharacter, false);
       console.log(`🔄 [ADMIN] Character update queued for DB sync`);
       
-      // 3. Refresh memory with error handling
+      // 3. Refresh memory cache with error handling
       let reloadWarning = null;
       try {
         await masterDataService.reloadCharacters();
@@ -1273,123 +1663,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // 🔧 MIGRATION: Auto-migrate old player files to new telegramId_username structure
-  app.post("/api/admin/migrate-player-files", requireAuth, requireAdmin, async (req, res) => {
-    try {
-      console.log('📦 Starting player file migration to telegramId_username structure...');
-      logger.info('Player file migration started');
-      
-      const result = await withTimeout(
-        playerStateManager.migrateOldPlayerFiles(),
-        30000,
-        'player file migration'
-      );
-      
-      console.log(`✅ Migration complete: ${result.moved} moved, ${result.errors} errors`);
-      logger.info('Player file migration completed', result);
-      
-      res.json({
-        success: true,
-        migration: {
-          moved: result.moved,
-          errors: result.errors,
-          message: `Migration complete: ${result.moved} files moved to telegramId_username structure`
-        }
-      });
-    } catch (error) {
-      logger.error('Player file migration error', { error: error instanceof Error ? error.message : 'Unknown' });
-      res.status(500).json({ error: 'Failed to migrate player files' });
-    }
-  });
-
-  // 📁 ADMIN: Load master-data templates
-  app.get("/api/admin/master/characters", requireAuth, requireAdmin, async (req, res) => {
-    try {
-      const templatesDir = path.join(MASTER_DATA_DIR, 'characters');
-      const files = await fs.promises.readdir(templatesDir).catch(() => []);
-      const templates = [];
-      
-      for (const file of files.filter(f => f.endsWith('.json'))) {
-        try {
-          const data = await fs.promises.readFile(path.join(templatesDir, file), 'utf8');
-          const template = JSON.parse(data);
-          templates.push(template);
-        } catch (error) {
-          logger.warn(`Failed to load character template ${file}`);
-        }
-      }
-      
-      console.log(`📂 [ADMIN] Loaded ${templates.length} character templates from master-data`);
-      res.json({ success: true, templates });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to load character templates' });
-    }
-  });
-
-  // 🎭 ADMIN: Create character (master-data template → main-gamedata save)
-  app.post("/api/admin/characters/create", requireAuth, requireAdmin, async (req, res) => {
-    try {
-      const { templateId, ...customFields } = req.body;
-      
-      console.log(`🎭 [CREATE CHARACTER] Loading template ${templateId || 'default'} from master-data...`);
-
-      // Load template from master-data
-      let template = {};
-      if (templateId) {
-        try {
-          const templatePath = path.join(MASTER_DATA_DIR, 'characters', `${templateId}.json`);
-          const templateData = await fs.promises.readFile(templatePath, 'utf8');
-          template = JSON.parse(templateData);
-          console.log(`📂 [CREATE CHARACTER] Template loaded: ${templateId}`);
-        } catch (error) {
-          console.warn(`⚠️ [CREATE CHARACTER] Template ${templateId} not found, using defaults`);
-        }
-      }
-      
-      // Merge template with custom fields
-      const newCharacter = sanitizeCharacter({
-        id: customFields.id || `char_${Date.now()}`,
-        name: customFields.name || 'New Character',
-        description: customFields.description || 'A mysterious character',
-        unlockLevel: customFields.unlockLevel || 1,
-        avatarImage: customFields.avatarImage || null,
-        defaultImage: customFields.defaultImage || null,
-        categories: customFields.categories || [],
-        poses: customFields.poses || [],
-        isHidden: customFields.isHidden || false,
-        ...template, // Apply template defaults first
-        ...customFields, // Override with user input
-        createdAt: new Date(),
-        updatedAt: new Date()
-      });
-      
-      // Save to main-gamedata/characters/
-      await saveCharacterToJSON(newCharacter);
-      
-      // 🔄 QUEUE for DB sync
-      queueCharacterSync(newCharacter.id, newCharacter, true);
-      
-      console.log(`✅ [CREATE CHARACTER] Character created: ${newCharacter.name} (${newCharacter.id})`);
-      console.log(`📁 [CREATE CHARACTER] Saved to: main-gamedata/characters/${newCharacter.id}.json`);
-      console.log(`🔄 [CREATE CHARACTER] Queued for DB sync`);
-      
-      res.json({ success: true, character: newCharacter, syncQueued: true });
-    } catch (error) {
-      logger.error('Create character failed', { error: error instanceof Error ? error.message : 'Unknown' });
-      res.status(500).json({ error: 'Failed to create character' });
-    }
-  });
-
-  // 🌙 LUNABUG ROUTES
-  try {
-    const lunaBugRoutes = await import('./routes/lunabug.mjs');
-    app.use('/api/lunabug', lunaBugRoutes.default);
-    console.log('✅ LunaBug routes registered at /api/lunabug');
-  } catch (error) {
-    console.error(`❌ LunaBug routes failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    console.log('🌙 LunaBug will use client-side fallback mode');
-  }
-
   // 🔧 ENHANCED: Upload with better JSON parsing and error handling
   app.post("/api/upload", requireAuth, upload.single("image"), async (req, res) => {
     if (!req.file) {
@@ -1515,230 +1788,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // 🔧 DEV AUTH: Now auto-unlocks all characters in development
-  app.post("/api/auth/dev", async (req, res) => {
-    if (process.env.NODE_ENV === 'production') {
-      return res.status(403).json({ error: 'Development login not available in production' });
-    }
-
-    try {
-      const { username } = req.body;
-      console.log(`🔍 [DEV AUTH] Login request for username: ${username}`);
-      
-      if (!username || username.trim().length === 0) {
-        return res.status(400).json({ error: 'Username is required' });
-      }
-
-      const sanitizedUsername = username.trim().substring(0, 50);
-      const devTelegramId = `dev_${sanitizedUsername.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
-      
-      console.log(`🔍 [DEV AUTH] Generated telegramId: ${devTelegramId}`);
-
-      let player = await withTimeout(
-        storage.getPlayerByTelegramId(devTelegramId),
-        3000,
-        'get player by telegram id'
-      );
-      console.log(`🔍 [DEV AUTH] Player lookup result:`, {
-        found: !!player,
-        id: player?.id,
-        username: player?.username,
-        telegramId: player?.telegramId
-      });
-
-      if (!player) {
-        console.log(`🔍 [DEV AUTH] Creating new dev player...`);
-        const playerData = await masterDataService.createNewPlayerData(devTelegramId, sanitizedUsername);
-        
-        // 🔧 DEV: Auto-unlock all characters
-        const characters = getCharactersFromMemory();
-        playerData.unlockedCharacters = characters.map(c => c.id);
-        if (characters.length > 0) {
-          playerData.selectedCharacterId = characters[0].id;
-        }
-        console.log(`🔓 [DEV AUTH] Auto-unlocked ${characters.length} characters`);
-        
-        player = await withTimeout(
-          storage.createPlayer(playerData),
-          5000,
-          'create new dev player'
-        );
-        await savePlayerDataToJSON(player);
-        console.log(`🎮 Created new dev player: ${sanitizedUsername} (${devTelegramId}_${sanitizedUsername})`);
-      } else {
-        console.log(`🔍 [DEV AUTH] Updating existing player login time...`);
-        await withTimeout(
-          storage.updatePlayer(player.id, { lastLogin: new Date() }),
-          3000,
-          'update player login time'
-        );
-        await savePlayerDataToJSON(player);
-      }
-
-      const sessionToken = generateSecureToken();
-      console.log(`🔍 [DEV AUTH] Generated session token: ${sessionToken.slice(0, 8)}...`);
-      
-      await withTimeout(
-        storage.createSession({
-          playerId: player.id,
-          token: sessionToken,
-          expiresAt: getSessionExpiry(),
-        }),
-        3000,
-        'create session'
-      );
-      
-      console.log(`✅ [DEV AUTH] Session created for player ${player.username}`);
-      logger.info('Dev auth successful', { username: player.username, playerId: player.id });
-
-      res.json({ success: true, player, sessionToken });
-    } catch (error) {
-      console.error(`🔴 [DEV AUTH] Failed:`, error);
-      logger.error('Dev auth error', { error: error instanceof Error ? error.message : 'Unknown error' });
-      res.status(500).json({ error: 'Authentication failed', details: (error as Error).message });
-    }
-  });
-
-  app.post("/api/auth/telegram", async (req, res) => {
-    try {
-      const { initData } = req.body;
-      const botToken = process.env.TELEGRAM_BOT_TOKEN;
-
-      if (!botToken) {
-        return res.status(500).json({ error: 'Telegram authentication not configured' });
-      }
-
-      if (!initData) {
-        return res.status(400).json({ error: 'Missing initData' });
-      }
-
-      const validator = new AuthDataValidator({ botToken });
-      const dataMap = new Map(new URLSearchParams(initData).entries());
-      const validationResult = await validator.validate(dataMap);
-
-      if (!validationResult || !validationResult.id) {
-        return res.status(401).json({ error: 'Invalid Telegram authentication' });
-      }
-
-      const telegramId = validationResult.id.toString();
-      const username = (validationResult as any).username || (validationResult as any).first_name || 'TelegramUser';
-
-      let player = await withTimeout(
-        storage.getPlayerByTelegramId(telegramId),
-        3000,
-        'get telegram player'
-      );
-
-      if (!player) {
-        const playerData = await masterDataService.createNewPlayerData(telegramId, username);
-        player = await withTimeout(
-          storage.createPlayer(playerData),
-          5000,
-          'create telegram player'
-        );
-        await savePlayerDataToJSON(player);
-        console.log(`🎮 Created new Telegram player: ${username} (${telegramId}_${username})`);
-      } else {
-        await withTimeout(
-          storage.updatePlayer(player.id, { lastLogin: new Date() }),
-          3000,
-          'update telegram player login'
-        );
-        await savePlayerDataToJSON(player);
-      }
-
-      const sessionToken = generateSecureToken();
-      await withTimeout(
-        storage.createSession({
-          playerId: player.id,
-          token: sessionToken,
-          expiresAt: getSessionExpiry(),
-        }),
-        3000,
-        'create telegram session'
-      );
-
-      res.json({ success: true, player, sessionToken });
-    } catch (error) {
-      logger.error('Telegram auth error', { error: error instanceof Error ? error.message : 'Unknown error' });
-      res.status(500).json({ error: 'Authentication failed', details: (error as Error).message });
-    }
-  });
-
-  // 🔍 DIAGNOSTIC: Enhanced auth/me endpoint with detailed logging
-  app.get("/api/auth/me", requireAuth, async (req, res) => {
-    try {
-      console.log(`🔍 [AUTH/ME] Request from player: ${req.player?.username || req.player?.id}`);
-      console.log(`🔍 [AUTH/ME] Player data:`, {
-        id: req.player?.id,
-        telegramId: req.player?.telegramId,
-        username: req.player?.username,
-        isAdmin: req.player?.isAdmin
-      });
-      
-      // 🎯 JSON-FIRST: Load from telegramId_username folder JSON
-      const playerState = await withTimeout(
-        getPlayerState(req.player!.id),
-        5000,
-        'get player state'
-      );
-      console.log(`✅ [AUTH/ME] Loaded player state for: ${playerState.username}`);
-      
-      res.json({ success: true, player: playerState });
-    } catch (error) {
-      console.error(`🔴 [AUTH/ME] Failed to load player ${req.player?.username}:`, error);
-      logger.error('Auth/me error', { 
-        playerId: req.player?.id,
-        username: req.player?.username,
-        error: error instanceof Error ? error.message : 'Unknown error' 
-      });
-      res.status(500).json({ error: 'Failed to fetch player data' });
-    }
-  });
-
-  // Get all upgrades (from memory)
-  app.get("/api/upgrades", requireAuth, async (_req, res) => {
-    try {
-      const upgrades = getUpgradesFromMemory();
-      res.json({ upgrades });
-    } catch (error: any) {
-      res.status(500).json({ success: false, message: error.message });
-    }
-  });
-
-  // Get all characters (from memory)
-  app.get("/api/characters", requireAuth, async (_req, res) => {
-    try {
-      const characters = getCharactersFromMemory();
-      res.json({ characters });
-    } catch (error: any) {
-      res.status(500).json({ success: false, message: error.message });
-    }
-  });
-
-  // Get specific character
-  app.get("/api/characters/:id", requireAuth, async (req, res) => {
-    try {
-      const character = getCharacterFromMemory(req.params.id);
-      if (!character) {
-        return res.status(404).json({ error: 'Character not found' });
-      }
-      res.json(character);
-    } catch (error: any) {
-      res.status(500).json({ success: false, message: error.message });
-    }
-  });
-
-  // Get all levels (from memory) 
-  app.get("/api/levels", requireAuth, async (_req, res) => {
-    try {
-      const levels = getLevelsFromMemory();
-      res.json({ levels });
-    } catch (error: any) {
-      res.status(500).json({ success: false, message: error.message });
-    }
-  });
-
   // Get all media uploads
   app.get("/api/media", requireAuth, async (req, res) => {
     try {
@@ -1848,351 +1897,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // 🎯 JSON-FIRST: Get player data (from telegramId_username folder) - ENHANCED DEBUGGING
-  app.get("/api/player/me", requireAuth, async (req, res) => {
-    try {
-      console.log(`🔍 [PLAYER/ME] Request from: ${req.player?.username || req.player?.id}`);
-      
-      const playerState = await withTimeout(
-        getPlayerState(req.player!.id),
-        5000,
-        'get player state'
-      );
-      console.log(`✅ [PLAYER/ME] Successfully loaded state for: ${playerState.username}`);
-      console.log(`🔍 [PLAYER/ME] State summary:`, {
-        points: playerState.points,
-        level: playerState.level,
-        experience: playerState.experience, // 🆕 Include experience in logs
-        selectedCharacterId: playerState.selectedCharacterId,
-        displayImage: playerState.displayImage ? 'set' : 'null',
-        upgradesCount: Object.keys(playerState.upgrades || {}).length, // 🚨 SAFE: Add || {} to prevent crash
-        unlockedCharacters: (playerState.unlockedCharacters || []).length // 🚨 SAFE: Add || [] to prevent crash
-      });
-      
-      res.json({ player: playerState });
-    } catch (error) {
-      console.error(`🔴 [PLAYER/ME] Failed for ${req.player?.username}:`, error);
-      logger.error('Player fetch error', { 
-        playerId: req.player?.id,
-        username: req.player?.username,
-        error: error instanceof Error ? error.message : 'Unknown' 
-      });
-      res.status(500).json({ error: 'Failed to fetch player data' });
-    }
-  });
-
-  // 🎯 JSON-FIRST: Update player data (immediate telegramId_username JSON + queued DB sync)
-  app.patch("/api/player/me", requireAuth, async (req, res) => {
-    try {
-      const updates = req.body;
-      console.log(`🔍 [PLAYER/ME PATCH] Update request from: ${req.player?.username}`, Object.keys(updates));
-      
-      // Security: prevent admin escalation
-      if (updates.isAdmin !== undefined) {
-        delete updates.isAdmin;
-      }
-
-      // Round integer fields to prevent PostgreSQL errors
-      const integerFields = ['points', 'energy', 'energyMax', 'level', 'experience', 'passiveIncomeRate'];
-      for (const field of integerFields) {
-        if (updates[field] !== undefined && typeof updates[field] === 'number') {
-          updates[field] = Math.round(updates[field]);
-        }
-      }
-
-      // Apply updates via JSON-first manager
-      const updatedState = await withTimeout(
-        updatePlayerState(req.player!.id, updates),
-        5000,
-        'update player state'
-      );
-      console.log(`✅ [PLAYER/ME PATCH] Successfully updated: ${updatedState.username}`);
-
-      // 🔄 Player sync is handled automatically in updatePlayerState via queuePlayerSync
-
-      // Handle sendBeacon requests (no response expected)
-      if (req.headers['content-type']?.includes('text/plain')) {
-        res.status(204).end();
-      } else {
-        res.json({ player: updatedState });
-      }
-      
-    } catch (error) {
-      console.error(`🔴 [PLAYER/ME PATCH] Failed for ${req.player?.username}:`, error);
-      logger.error('Player update error', { 
-        playerId: req.player?.id,
-        username: req.player?.username,
-        error: error instanceof Error ? error.message : 'Unknown' 
-      });
-      res.status(500).json({ error: 'Failed to update player' });
-    }
-  });
-
-  // 🎭 CHARACTER SELECT: Enhanced with retry logic for memory reload
-  app.post("/api/player/select-character", requireAuth, async (req, res) => {
-    try {
-      const { characterId } = req.body;
-      
-      console.log(`🎭 [CHARACTER SELECT] Player ${req.player!.username || req.player!.id} selecting: ${characterId}`);
-      
-      if (!characterId) {
-        console.log(`❌ [CHARACTER SELECT] No characterId provided`);
-        return res.status(400).json({ error: 'Character ID is required' });
-      }
-
-      // Check if character exists in memory first
-      let character = getCharacterFromMemory(characterId);
-      if (!character) {
-        console.log(`⚠️ [CHARACTER SELECT] Character ${characterId} not found in memory, reloading...`);
-        try {
-          await masterDataService.reloadCharacters();
-          character = getCharacterFromMemory(characterId);
-          if (!character) {
-            console.log(`❌ [CHARACTER SELECT] Character ${characterId} still not found after reload`);
-            return res.status(404).json({ error: `Character '${characterId}' not found` });
-          }
-          console.log(`✅ [CHARACTER SELECT] Character ${characterId} found after reload`);
-        } catch (reloadError) {
-          console.error(`🔴 [CHARACTER SELECT] Character reload failed:`, reloadError);
-          return res.status(500).json({ error: 'Failed to reload character data' });
-        }
-      }
-
-      console.log(`🔄 [CHARACTER SELECT] Calling selectCharacterForPlayer...`);
-      const updatedState = await withTimeout(
-        selectCharacterForPlayer(req.player!.id, characterId),
-        5000,
-        'select character for player'
-      );
-      
-      console.log(`✅ [CHARACTER SELECT] SUCCESS: ${characterId} selected for ${updatedState.username}`);
-      
-      // 🔄 Player sync is handled automatically in selectCharacterForPlayer
-      
-      res.json({ success: true, player: updatedState });
-    } catch (error) {
-      console.error(`🔴 [CHARACTER SELECT] FAILED for ${req.player!.username || req.player!.id}:`, error);
-      logger.error('Character selection error', { 
-        playerId: req.player?.id,
-        username: req.player?.username,
-        characterId: req.body.characterId,
-        error: error instanceof Error ? error.message : 'Unknown' 
-      });
-      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to select character' });
-    }
-  });
-
-  // 🖼️ FIXED: Set display image with telegramId_username folder JSON - ENHANCED LOGGING + TIMEOUT
-  app.post("/api/player/set-display-image", requireAuth, async (req, res) => {
-    try {
-      const { imageUrl } = req.body;
-      
-      console.log(`🖼️ [DISPLAY IMAGE] Player ${req.player!.username || req.player!.id} setting: ${imageUrl}`);
-      
-      if (!imageUrl || typeof imageUrl !== 'string') {
-        console.log(`❌ [DISPLAY IMAGE] Invalid or missing imageUrl:`, imageUrl);
-        return res.status(400).json({ error: 'Valid image URL is required' });
-      }
-
-      // Security: ensure URL is from uploads
-      if (!imageUrl.startsWith('/uploads/')) {
-        console.log(`❌ [DISPLAY IMAGE] URL not from uploads directory: ${imageUrl}`);
-        return res.status(400).json({ error: 'Image URL must be from uploads directory' });
-      }
-      
-      console.log(`🔄 [DISPLAY IMAGE] Attempting to set display image...`);
-      const updatedState = await withTimeout(
-        setDisplayImageForPlayer(req.player!.id, imageUrl),
-        5000,
-        'set display image for player'
-      );
-      
-      console.log(`✅ [DISPLAY IMAGE] SUCCESS: ${imageUrl} set for ${updatedState.username}`);
-      
-      // 🔄 Player sync is handled automatically in setDisplayImageForPlayer
-      
-      res.json({ success: true, player: updatedState });
-    } catch (error) {
-      console.error(`🔴 [DISPLAY IMAGE] FAILED:`, error);
-      logger.error('Display image error', { 
-        playerId: req.player?.id,
-        username: req.player?.username,
-        imageUrl: req.body.imageUrl,
-        error: error instanceof Error ? error.message : 'Unknown' 
-      });
-      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to set display image' });
-    }
-  });
-
-  // 🎯 JSON-FIRST: Purchase upgrade - FIXED WITH TIMEOUT AND BETTER ERROR HANDLING
-  app.post("/api/player/upgrades", requireAuth, async (req, res) => {
-    try {
-      const { upgradeId, level } = req.body;
-      console.log(`🛒 [UPGRADE] Player ${req.player?.username} purchasing ${upgradeId} level ${level}`);
-      
-      const upgrade = getUpgradeFromMemory(upgradeId);
-      
-      if (!upgrade) {
-        console.log(`❌ [UPGRADE] Invalid upgrade: ${upgradeId}`);
-        return res.status(400).json({ error: 'Invalid upgrade' });
-      }
-
-      if (level > upgrade.maxLevel) {
-        console.log(`❌ [UPGRADE] Level ${level} exceeds max ${upgrade.maxLevel} for ${upgradeId}`);
-        return res.status(400).json({ error: 'Level exceeds maximum' });
-      }
-
-      const cost = upgrade.baseCost * Math.pow(upgrade.costMultiplier, level - 1);
-      console.log(`💰 [UPGRADE] Cost calculated: ${cost} for ${upgradeId} level ${level}`);
-      
-      const updatedState = await withTimeout(
-        purchaseUpgradeForPlayer(req.player!.id, upgradeId, level, cost),
-        5000,
-        'purchase upgrade for player'
-      );
-      
-      console.log(`✅ [UPGRADE] Success for ${updatedState.username}`);
-      console.log(`📊 [UPGRADE] New upgrade levels:`, Object.keys(updatedState.upgrades || {}).length); // 🚨 SAFE: Add || {} to prevent crash
-      
-      // 🔄 Player sync is handled automatically in purchaseUpgradeForPlayer
-      
-      res.json({ success: true, player: updatedState });
-    } catch (error) {
-      console.error(`🔴 [UPGRADE] Failed for ${req.player?.username}:`, error);
-      logger.error('Upgrade purchase error', { 
-        playerId: req.player?.id,
-        username: req.player?.username,
-        upgradeId: req.body.upgradeId,
-        error: error instanceof Error ? error.message : 'Unknown' 
-      });
-      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to purchase upgrade' });
-    }
-  });
-
-  // 🎯 JSON-FIRST: Health check for player state system
-  app.get("/api/player/health", requireAuth, async (req, res) => {
-    try {
-      const health = await withTimeout(
-        playerStateManager.healthCheck(),
-        5000,
-        'player state health check'
-      );
-      console.log(`🔍 [PLAYER HEALTH] Check requested by: ${req.player?.username}`);
-      
-      res.json({ 
-        success: true, 
-        health,
-        message: 'Simplified JSON-first player state system (AsyncLock removed)',
-        requestedBy: req.player?.username
-      });
-    } catch (error) {
-      logger.error('Player state health check error', { error: error instanceof Error ? error.message : 'Unknown' });
-      res.status(500).json({ error: 'Failed to check player state health' });
-    }
-  });
-
-  // ✅ LUNA DIAGNOSTIC ROUTE: Check master data integrity
-  app.get("/api/luna/master-data-report", requireAuth, async (req, res) => {
-    try {
-      const report = await withTimeout(
-        masterDataService.getDataIntegrityReport(),
-        10000,
-        'master data integrity report'
-      );
-      res.json({ 
-        success: true, 
-        report,
-        message: "Luna's Master Data Integrity Report with AsyncLock prevention active"
-      });
-    } catch (error) {
-      logger.error('Master data report error', { error: error instanceof Error ? error.message : 'Unknown' });
-      res.status(500).json({ error: 'Failed to generate master data report' });
-    }
-  });
-
-  // 🎯 JSON-FIRST: Admin endpoint to force DB sync for a player
-  app.post("/api/admin/sync-player", requireAuth, requireAdmin, async (req, res) => {
-    try {
-      const { playerId } = req.body;
-      
-      if (!playerId) {
-        return res.status(400).json({ error: 'Player ID is required' });
-      }
-
-      console.log(`⚡ [FORCE SYNC] Admin forcing sync for player: ${playerId}`);
-      
-      // 🧹 Clean up any FK constraint issues first
-      try {
-        await storage.deletePlayerSessions(playerId);
-        console.log(`🧹 [FORCE SYNC] Cleaned sessions before sync`);
-      } catch (sessionError) {
-        console.warn(`⚠️ [FORCE SYNC] Session cleanup failed (might be ok):`, sessionError);
-      }
-      
-      await withTimeout(
-        playerStateManager.forceDatabaseSync(playerId),
-        10000,
-        'force database sync'
-      );
-      
-      res.json({ 
-        success: true, 
-        message: `Player ${playerId} force-synced to database`,
-        sessionsCleaned: true
-      });
-    } catch (error) {
-      logger.error('Force sync error', { error: error instanceof Error ? error.message : 'Unknown' });
-      res.status(500).json({ error: 'Failed to force sync player' });
-    }
-  });
-
-  // 🎯 JSON-FIRST: Admin endpoint to view system health + Luna learning
-  app.get("/api/admin/system-health", requireAuth, requireAdmin, async (req, res) => {
-    try {
-      const playerHealth = await withTimeout(
-        playerStateManager.healthCheck(),
-        5000,
-        'player health check'
-      );
-      const masterDataReport = await withTimeout(
-        masterDataService.getDataIntegrityReport(),
-        5000,
-        'master data report'
-      );
-      const lunaLearningReport = await withTimeout(
-        lunaLearning.getLearningSummary(),
-        5000,
-        'luna learning summary'
-      );
-      
-      console.log(`🔍 [SYSTEM HEALTH] Admin health check by: ${req.player?.username}`);
-      
-      res.json({ 
-        success: true,
-        system: {
-          timestamp: new Date().toISOString(),
-          jsonFirst: {
-            active: true,
-            ...playerHealth
-          },
-          syncQueues: getAllQueueStatus(), // 🔄 Include queue health with FK errors
-          masterData: masterDataReport,
-          lunaLearning: lunaLearningReport,
-          uptime: process.uptime(),
-          memory: process.memoryUsage(),
-          env: process.env.NODE_ENV,
-          requestedBy: req.player?.username
-        }
-      });
-    } catch (error) {
-      logger.error('System health error', { error: error instanceof Error ? error.message : 'Unknown' });
-      res.status(500).json({ error: 'Failed to get system health' });
-    }
-  });
-  
   const httpServer = createServer(app);
   
   console.log('✅ All routes registered successfully');
+  console.log('🏆 NEW: Tasks API at GET /api/tasks and POST /api/tasks/:id/claim');
+  console.log('🏅 NEW: Achievements API at GET /api/achievements and POST /api/achievements/:id/claim');
+  console.log('🚀 NEW: Level-up endpoint at POST /api/player/level-up with DB sync');
+  console.log('🎯 FIXED: Maximum level reached bug resolved');
   console.log('🔧 Timeout protection: 5s max for most operations, 3s for auth');
   console.log('🎯 JSON-FIRST: Player system using telegramId_username folders');
   console.log('🔄 SYNC QUEUES: JSON changes throttle-synced to Supabase DB');
@@ -2202,22 +1913,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   console.log('  - Levels: 15s batches (less frequent changes)');
   console.log('🧹 FK CONSTRAINTS: Auto-cleanup with session management');
   console.log('🔧 Debug routes available at /api/debug (dev only)');
-  console.log('📁 Master-data templates available for admin create flows');
   console.log('🌙 Luna Learning System active with AsyncLock deadlock prevention');
-  console.log('📦 Migration endpoint available: POST /api/admin/migrate-player-files');
-  console.log('🔍 Winston logging active with enhanced error tracking');
-  console.log('🆕 FIXED: Admin CRUD routes with detailed error handling and type coercion');
-  console.log('🔄 ENHANCED: Character selection with memory reload retry logic');
-  console.log('📤 IMPROVED: Upload endpoint with better JSON parsing');
-  console.log('🔍 Config diff endpoint at GET /api/admin/config-diff');
-  console.log('🔄 Sync queue endpoints at /api/admin/sync-queues');
-  console.log('🧹 NEW: FK cleanup endpoints at /api/admin/cleanup-fk and /api/admin/cleanup-player-sessions');
-  console.log('🏆 NEW: Tasks API at GET /api/tasks and POST /api/tasks/:id/claim');
-  console.log('🏅 NEW: Achievements API at GET /api/achievements and POST /api/achievements/:id/claim');
-  console.log('🚀 NEW: Level-up endpoint at POST /api/player/level-up with DB sync');
-  console.log('🎯 FIXED: Maximum level reached bug resolved');
   console.log('🔧 FIXED: Master-data directory path: main-gamedata/master-data/');
   console.log('🚨 CRITICAL: Object.keys undefined errors FIXED with safe defaults');
-  console.log('🎮 FIXED: Game.tsx now uses GameInterfaceV3 with Tasks button');
+  console.log('🎮 GAME: Using GameInterfaceV2 with added Tasks & Achievements button');
+  console.log('🏆 UI: Experience progress bar added to show level-up progress');
   return httpServer;
 }
