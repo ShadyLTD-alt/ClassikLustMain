@@ -3,7 +3,7 @@ import { useGame } from '@/contexts/GameContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { User, Trophy, Zap, Clock, TrendingUp } from 'lucide-react';
+import { User, Trophy, Zap, Clock, TrendingUp, Crown, Camera } from 'lucide-react';
 
 interface Props {
   isOpen: boolean;
@@ -17,6 +17,7 @@ export default function PlayerInfoMenu({ isOpen, onClose }: Props) {
   
   const experienceToNextLevel = (state.level + 1) * 1000;
   const experienceProgress = (state.experience / experienceToNextLevel) * 100;
+  const totalLpEarned = Math.round((state.lustPoints || state.points || 0) + (state.lpEarnedToday || 0)); // Calculated total
   
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -29,12 +30,23 @@ export default function PlayerInfoMenu({ isOpen, onClose }: Props) {
         </DialogHeader>
         
         <div className="space-y-6">
-          {/* Player Basic Info */}
+          {/* Player Basic Info - Gallery icon moved to LEFT of avatar */}
           <div className="flex items-center gap-4 p-4 bg-gray-800/30 rounded-lg border border-gray-700/50">
+            {/* Character Gallery Icon - LEFT of avatar */}
+            <button 
+              onClick={() => {}}
+              className="w-12 h-12 bg-purple-600/20 hover:bg-purple-600/30 rounded-lg flex items-center justify-center transition-colors border border-purple-500/30"
+              title="Character Gallery"
+            >
+              <Crown className="w-6 h-6 text-purple-400" />
+            </button>
+            
+            {/* Avatar */}
             <div className="w-16 h-16 bg-purple-600 rounded-full flex items-center justify-center">
               <User className="w-8 h-8 text-white" />
             </div>
-            <div>
+            
+            <div className="flex-1">
               <h2 className="text-xl font-bold text-white">{state.username}</h2>
               <div className="flex items-center gap-2 mt-1">
                 <Badge className="bg-purple-600/20 text-purple-300 border-purple-400/30">
@@ -46,6 +58,12 @@ export default function PlayerInfoMenu({ isOpen, onClose }: Props) {
                   </Badge>
                 )}
               </div>
+            </div>
+            
+            {/* LP/hr display */}
+            <div className="text-right">
+              <div className="text-purple-300 text-sm font-semibold">LP/HR</div>
+              <div className="text-white text-lg font-bold">{Math.round(state.passiveIncomeRate || 0)}</div>
             </div>
           </div>
           
@@ -66,15 +84,23 @@ export default function PlayerInfoMenu({ isOpen, onClose }: Props) {
             </div>
           </div>
           
-          {/* Currency Stats */}
-          <div className="grid grid-cols-2 gap-4">
+          {/* Currency Stats - Include Total LP Earned and LustGems */}
+          <div className="grid grid-cols-3 gap-4">
             <div className="p-4 bg-gray-800/30 rounded-lg border border-gray-700/50 text-center">
-              <div className="text-2xl font-bold text-purple-400">{Math.round(state.lustPoints || state.points || 0).toLocaleString()}</div>
-              <div className="text-purple-300 text-sm">Lust Points</div>
+              <div className="text-2xl font-bold text-transparent bg-gradient-to-r from-pink-400 via-purple-400 to-pink-500 bg-clip-text">
+                {Math.round(state.lustPoints || state.points || 0).toLocaleString()}
+              </div>
+              <div className="text-purple-300 text-sm">Current LP</div>
             </div>
             <div className="p-4 bg-gray-800/30 rounded-lg border border-gray-700/50 text-center">
-              <div className="text-2xl font-bold text-purple-400">{Math.round(state.lustGems || 0).toLocaleString()}</div>
+              <div className="text-2xl font-bold text-transparent bg-gradient-to-r from-emerald-400 via-cyan-400 to-emerald-500 bg-clip-text">
+                {Math.round(state.lustGems || 0).toLocaleString()}
+              </div>
               <div className="text-purple-300 text-sm">Lust Gems</div>
+            </div>
+            <div className="p-4 bg-gray-800/30 rounded-lg border border-gray-700/50 text-center">
+              <div className="text-2xl font-bold text-purple-400">{totalLpEarned.toLocaleString()}</div>
+              <div className="text-purple-300 text-sm">Total LP Earned</div>
             </div>
           </div>
           
@@ -98,13 +124,13 @@ export default function PlayerInfoMenu({ isOpen, onClose }: Props) {
             </div>
           </div>
           
-          {/* Daily Stats */}
+          {/* Daily Stats - Include Upgrades Purchased Today */}
           <div className="p-4 bg-gray-800/30 rounded-lg border border-gray-700/50">
             <h3 className="text-purple-300 font-semibold mb-3 flex items-center gap-2">
               <Clock className="w-4 h-4" />
               Today's Progress
             </h3>
-            <div className="grid grid-cols-3 gap-4 text-sm">
+            <div className="grid grid-cols-4 gap-4 text-sm">
               <div className="text-center">
                 <div className="text-white font-bold">{Math.round(state.totalTapsToday || 0)}</div>
                 <div className="text-gray-400">Taps</div>
@@ -116,6 +142,10 @@ export default function PlayerInfoMenu({ isOpen, onClose }: Props) {
               <div className="text-center">
                 <div className="text-white font-bold">{Math.round(state.upgradesPurchasedToday || 0)}</div>
                 <div className="text-gray-400">Upgrades</div>
+              </div>
+              <div className="text-center">
+                <div className="text-white font-bold">{Math.round(state.lustGems || 0)}</div>
+                <div className="text-gray-400">Gems</div>
               </div>
             </div>
           </div>

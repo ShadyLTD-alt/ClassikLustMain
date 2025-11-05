@@ -33,7 +33,7 @@ export default function GameInterfaceV2() {
     const y = event.clientY - rect.top;
     
     // Calculate tap value (GameContext will handle boost multipliers)
-    const tapValue = state.lastTapValue || 1;
+    const tapValue = Math.round(state.lastTapValue || 1);
     
     // Add floating animation
     const effectId = crypto.randomUUID();
@@ -50,7 +50,10 @@ export default function GameInterfaceV2() {
 
   const getCharacterImage = () => {
     if (state?.displayImage) return state.displayImage;
-    if (currentCharacter?.defaultImage) return currentCharacter.defaultImage;
+    if (currentCharacter?.defaultImage) {
+      // Ensure absolute path for images
+      return currentCharacter.defaultImage.startsWith('/') ? currentCharacter.defaultImage : `/uploads/${currentCharacter.defaultImage}`;
+    }
     return null;
   };
 
@@ -58,15 +61,15 @@ export default function GameInterfaceV2() {
 
   return (
     <GameLayout>
-      {/* Main character display area - CLEAN, NO PROGRESS BAR */}
-      <div className="flex items-center justify-center min-h-[60vh] mt-16"> {/* Added margin-top for top menu */}
+      {/* Main character display area - ENLARGED and clean */}
+      <div className="flex items-center justify-center min-h-[60vh] mt-16">
         <div className="text-center relative">
           <div className="text-sm text-gray-400 mb-4">Tap to earn points!</div>
           
           <div className="relative">
-            {/* Character Display Area */}
+            {/* Character Display Area - ENLARGED from 320px to 420px */}
             <div
-              className="w-80 h-80 mx-auto rounded-2xl bg-gradient-to-br from-purple-800/40 via-black/50 to-pink-800/40 border-2 border-purple-500/40 flex items-center justify-center cursor-pointer hover:border-purple-400/60 transition-all active:scale-[0.98] overflow-hidden relative group"
+              className="w-[420px] h-[420px] mx-auto rounded-2xl bg-gradient-to-br from-purple-800/40 via-black/50 to-pink-800/40 border-2 border-purple-500/40 flex items-center justify-center cursor-pointer hover:border-purple-400/60 transition-all active:scale-[0.98] overflow-hidden relative group"
               onClick={handleTap}
               style={{
                 boxShadow: '0 8px 32px rgba(168, 85, 247, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.1)'
@@ -94,6 +97,7 @@ export default function GameInterfaceV2() {
                   alt={currentCharacter?.name || 'Character'}
                   className="w-full h-full object-cover rounded-2xl"
                   onError={(e) => {
+                    console.log('Image failed to load:', characterImage);
                     (e.target as HTMLImageElement).src = '/uploads/placeholder-character.jpg';
                   }}
                 />
@@ -169,7 +173,8 @@ export default function GameInterfaceV2() {
                 isAdmin: state?.isAdmin,
                 experience: state?.experience,
                 upgradesCount: Object.keys(state?.upgrades || {}).length,
-                unlockedCharacters: (state?.unlockedCharacters || []).length
+                unlockedCharacters: (state?.unlockedCharacters || []).length,
+                passiveIncomeRate: state?.passiveIncomeRate
               }, null, 2)}</pre>
             </div>
           </div>
