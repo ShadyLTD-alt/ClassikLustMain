@@ -1,221 +1,33 @@
+import fs from 'fs/promises';
 import path from 'path';
-import fs from 'fs';
 import { storage } from '../storage';
-import logger from '../logger';
-import { queuePlayerSync } from './syncQueue';
 
-// 📁 Player data directory structure
-const getPlayerDataPath = (telegramId: string, username: string) => {
-  const sanitizedUsername = username.replace(/[^a-zA-Z0-9_-]/g, '_');
-  const folder = `${telegramId}_${sanitizedUsername}`;
-  const filename = `player_${sanitizedUsername}.json`;
-  return {
-    folder,
-    filename,
-    fullPath: path.join(process.cwd(), 'main-gamedata', 'player-data', folder, filename)
-  };
-};
+class PlayerStateManager {
+  private cache = new Map();
+  private syncQueue = new Map();
+  private syncInProgress = new Set();
+  private syncTimer: NodeJS.Timeout | null = null;
+  private readonly SYNC_INTERVAL = 5000;
+  private readonly DATA_DIR = path.join(process.cwd(), 'main-gamedata', 'player-data');
 
-// 🔧 FIXED: Round all numeric fields to prevent decimal issues
-const sanitizePlayerUpdates = (updates: any) => {
-  const sanitized = { ...updates };
-  
-  // Round all numeric fields to prevent decimal issues
-  const numericFields = ['points', 'lustPoints', 'energy', 'energyMax', 'level', 'experience', 'passiveIncomeRate', 'lustGems'];
-  for (const field of numericFields) {
-    if (sanitized[field] !== undefined && typeof sanitized[field] === 'number') {
-      sanitized[field] = Math.round(sanitized[field]);
-    }
-  }
-  
-  return sanitized;
-};
+  constructor() { this.startSyncTimer(); this.ensureDataDirectory(); }
+  private async ensureDataDirectory() { try { await fs.mkdir(this.DATA_DIR, { recursive: true }); } catch (e) {} }
+  private async ensurePlayerDirectory(id: string) { try { await fs.mkdir(path.join(this.DATA_DIR, id), { recursive: true }); } catch (e) {} }
+  private getPlayerFilePath(id: string) { return path.join(this.DATA_DIR, id, 'player-state.json'); }
+  private createSafeDefaults() { return { id: '', username: 'Unknown', telegramId: '', points: 0, lustPoints: 0, lustGems: 0, energy: 3300, energyMax: 3300, level: 1, experience: 0, passiveIncomeRate: 0, lastTapValue: 1, selectedCharacterId: null, displayImage: null, upgrades: {}, unlockedCharacters: [], totalTapsAllTime: 0, totalTapsToday: 0, lpEarnedToday: 0, upgradesPurchasedToday: 0, consecutiveDays: 0, isAdmin: false, boostActive: false, boostMultiplier: 1, boostEndTime: null, claimedTasks: [], claimedAchievements: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }; }
+  private sanitizeForDatabase(data: any) { const s = { ...data }; ['createdAt','updatedAt','boostEndTime','lastActiveAt'].forEach(f => { if (s[f] && typeof s[f] !== 'string') s[f] = new Date(s[f]).toISOString(); }); ['points','lustPoints','lustGems','energy','energyMax','level','experience','passiveIncomeRate','lastTapValue','totalTapsAllTime','totalTapsToday','lpEarnedToday','upgradesPurchasedToday','consecutiveDays','boostMultiplier'].forEach(f => { if (typeof s[f] === 'number') s[f] = Math.round(s[f]); }); return s; }
+  async loadPlayer(id: string) { await this.ensurePlayerDirectory(id); const fp = this.getPlayerFilePath(id); try { const d = JSON.parse(await fs.readFile(fp, 'utf8')); const wd = { ...this.createSafeDefaults(), ...d }; this.cache.set(id, wd); return wd; } catch { const def = this.createSafeDefaults(); def.id = id; await fs.writeFile(fp, JSON.stringify(def, null, 2)); this.cache.set(id, def); return def; } }
+  async savePlayer(id: string, data: any) { await this.ensurePlayerDirectory(id); const sd = this.sanitizeForDatabase(data); await fs.writeFile(this.getPlayerFilePath(id), JSON.stringify(sd, null, 2)); this.cache.set(id, sd); }
+  private startSyncTimer() { if (this.syncTimer) clearInterval(this.syncTimer); this.syncTimer = setInterval(async () => await this.processingSyncQueue(), this.SYNC_INTERVAL); }
+  private async processingSyncQueue() { if (this.syncQueue.size === 0) return; const entries = Array.from(this.syncQueue.entries()); this.syncQueue.clear(); for (const [id, data] of entries) { if (this.syncInProgress.has(id)) continue; this.syncInProgress.add(id); try { const sd = this.sanitizeForDatabase(data); const u = await storage.updatePlayer(id, sd); if (!u) await storage.createPlayer(sd); } catch (e) { console.error('[DB SYNC] Error:', e); } finally { this.syncInProgress.delete(id); } } }
+  queuePlayerSync(id: string, data: any) { this.syncQueue.set(id, data); }
+  async healthCheck() { return { cacheSize: this.cache.size, syncQueueSize: this.syncQueue.size, dataDirectory: this.DATA_DIR, status: 'healthy' }; }
+  destroy() { if (this.syncTimer) { clearInterval(this.syncTimer); this.syncTimer = null; } }
+}
 
-// 📖 Get player state from JSON file
-export const getPlayerState = async (playerId: string) => {
-  try {
-    const player = await storage.getPlayer(playerId);
-    if (!player) throw new Error('Player not found');
-    
-    const { fullPath } = getPlayerDataPath(player.telegramId, player.username);
-    
-    if (!fs.existsSync(fullPath)) {
-      // Return default state if no JSON exists
-      return {
-        id: player.id,
-        telegramId: player.telegramId,
-        username: player.username,
-        isAdmin: player.isAdmin,
-        points: 0,
-        lustPoints: 0,
-        lustGems: 0,
-        energy: 3300,
-        energyMax: 3300,
-        level: 1,
-        experience: 0,
-        selectedCharacterId: null,
-        displayImage: null,
-        upgrades: {},
-        unlockedCharacters: [],
-        boostActive: false,
-        boostMultiplier: 1,
-        lastTapValue: 1,
-        totalTapsToday: 0,
-        totalTapsAllTime: 0,
-        lpEarnedToday: 0,
-        upgradesPurchasedToday: 0,
-        consecutiveDays: 0,
-        claimedTasks: [],
-        claimedAchievements: [],
-        achievementUnlockDates: {},
-        createdAt: player.createdAt,
-        updatedAt: new Date()
-      };
-    }
-    
-    const content = await fs.promises.readFile(fullPath, 'utf8');
-    const playerData = JSON.parse(content);
-    
-    // Ensure safe defaults for all fields
-    return {
-      id: player.id,
-      telegramId: player.telegramId,
-      username: player.username,
-      isAdmin: player.isAdmin,
-      points: Math.round(playerData.points || playerData.lustPoints || 0),
-      lustPoints: Math.round(playerData.lustPoints || playerData.points || 0),
-      lustGems: Math.round(playerData.lustGems || 0),
-      energy: Math.round(playerData.energy || 3300),
-      energyMax: Math.round(playerData.energyMax || 3300),
-      level: Math.round(playerData.level || 1),
-      experience: Math.round(playerData.experience || 0),
-      selectedCharacterId: playerData.selectedCharacterId || null,
-      displayImage: playerData.displayImage || null,
-      upgrades: playerData.upgrades || {},
-      unlockedCharacters: playerData.unlockedCharacters || [],
-      boostActive: Boolean(playerData.boostActive),
-      boostMultiplier: Math.round(playerData.boostMultiplier || 1),
-      lastTapValue: Math.round(playerData.lastTapValue || 1),
-      totalTapsToday: Math.round(playerData.totalTapsToday || 0),
-      totalTapsAllTime: Math.round(playerData.totalTapsAllTime || 0),
-      lpEarnedToday: Math.round(playerData.lpEarnedToday || 0),
-      upgradesPurchasedToday: Math.round(playerData.upgradesPurchasedToday || 0),
-      consecutiveDays: Math.round(playerData.consecutiveDays || 0),
-      claimedTasks: playerData.claimedTasks || [],
-      claimedAchievements: playerData.claimedAchievements || [],
-      achievementUnlockDates: playerData.achievementUnlockDates || {},
-      createdAt: playerData.createdAt || player.createdAt,
-      updatedAt: new Date()
-    };
-  } catch (error) {
-    logger.error('Failed to get player state', { playerId, error: error instanceof Error ? error.message : 'Unknown' });
-    throw error;
-  }
-};
-
-// ✏️ Update player state in JSON file
-export const updatePlayerState = async (playerId: string, updates: any) => {
-  try {
-    const player = await storage.getPlayer(playerId);
-    if (!player) throw new Error('Player not found');
-    
-    const { folder, filename, fullPath } = getPlayerDataPath(player.telegramId, player.username);
-    
-    // Ensure directory exists
-    const dir = path.dirname(fullPath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    
-    // Get current state
-    const currentState = await getPlayerState(playerId);
-    
-    // Apply sanitized updates
-    const sanitizedUpdates = sanitizePlayerUpdates(updates);
-    const updatedState = {
-      ...currentState,
-      ...sanitizedUpdates,
-      updatedAt: new Date()
-    };
-    
-    // Save to JSON
-    await fs.promises.writeFile(fullPath, JSON.stringify(updatedState, null, 2));
-    
-    // Queue for DB sync
-    queuePlayerSync(playerId, updatedState, false);
-    
-    console.log(`✅ [SIMPLE] Updated player ${updatedState.username}`);
-    return updatedState;
-  } catch (error) {
-    logger.error('Failed to update player state', { playerId, error: error instanceof Error ? error.message : 'Unknown' });
-    throw error;
-  }
-};
-
-// 🎭 Select character for player
-export const selectCharacterForPlayer = async (playerId: string, characterId: string) => {
-  const updates = {
-    selectedCharacterId: characterId,
-    displayImage: null // Reset display image when changing character
-  };
-  return await updatePlayerState(playerId, updates);
-};
-
-// 🖼️ Set display image for player
-export const setDisplayImageForPlayer = async (playerId: string, imageUrl: string) => {
-  const updates = {
-    displayImage: imageUrl
-  };
-  return await updatePlayerState(playerId, updates);
-};
-
-// 🛒 Purchase upgrade for player - FIXED with proper username logging
-export const purchaseUpgradeForPlayer = async (playerId: string, upgradeId: string, level: number, cost: number) => {
-  const player = await storage.getPlayer(playerId);
-  if (!player) throw new Error('Player not found');
-  
-  console.log(`🛒 [UPGRADE] Player ${player.username} purchasing ${upgradeId} level ${level}`);
-  
-  const currentState = await getPlayerState(playerId);
-  const roundedCost = Math.round(cost);
-  
-  if ((currentState.lustPoints || currentState.points || 0) < roundedCost) {
-    throw new Error('Insufficient funds');
-  }
-  
-  const updates = {
-    upgrades: {
-      ...currentState.upgrades,
-      [upgradeId]: level
-    },
-    lustPoints: Math.round((currentState.lustPoints || currentState.points || 0) - roundedCost),
-    points: Math.round((currentState.lustPoints || currentState.points || 0) - roundedCost),
-    experience: Math.round((currentState.experience || 0) + (level * 10)), // Add XP for upgrades
-    upgradesPurchasedToday: (currentState.upgradesPurchasedToday || 0) + 1
-  };
-  
-  console.log(`✅ [UPGRADE] Success for ${player.username}`);
-  return await updatePlayerState(playerId, updates);
-};
-
-// 🏥 Player State Manager health check
-export const playerStateManager = {
-  async healthCheck() {
-    return {
-      status: 'active',
-      type: 'json-first',
-      asyncLockBypassed: true,
-      dataDirectory: path.join(process.cwd(), 'main-gamedata', 'player-data')
-    };
-  },
-  
-  async migrateOldPlayerFiles() {
-    return { moved: 0, errors: 0 };
-  },
-  
-  async forceDatabaseSync(playerId: string) {
-    const state = await getPlayerState(playerId);
-    queuePlayerSync(playerId, state, false);
-    return { synced: true };
-  }
-};
+export const playerStateManager = new PlayerStateManager();
+export async function getPlayerState(id: string) { return await playerStateManager.loadPlayer(id); }
+export async function updatePlayerState(id: string, updates: any) { const c = await playerStateManager.loadPlayer(id); const u = { ...c, ...updates, updatedAt: new Date().toISOString() }; ['points','lustPoints','lustGems','energy','energyMax','level','experience','passiveIncomeRate','lastTapValue','totalTapsAllTime','totalTapsToday','lpEarnedToday','upgradesPurchasedToday','consecutiveDays','boostMultiplier'].forEach(f => { if (typeof u[f] === 'number') u[f] = Math.round(u[f]); }); await playerStateManager.savePlayer(id, u); playerStateManager.queuePlayerSync(id, u); return u; }
+export async function selectCharacterForPlayer(id: string, charId: string) { return await updatePlayerState(id, { selectedCharacterId: charId, displayImage: null }); }
+export async function setDisplayImageForPlayer(id: string, img: string) { return await updatePlayerState(id, { displayImage: img }); }
+export async function purchaseUpgradeForPlayer(id: string, upId: string, lvl: number, cost: number) { const c = await playerStateManager.loadPlayer(id); const lp = Math.round(c.lustPoints || c.points || 0); if (lp < cost) throw new Error('Insufficient Lust Points'); const nu = { ...c.upgrades, [upId]: lvl }; const nlp = Math.round(lp - cost); return await updatePlayerState(id, { upgrades: nu, lustPoints: nlp, points: nlp, upgradesPurchasedToday: Math.round((c.upgradesPurchasedToday || 0) + 1) }); }
