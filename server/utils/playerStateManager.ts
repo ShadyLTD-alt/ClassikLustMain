@@ -2,7 +2,6 @@ import fs from 'fs/promises';
 import path from 'path';
 import { storage } from '../storage';
 
-// Patch: always resolves player key by telegramId, username, or id
 function resolvePlayerKey(player: any) {
   return player.telegramId || player.username || player.id;
 }
@@ -14,10 +13,12 @@ class PlayerStateManager {
   private syncTimer: NodeJS.Timeout | null = null;
   private readonly SYNC_INTERVAL = 5000;
   private readonly DATA_DIR = path.join(process.cwd(), 'main-gamedata', 'player-data');
-
+  public playerFolders: string[] = [];
+  public playerJsonFiles: string[] = [];
+  public errorReports: string[] = [];
   constructor() {
     this.startSyncTimer();
-    this.ensureDataDirectory();
+    this.ensureDataDirectory().then(() => this.scanAllPlayerFolders());
   }
   private async ensureDataDirectory() {
     try { await fs.mkdir(this.DATA_DIR, { recursive: true }); } catch (e) {}
@@ -51,24 +52,71 @@ class PlayerStateManager {
     ['points', 'lustPoints', 'lustGems', 'energy', 'energyMax', 'level', 'experience', 'passiveIncomeRate', 'lastTapValue', 'totalTapsAllTime', 'totalTapsToday', 'lpEarnedToday', 'upgradesPurchasedToday', 'consecutiveDays', 'boostMultiplier'].forEach(f => { if (typeof sanitized[f] === 'number') sanitized[f] = Math.round(sanitized[f]); });
     return sanitized;
   }
+  async scanAllPlayerFolders() {
+    // Luna self-diagnosis and repair
+    this.errorReports = [];
+    try {
+      this.playerFolders = await fs.readdir(this.DATA_DIR);
+      this.playerJsonFiles = [];
+      for (const folder of this.playerFolders) {
+        const folderPath = path.join(this.DATA_DIR, folder);
+        const files = await fs.readdir(folderPath).catch(() => []);
+        for (const file of files) {
+          if (file.endsWith('player-state.json')) {
+            const jsonPath = path.join(folderPath, file);
+            this.playerJsonFiles.push(jsonPath);
+            try {
+              const data = JSON.parse(await fs.readFile(jsonPath, 'utf8'));
+              // Validate minimally required keys
+              const templ = this.createSafeDefaults();
+              let repaired = false;
+              for (const key of Object.keys(templ)) {
+                if (!(key in data)) { data[key] = templ[key]; repaired = true; }
+              }
+              if (repaired) {
+                await fs.writeFile(jsonPath, JSON.stringify(data, null, 2));
+                this.errorReports.push(`Luna: Repaired ${jsonPath} (added missing keys)`);
+                console.warn(`Luna: Repaired ${jsonPath} (added missing keys)`);
+              }
+            } catch (e: any) {
+              // Attempt to restore default if unreadable/corrupt
+              await fs.writeFile(jsonPath, JSON.stringify(this.createSafeDefaults(), null, 2));
+              this.errorReports.push(`Luna: Fixed corrupt ${jsonPath} (${e.message})`);
+              console.error(`Luna: Fixed corrupt ${jsonPath} (${e.message})`);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      this.errorReports.push(`Luna: Error scanning player data folders: ${e.message}`);
+      console.error('Luna: Error scanning player data folders:', e.message);
+    }
+    console.info(`Luna diagnostics: Player folders=${this.playerFolders.length}, playerJsonFiles=${this.playerJsonFiles.length}, problems=${this.errorReports.length}`);
+    if (this.errorReports.length) {
+      console.info('Luna: Detected and fixed these issues:', this.errorReports);
+    }
+  }
   async loadPlayer(player: any) {
     const playerKey = resolvePlayerKey(player);
     await this.ensurePlayerDirectory(playerKey);
     const filePath = this.getPlayerFilePath(playerKey);
+    let data: any;
     try {
-      const data = JSON.parse(await fs.readFile(filePath, 'utf8'));
-      const withDefaults = { ...this.createSafeDefaults(), ...data };
-      this.cache.set(playerKey, withDefaults);
-      return withDefaults;
-    } catch {
-      const defaults = this.createSafeDefaults();
-      defaults.id = player.id;
-      defaults.username = player.username;
-      defaults.telegramId = player.telegramId || '';
-      await fs.writeFile(filePath, JSON.stringify(defaults, null, 2));
-      this.cache.set(playerKey, defaults);
-      return defaults;
+      data = JSON.parse(await fs.readFile(filePath, 'utf8'));
+    } catch (e: any) {
+      data = null;
+      // Auto-repair blank or missing file
+      this.errorReports.push(`Luna: rebuilt ${filePath} for new or broken profile (${e.message})`);
+      data = this.createSafeDefaults();
+      data.id = player.id;
+      data.username = player.username;
+      data.telegramId = player.telegramId || '';
+      await fs.writeFile(filePath, JSON.stringify(data, null, 2));
+      console.warn(`Luna: repaired new/blank/corrupt file for ${playerKey}: ${e.message}`);
     }
+    const withDefaults = { ...this.createSafeDefaults(), ...data };
+    this.cache.set(playerKey, withDefaults);
+    return withDefaults;
   }
   async savePlayer(player: any, data: any) {
     const playerKey = resolvePlayerKey(player);
@@ -80,7 +128,18 @@ class PlayerStateManager {
   private startSyncTimer() { if (this.syncTimer) clearInterval(this.syncTimer); this.syncTimer = setInterval(async () => await this.processingSyncQueue(), this.SYNC_INTERVAL); }
   private async processingSyncQueue() { if (this.syncQueue.size === 0) return; const entries = Array.from(this.syncQueue.entries()); this.syncQueue.clear(); for (const [playerKey, playerData] of entries) { if (this.syncInProgress.has(playerKey)) continue; this.syncInProgress.add(playerKey); try { const sd = this.sanitizeForDatabase(playerData); const updated = await storage.updatePlayer(playerKey, sd); if (!updated) await storage.createPlayer(sd); } catch (e) { console.error('[DB SYNC] Error:', e); } finally { this.syncInProgress.delete(playerKey); } } }
   queuePlayerSync(player: any, playerData: any) { this.syncQueue.set(resolvePlayerKey(player), playerData); }
-  async healthCheck() { return { cacheSize: this.cache.size, syncQueueSize: this.syncQueue.size, dataDirectory: this.DATA_DIR, status: 'healthy' }; }
+  async healthCheck() {
+    await this.scanAllPlayerFolders();
+    return {
+      cacheSize: this.cache.size,
+      syncQueueSize: this.syncQueue.size,
+      dataDirectory: this.DATA_DIR,
+      playerFolders: this.playerFolders,
+      playerJsonFiles: this.playerJsonFiles,
+      errorReports: this.errorReports,
+      status: 'healthy',
+    };
+  }
   destroy() { if (this.syncTimer) { clearInterval(this.syncTimer); this.syncTimer = null; } }
 }
 
