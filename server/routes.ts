@@ -45,7 +45,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!player) {
         // Create new dev player with PROPER Date objects
         console.log(`🆕 [DEV AUTH] Creating new dev player: ${sanitizedUsername}`);
-        const now = new Date(); // 🔧 FIXED: Use actual Date object
+        const now = new Date();
         
         player = await storage.createPlayer({
           id: playerId,
@@ -64,8 +64,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           displayImage: null,
           isAdmin: false,
           consecutiveDays: 0,
-          createdAt: now, // 👉 FIXED: Use Date object, not new Date()
-          updatedAt: now  // 👉 FIXED: Use Date object, not new Date()
+          createdAt: now,
+          updatedAt: now
         });
         console.log(`✅ [DEV AUTH] Created dev player:`, player.id);
       } else {
@@ -186,21 +186,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } 
   });
 
+  // 🖼️ FIXED: Add missing /api/media endpoint (THIS WAS CAUSING IMAGES TO NOT LOAD!)
+  app.get('/api/media', requireAuth, async (_req, res) => {
+    try {
+      console.log('[MEDIA] Fetching all media uploads...');
+      const media = await storage.getMediaUploads();
+      console.log(`[MEDIA] Returning ${media.length} media items`);
+      res.json({ media });
+    } catch (e: any) {
+      console.error('[MEDIA] Error:', e);
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   app.get('/api/levels', requireAuth, (_req, res) => { 
     try { 
       const lvls = getLevelsFromMemory().map(l => ({ 
         level: Number(l.level) || 0, 
         xpRequired: Number(l.xpRequired) || 0, 
+        cost: Number(l.cost) || 0, // Include cost field
+        experienceRequired: Number(l.experienceRequired || l.xpRequired) || 0,
         rewards: { 
           lustPoints: Number(l.rewards?.lustPoints) || 0, 
           lustGems: Number(l.rewards?.lustGems) || 0, 
           energyMax: Number(l.rewards?.energyMax) || 0, 
           ...l.rewards 
         }, 
-        requirements: { 
-          minUpgrades: Number(l.requirements?.minUpgrades) || 0, 
-          ...l.requirements 
-        }, 
+        requirements: l.requirements || [], // Return as array like in JSON files
+        unlocks: l.unlocks || [],
         createdAt: l.createdAt || new Date().toISOString(), 
         updatedAt: l.updatedAt || new Date().toISOString(), 
         ...l 
@@ -209,6 +222,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (e: any) { 
       res.status(500).json({ error: e.message }); 
     } 
+  });
+  
+  // 🎯 FIXED: Add /api/levels/:level endpoint for LevelUp component
+  app.get('/api/levels/:level', requireAuth, (req, res) => {
+    try {
+      const requestedLevel = parseInt(req.params.level);
+      const lvl = getLevelsFromMemory().find(l => l.level === requestedLevel);
+      
+      if (!lvl) {
+        return res.status(404).json({ error: 'Level not found' });
+      }
+      
+      const formatted = {
+        level: Number(lvl.level) || 0,
+        xpRequired: Number(lvl.xpRequired) || 0,
+        cost: Number(lvl.cost) || 0,
+        experienceRequired: Number(lvl.experienceRequired || lvl.xpRequired) || 0,
+        rewards: {
+          lustPoints: Number(lvl.rewards?.lustPoints) || 0,
+          lustGems: Number(lvl.rewards?.lustGems) || 0,
+          energyMax: Number(lvl.rewards?.energyMax) || 0,
+          ...lvl.rewards
+        },
+        requirements: lvl.requirements || [],
+        unlocks: lvl.unlocks || [],
+        createdAt: lvl.createdAt || new Date().toISOString(),
+        updatedAt: lvl.updatedAt || new Date().toISOString(),
+        ...lvl
+      };
+      
+      res.json({ level: formatted });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
   });
   
   // Tasks and achievements
