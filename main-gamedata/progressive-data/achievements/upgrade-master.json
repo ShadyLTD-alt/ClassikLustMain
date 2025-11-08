@@ -1,0 +1,16 @@
+{
+  "id": "upgrade-master",
+  "name": "Upgrade Master",
+  "description": "Own 10 different upgrades",
+  "icon": "🏆",
+  "category": "collection",
+  "requirementType": "upgradeCount",
+  "target": 10,
+  "rewardType": "lp",
+  "rewardAmount": 5000,
+  "rewardData": null,
+  "rarity": "rare",
+  "sortOrder": 2,
+  "isSecret": false,
+  "isActive": true
+}
