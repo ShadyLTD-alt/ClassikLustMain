@@ -242,6 +242,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
       console.log('👤 [GAMECONTEXT] Player data received from backend:', {
         username: player.username,
         lustPoints: player.lustPoints,
+        energy: player.energy,
+        energyMax: player.energyMax,
         level: player.level,
         isAdmin: player.isAdmin,
         upgrades: Object.keys(player.upgrades || {}).length
@@ -288,26 +290,26 @@ export function GameProvider({ children }: { children: ReactNode }) {
       });
 
       const playerUpgrades = player.upgrades || {};
-      const { baseMaxEnergy, baseEnergyRegen } = calculateBaseEnergyValues(loadedUpgrades, playerUpgrades);
       
+      // 🔧 FIX: Use backend energy/energyMax directly, don't recalculate!
       const newState = {
         username: player.username,
         telegramId: player.telegramId,
         points: typeof player.points === 'string' ? parseFloat(player.points) : (player.points || 0),
         lustPoints: typeof player.lustPoints === 'string' ? parseFloat(player.lustPoints) : (player.lustPoints || player.points || 0),
         lustGems: player.lustGems || 0,
-        energy: Math.min(player.energy || baseMaxEnergy, baseMaxEnergy),
-        energyMax: baseMaxEnergy,
+        energy: player.energy || 1000,  // 🔧 Use backend value directly
+        energyMax: player.energyMax || 1000,  // 🔧 Use backend value directly
         level: player.level || 1,
         selectedCharacterId: player.selectedCharacterId || (loadedCharacters[0]?.id || 'shadow'),
         selectedImageId: player.selectedImageId || null,
         displayImage: normalizeImageUrl(player.displayImage),
-        upgrades: playerUpgrades,
+        upgrades: playerUpgrades,  // 🔧 Use backend upgrades directly
         unlockedCharacters: Array.isArray(player.unlockedCharacters) ? player.unlockedCharacters : ['shadow'],
         unlockedImages: Array.isArray(player.unlockedImages) ? player.unlockedImages : [],
         passiveIncomeRate: player.passiveIncomeRate || 0,
         passiveIncomeCap: 10000,
-        energyRegenRate: baseEnergyRegen,
+        energyRegenRate: player.energyRegenRate || 1,  // 🔧 Use backend value
         isAdmin: player.isAdmin || false,
         boostActive: player.boostActive || false,
         boostMultiplier: player.boostMultiplier || 1.0,
@@ -323,9 +325,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
       
       console.log('📢 [GAMECONTEXT] Setting player state to loaded data:', {
         lustPoints: newState.lustPoints,
+        energy: newState.energy,
+        energyMax: newState.energyMax,
         level: newState.level,
         isAdmin: newState.isAdmin,
-        energy: newState.energy,
         upgradeCount: Object.keys(newState.upgrades).length
       });
       
@@ -365,12 +368,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
     console.log('🚀 [GAMECONTEXT] Initial loadAllData triggered');
     loadAllData();
   }, [loadAllData]);
-
-  // 🔧 DISABLED: Don't recalculate stats on every upgrade change - this was resetting the state
-  // useEffect(() => {
-  //   if (!isInitialized || upgrades.length === 0) return;
-  //   ...
-  // }, [state.upgrades, upgrades, isInitialized]);
 
   useEffect(() => {
     applyTheme(theme);
@@ -668,6 +665,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
     const debugInterval = setInterval(() => {
       console.log('🔍 [GAMECONTEXT STATE]', {
         lustPoints: state.lustPoints,
+        energy: state.energy,
+        energyMax: state.energyMax,
         level: state.level,
         isAdmin: state.isAdmin,
         upgradeCount: Object.keys(state.upgrades).length,
@@ -676,7 +675,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     }, 10000); // Every 10 seconds
 
     return () => clearInterval(debugInterval);
-  }, [state.lustPoints, state.level, state.isAdmin, state.upgrades, connectionStatus]);
+  }, [state.lustPoints, state.energy, state.energyMax, state.level, state.isAdmin, state.upgrades, connectionStatus]);
 
   return (
     <GameContext.Provider value={{
