@@ -74,7 +74,7 @@ const createInitialState = (): GameState => ({
   energy: 1000,
   energyMax: 1000,
   level: 1,
-  selectedCharacterId: 'shadow', // 🔧 Default fallback character
+  selectedCharacterId: 'shadow',
   selectedImageId: null,
   selectedAvatarId: null,
   upgrades: {},
@@ -130,7 +130,6 @@ const normalizeImageUrl = (url: string | null): string | null => {
   return `/${url}`;
 };
 
-// 🔧 IMPROVED: Robust API helper with better error handling
 const apiRequest = async (url: string, options: RequestInit = {}, timeoutMs: number = 3000): Promise<Response> => {
   const sessionToken = localStorage.getItem('sessionToken');
   const defaultHeaders: Record<string, string> = {
@@ -158,8 +157,11 @@ const apiRequest = async (url: string, options: RequestInit = {}, timeoutMs: num
   }
 };
 
-export function GameProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<GameState>(() => createInitialState());
+export function GameProvider({ children }: { children: ReactNode }) {
+  const [state, setState] = useState<GameState>(() => {
+    console.log('🎮 [GAMECONTEXT] Initializing with DEFAULT state');
+    return createInitialState();
+  });
   const [upgrades, setUpgrades] = useState<UpgradeConfig[]>([]);
   const [characters, setCharacters] = useState<CharacterConfig[]>([]);
   const [images, setImages] = useState<ImageConfig[]>([]);
@@ -198,15 +200,14 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
   }, [state.boostActive, state.boostExpiresAt]);
 
-  // 🔧 ROBUST LOADING: Simplified with better error recovery
   const loadAllData = useCallback(async () => {
-    console.log('🔄 [GAME] Starting data load (attempt ' + (retryCount + 1) + ')...');
+    console.log('🔄 [GAMECONTEXT] Starting data load (attempt ' + (retryCount + 1) + ')...');
     setConnectionStatus('connecting');
     setLastError(null);
 
     const sessionToken = localStorage.getItem('sessionToken');
     if (!sessionToken) {
-      console.log('❌ [GAME] No session token');
+      console.log('❌ [GAMECONTEXT] No session token');
       setConnectionStatus('offline');
       setLastError('Not authenticated - please login');
       setIsInitialized(true);
@@ -214,16 +215,14 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      // Step 1: Test basic connectivity
-      console.log('🏥 [GAME] Testing server connection...');
+      console.log('🎯 [GAMECONTEXT] Testing server connection...');
       const healthRes = await apiRequest('/api/health', {}, 2000);
       if (!healthRes.ok) {
         throw new Error(`Server unreachable (${healthRes.status})`);
       }
-      console.log('✅ [GAME] Server is responding');
+      console.log('✅ [GAMECONTEXT] Server is responding');
 
-      // Step 2: Validate authentication
-      console.log('🔑 [GAME] Validating session...');
+      console.log('🔑 [GAMECONTEXT] Validating session...');
       const authRes = await apiRequest('/api/auth/me', {}, 3000);
       
       if (!authRes.ok) {
@@ -240,10 +239,15 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       }
       
       const player = authData.player;
-      console.log('✅ [GAME] Authentication valid:', player.username);
+      console.log('👤 [GAMECONTEXT] Player data received from backend:', {
+        username: player.username,
+        lustPoints: player.lustPoints,
+        level: player.level,
+        isAdmin: player.isAdmin,
+        upgrades: Object.keys(player.upgrades || {}).length
+      });
 
-      // Step 3: Load game config (with fallbacks)
-      console.log('📦 [GAME] Loading game configuration...');
+      console.log('📦 [GAMECONTEXT] Loading game configuration...');
       const configResults = await Promise.allSettled([
         apiRequest('/api/upgrades', {}, 3000).then(r => r.ok ? r.json() : { upgrades: [] }),
         apiRequest('/api/characters', {}, 3000).then(r => r.ok ? r.json() : { characters: [] }),
@@ -251,7 +255,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         apiRequest('/api/media', {}, 3000).then(r => r.ok ? r.json() : { media: [] })
       ]);
 
-      // Extract config data with fallbacks
       const upgradesData = configResults[0].status === 'fulfilled' ? configResults[0].value : { upgrades: [] };
       const charactersData = configResults[1].status === 'fulfilled' ? configResults[1].value : { characters: [] };
       const levelsData = configResults[2].status === 'fulfilled' ? configResults[2].value : { levels: [] };
@@ -262,7 +265,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       const loadedLevels = levelsData.levels || [];
       const loadedMedia = mediaData.media || [];
 
-      // Update config state
       setUpgrades(loadedUpgrades);
       setCharacters(loadedCharacters);
       setLevelConfigs(loadedLevels);
@@ -278,19 +280,17 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       }));
       setImages(imageConfigs);
       
-      console.log('✅ [GAME] Config loaded:', {
+      console.log('✅ [GAMECONTEXT] Config loaded:', {
         upgrades: loadedUpgrades.length,
         characters: loadedCharacters.length,
         levels: loadedLevels.length,
         media: imageConfigs.length
       });
 
-      // Step 4: Update player state
       const playerUpgrades = player.upgrades || {};
       const { baseMaxEnergy, baseEnergyRegen } = calculateBaseEnergyValues(loadedUpgrades, playerUpgrades);
       
-      setState(prev => ({
-        ...prev,
+      const newState = {
         username: player.username,
         telegramId: player.telegramId,
         points: typeof player.points === 'string' ? parseFloat(player.points) : (player.points || 0),
@@ -306,6 +306,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         unlockedCharacters: Array.isArray(player.unlockedCharacters) ? player.unlockedCharacters : ['shadow'],
         unlockedImages: Array.isArray(player.unlockedImages) ? player.unlockedImages : [],
         passiveIncomeRate: player.passiveIncomeRate || 0,
+        passiveIncomeCap: 10000,
         energyRegenRate: baseEnergyRegen,
         isAdmin: player.isAdmin || false,
         boostActive: player.boostActive || false,
@@ -315,16 +316,28 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         totalTapsToday: player.totalTapsToday || 0,
         totalTapsAllTime: player.totalTapsAllTime || 0,
         lastDailyReset: player.lastDailyReset ? new Date(player.lastDailyReset) : new Date(),
-        lastWeeklyReset: player.lastWeeklyReset ? new Date(player.lastWeeklyReset) : new Date()
-      }));
+        lastWeeklyReset: player.lastWeeklyReset ? new Date(player.lastWeeklyReset) : new Date(),
+        lastTapValue: 1,
+        selectedAvatarId: null
+      };
+      
+      console.log('📢 [GAMECONTEXT] Setting player state to loaded data:', {
+        lustPoints: newState.lustPoints,
+        level: newState.level,
+        isAdmin: newState.isAdmin,
+        energy: newState.energy,
+        upgradeCount: Object.keys(newState.upgrades).length
+      });
+      
+      setState(newState);
 
       setConnectionStatus('connected');
       setLastError(null);
       setRetryCount(0);
-      console.log('🎉 [GAME] All data loaded successfully');
+      console.log('✅ [GAMECONTEXT] All data loaded and state updated successfully');
       
     } catch (error) {
-      console.error('❌ [GAME] Load failed:', error);
+      console.error('❌ [GAMECONTEXT] Load failed:', error);
       
       if (error instanceof Error) {
         if (error.name === 'AbortError' || error.message.includes('timeout')) {
@@ -344,50 +357,25 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   }, [retryCount]);
 
   const retryConnection = useCallback(() => {
+    console.log('🔄 [GAMECONTEXT] Manual retry requested');
     setRetryCount(prev => prev + 1);
   }, []);
 
-  // Initial load
   useEffect(() => {
+    console.log('🚀 [GAMECONTEXT] Initial loadAllData triggered');
     loadAllData();
   }, [loadAllData]);
 
-  // Recalculate stats when upgrades change
-  useEffect(() => {
-    if (!isInitialized || upgrades.length === 0) return;
-
-    setState(prev => {
-      const perHourUpgrades = upgrades.filter(u => u.type === 'perHour');
-      let newPassiveRate = 0;
-      perHourUpgrades.forEach(u => {
-        const lvl = prev.upgrades[u.id] || 0;
-        newPassiveRate += calculateUpgradeValue(u, lvl);
-      });
-
-      const { baseMaxEnergy, baseEnergyRegen } = calculateBaseEnergyValues(upgrades, prev.upgrades);
-
-      if (newPassiveRate !== prev.passiveIncomeRate || 
-          baseMaxEnergy !== prev.energyMax || 
-          baseEnergyRegen !== prev.energyRegenRate) {
-        
-        return {
-          ...prev,
-          passiveIncomeRate: newPassiveRate,
-          energyMax: baseMaxEnergy,
-          energyRegenRate: baseEnergyRegen,
-          energy: Math.min(prev.energy, baseMaxEnergy)
-        };
-      }
-
-      return prev;
-    });
-  }, [state.upgrades, upgrades, isInitialized]);
+  // 🔧 DISABLED: Don't recalculate stats on every upgrade change - this was resetting the state
+  // useEffect(() => {
+  //   if (!isInitialized || upgrades.length === 0) return;
+  //   ...
+  // }, [state.upgrades, upgrades, isInitialized]);
 
   useEffect(() => {
     applyTheme(theme);
   }, [theme]);
 
-  // 🔧 REDUCED SPAM: Only sync essential data when needed
   useEffect(() => {
     if (!isInitialized || !state.username || connectionStatus !== 'connected') return;
     
@@ -409,7 +397,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
         if (!energyChanged && !pointsChanged) return prev;
 
-        // Only sync every 2 minutes to reduce server load
         syncCounter++;
         if (syncCounter >= 120) {
           syncCounter = 0;
@@ -442,7 +429,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       const newTotalTapsToday = prev.totalTapsToday + 1;
       const newTotalTapsAllTime = prev.totalTapsAllTime + 1;
 
-      // Immediate sync for taps (user expects instant response)
       apiRequest('/api/player/me', {
         method: 'PATCH',
         body: JSON.stringify({
@@ -467,6 +453,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   }, [calculateTapValue]);
 
   const dispatch = useCallback((action: any) => {
+    console.log('📤 [GAMECONTEXT] Dispatch action:', action.type);
     switch (action.type) {
       case 'SET_POINTS':
         setState(prev => ({ ...prev, points: action.payload, lustPoints: action.payload }));
@@ -475,7 +462,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         setState(prev => ({ ...prev, displayImage: normalizeImageUrl(action.payload) }));
         break;
       case 'REFRESH_FROM_SERVER':
-        console.log('🔄 [REFRESH] Manual refresh requested');
+        console.log('🔄 [GAMECONTEXT] Manual refresh requested');
         loadAllData();
         break;
       default:
@@ -483,7 +470,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
   }, [loadAllData]);
 
-  // 🔧 IMPROVED: Upgrade purchase with better error handling
   const purchaseUpgrade = useCallback(async (upgradeId: string): Promise<boolean> => {
     if (pendingPurchases.has(upgradeId) || connectionStatus !== 'connected') return false;
     
@@ -500,7 +486,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setPendingPurchases(prev => new Set(prev).add(upgradeId));
 
     try {
-      console.log(`🛒 [UPGRADE] Purchasing ${upgradeId} level ${newLevel}`);
+      console.log(`🛍️ [GAMECONTEXT] Purchasing ${upgradeId} level ${newLevel}`);
       
       const response = await apiRequest('/api/player/upgrades', {
         method: 'POST',
@@ -514,7 +500,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       const result = await response.json();
       const updatedPlayer = result.player;
       
-      // Immediate local update
+      console.log('✅ [GAMECONTEXT] Upgrade purchased, updating state');
+      
       setState(prev => {
         const newUpgrades = { ...prev.upgrades, [upgradeId]: newLevel };
         const { baseMaxEnergy, baseEnergyRegen } = calculateBaseEnergyValues(upgrades, newUpgrades);
@@ -530,10 +517,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         };
       });
       
-      console.log(`✅ [UPGRADE] ${upgradeId} level ${newLevel} purchased successfully`);
       return true;
     } catch (err) {
-      console.error(`❌ [UPGRADE] Purchase failed:`, err);
+      console.error(`❌ [GAMECONTEXT] Purchase failed:`, err);
       setLastError(`Upgrade purchase failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
       return false;
     } finally {
@@ -549,7 +535,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     if (!state.unlockedCharacters.includes(characterId) || connectionStatus !== 'connected') return false;
 
     try {
-      console.log(`🎭 [CHARACTER] Selecting ${characterId}`);
+      console.log(`🎭 [GAMECONTEXT] Selecting ${characterId}`);
       
       const response = await apiRequest('/api/player/select-character', {
         method: 'POST',
@@ -570,10 +556,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         displayImage: normalizeImageUrl(updatedPlayer.displayImage)
       }));
 
-      console.log(`✅ [CHARACTER] Successfully selected ${characterId}`);
+      console.log(`✅ [GAMECONTEXT] Successfully selected ${characterId}`);
       return true;
     } catch (error) {
-      console.error('❌ [CHARACTER] Selection failed:', error);
+      console.error('❌ [GAMECONTEXT] Selection failed:', error);
       setLastError(`Character selection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
       return false;
     }
@@ -677,6 +663,21 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setConnectionStatus('connecting');
   }, []);
 
+  // 🔍 DEBUG: Log current state periodically
+  useEffect(() => {
+    const debugInterval = setInterval(() => {
+      console.log('🔍 [GAMECONTEXT STATE]', {
+        lustPoints: state.lustPoints,
+        level: state.level,
+        isAdmin: state.isAdmin,
+        upgradeCount: Object.keys(state.upgrades).length,
+        connectionStatus
+      });
+    }, 10000); // Every 10 seconds
+
+    return () => clearInterval(debugInterval);
+  }, [state.lustPoints, state.level, state.isAdmin, state.upgrades, connectionStatus]);
+
   return (
     <GameContext.Provider value={{
       state,
@@ -712,7 +713,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }}>
       {children}
       
-      {/* 🔧 IMPROVED: Better status overlay */}
       {(connectionStatus !== 'connected' || lastError) && (
         <div className="fixed bottom-4 right-4 bg-gray-900/95 text-white p-4 rounded-lg border max-w-sm text-sm z-50">
           <div className="flex items-center gap-2 mb-2">
