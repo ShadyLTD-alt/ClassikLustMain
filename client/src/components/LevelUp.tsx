@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle, Lock, TrendingUp, X } from "lucide-react";
+import { CheckCircle, Lock, TrendingUp, X, Loader2 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -18,25 +18,27 @@ export default function LevelUp({ isOpen, onClose }: LevelUpProps) {
   const { toast } = useToast();
   
   // Fetch player data
-  const { data: player } = useQuery({
+  const { data: playerData, isLoading: playerLoading } = useQuery({
     queryKey: ['/api/player/me'],
     queryFn: async () => {
       const response = await apiRequest('GET', '/api/player/me');
-      return await response.json();
+      const data = await response.json();
+      return data.player;
     },
     enabled: isOpen
   });
 
   // Fetch next level info
-  const { data: nextLevelData } = useQuery({
-    queryKey: ['/api/levels', player?.level + 1],
+  const { data: nextLevelData, isLoading: levelLoading } = useQuery({
+    queryKey: ['/api/levels', playerData?.level + 1],
     queryFn: async () => {
-      if (!player) return null;
-      const response = await apiRequest('GET', `/api/levels/${player.level + 1}`);
+      if (!playerData) return null;
+      const response = await apiRequest('GET', `/api/levels/${playerData.level + 1}`);
       if (!response.ok) return null;
-      return await response.json();
+      const data = await response.json();
+      return data.level;
     },
-    enabled: isOpen && !!player
+    enabled: isOpen && !!playerData
   });
 
   // Fetch upgrades for requirement checking
@@ -44,12 +46,14 @@ export default function LevelUp({ isOpen, onClose }: LevelUpProps) {
     queryKey: ['/api/upgrades'],
     queryFn: async () => {
       const response = await apiRequest('GET', '/api/upgrades');
-      return await response.json();
+      const data = await response.json();
+      return data;
     },
     enabled: isOpen
   });
 
-  if (!player || !nextLevelData?.level) {
+  // ✅ FIXED: Show loading state instead of "Maximum level reached!"
+  if (playerLoading || levelLoading) {
     return (
       <Dialog open={isOpen} onOpenChange={onClose}>
         <DialogContent className="max-w-md bg-gray-900/95 backdrop-blur-lg text-white border-purple-500/50">
@@ -64,23 +68,47 @@ export default function LevelUp({ isOpen, onClose }: LevelUpProps) {
             </div>
           </DialogHeader>
           <div className="text-center py-8">
-            <p className="text-gray-400">Maximum level reached!</p>
+            <Loader2 className="w-8 h-8 animate-spin mx-auto text-purple-400" />
+            <p className="text-gray-400 mt-4">Loading level data...</p>
           </div>
         </DialogContent>
       </Dialog>
     );
   }
 
-  const nextLevel = nextLevelData.level;
-  const cost = nextLevel.cost || 100;
-  const canAfford = player.points >= cost;
-  const requirements = nextLevel.requirements || [];
-  const unlocks = nextLevel.unlocks || [];
+  // ✅ FIXED: Show proper message if no next level exists (from JSON data)
+  if (!playerData || !nextLevelData) {
+    return (
+      <Dialog open={isOpen} onOpenChange={onClose}>
+        <DialogContent className="max-w-md bg-gray-900/95 backdrop-blur-lg text-white border-purple-500/50">
+          <DialogHeader>
+            <div className="flex items-center justify-between">
+              <DialogTitle className="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                Level Up
+              </DialogTitle>
+              <Button variant="ghost" size="sm" onClick={onClose} className="text-gray-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </Button>
+            </div>
+          </DialogHeader>
+          <div className="text-center py-8">
+            <p className="text-gray-400">No next level available.</p>
+            <p className="text-sm text-gray-500 mt-2">You're at the highest level configured in the game!</p>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  const cost = nextLevelData.cost || 100;
+  const canAfford = playerData.points >= cost;
+  const requirements = nextLevelData.requirements || [];
+  const unlocks = nextLevelData.unlocks || [];
   const upgrades = upgradesData?.upgrades || [];
 
   // Check if requirements are met
   const requirementsMet = requirements.every((req: any) => {
-    const playerUpgradeLevel = player.upgrades?.[req.upgradeId] || 0;
+    const playerUpgradeLevel = playerData.upgrades?.[req.upgradeId] || 0;
     return playerUpgradeLevel >= req.minLevel;
   });
 
@@ -96,7 +124,7 @@ export default function LevelUp({ isOpen, onClose }: LevelUpProps) {
       if (response.ok) {
         toast({
           title: "Level Up!",
-          description: `Congratulations! You've reached level ${nextLevel.level}`,
+          description: `Congratulations! You've reached level ${nextLevelData.level}`,
         });
         onClose();
       } else {
@@ -119,14 +147,14 @@ export default function LevelUp({ isOpen, onClose }: LevelUpProps) {
         <DialogHeader>
           <div className="flex items-center justify-between">
             <DialogTitle className="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-              Level Up - Level {nextLevel.level}
+              Level Up - Level {nextLevelData.level}
             </DialogTitle>
             <Button variant="ghost" size="sm" onClick={onClose} className="text-gray-400 hover:text-white">
               <X className="w-5 h-5" />
             </Button>
           </div>
           <p className="text-center text-sm text-gray-400">
-            Current Level: {player.level} | Cost: <span className="text-purple-400 font-semibold">{cost}</span> points
+            Current Level: {playerData.level} | Cost: <span className="text-purple-400 font-semibold">{cost}</span> points
           </p>
         </DialogHeader>
 
@@ -142,7 +170,7 @@ export default function LevelUp({ isOpen, onClose }: LevelUpProps) {
                 <div className="space-y-2">
                   {requirements.map((req: any, index: number) => {
                     const upgrade = upgrades.find((u: any) => u.id === req.upgradeId);
-                    const playerLevel = player.upgrades?.[req.upgradeId] || 0;
+                    const playerLevel = playerData.upgrades?.[req.upgradeId] || 0;
                     const isMet = playerLevel >= req.minLevel;
                     
                     return (
@@ -179,7 +207,7 @@ export default function LevelUp({ isOpen, onClose }: LevelUpProps) {
           {unlocks.length > 0 && (
             <Card className="bg-black/40 border-purple-500/30">
               <CardContent className="p-4">
-                <h3 className="font-semibold mb-3 text-yellow-400">Unlocks at Level {nextLevel.level}</h3>
+                <h3 className="font-semibold mb-3 text-yellow-400">Unlocks at Level {nextLevelData.level}</h3>
                 <div className="space-y-2">
                   {unlocks.map((unlock: string, index: number) => (
                     <div key={index} className="flex items-center gap-2 p-2 rounded bg-yellow-600/10">
@@ -204,13 +232,13 @@ export default function LevelUp({ isOpen, onClose }: LevelUpProps) {
           >
             {isLevelingUp ? (
               <div className="flex items-center gap-2">
-                <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+                <Loader2 className="w-4 h-4 animate-spin" />
                 Leveling up...
               </div>
             ) : canLevelUp ? (
               'Level Up Now!'
             ) : !canAfford ? (
-              `Need ${cost - player.points} more points`
+              `Need ${cost - playerData.points} more points`
             ) : (
               'Requirements not met'
             )}
@@ -218,7 +246,7 @@ export default function LevelUp({ isOpen, onClose }: LevelUpProps) {
 
           {/* Current Status */}
           <div className="text-center text-sm text-gray-400 space-y-1">
-            <div>Your Points: <span className="text-purple-400 font-semibold">{Math.floor(player.points)}</span></div>
+            <div>Your Points: <span className="text-purple-400 font-semibold">{Math.floor(playerData.points)}</span></div>
             <div>Cost: <span className="text-purple-400 font-semibold">{cost}</span></div>
             {canAfford ? (
               <div className="text-green-400">✓ You have enough points!</div>
