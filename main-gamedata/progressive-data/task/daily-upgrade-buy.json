@@ -1,0 +1,15 @@
+{
+  "id": "daily-upgrade-buy",
+  "name": "Upgrade Hunter",
+  "description": "Purchase 3 upgrades today",
+  "icon": "⬆️",
+  "category": "daily",
+  "requirementType": "upgradesPurchased",
+  "target": 3,
+  "rewardType": "lg",
+  "rewardAmount": 10,
+  "resetType": "daily",
+  "sortOrder": 2,
+  "isActive": true,
+  "isHidden": false
+}
