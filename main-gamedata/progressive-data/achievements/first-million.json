@@ -1,0 +1,16 @@
+{
+  "id": "first-million",
+  "name": "Millionaire",
+  "description": "Earn 1,000,000 Lust Points",
+  "icon": "💎",
+  "category": "progression",
+  "requirementType": "lpTotal",
+  "target": 1000000,
+  "rewardType": "lg",
+  "rewardAmount": 100,
+  "rewardData": null,
+  "rarity": "epic",
+  "sortOrder": 1,
+  "isSecret": false,
+  "isActive": true
+}
