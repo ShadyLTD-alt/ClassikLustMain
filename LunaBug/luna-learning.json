@@ -76,5 +76,37 @@
       "Implement fallback image system",
       "Track failed image URLs to prevent retry loops"
     ]
+  },
+  {
+    "timestamp": "2025-11-05T00:08:43.251Z",
+    "incidentId": "ASYNCLOCK_DEADLOCK_NOV_2025",
+    "errorPattern": "withTimeout(...) timed out after 5000ms + AsyncLock acquire never resolving",
+    "errorType": "ASYNC_LOCK_DEADLOCK",
+    "impact": "CRITICAL",
+    "debuggingTimeHours": 6,
+    "rootCauseModule": "async-lock + proper-lockfile",
+    "fixCommitSha": "e0d03409503298b7ae83bcc75cac13b21dd83411",
+    "solution": "Complete removal of AsyncLock and proper-lockfile. Direct JSON I/O with background DB sync.",
+    "codeExample": "// 🚨 NEVER USE THIS PATTERN IN JSON-FIRST SYSTEMS:\nclass BadPlayerStateManager {\n  private locks = new Map<string, AsyncLock>();\n  \n  async updatePlayer(playerId: string, updates: any) {\n    const lock = this.getLock(playerId);\n    return await lock.acquire(playerId, async () => { // 💀 DEADLOCK POINT\n      const release = await lockfile.lock(filePath); // 💀 HANG POINT\n      // Operations never complete...\n    });\n  }\n}\n\n// ✅ SAFE PATTERN: Direct operations\nclass SafePlayerStateManager {\n  private cache = new Map<string, PlayerState>();\n  \n  async updatePlayer(playerId: string, updates: any) {\n    const current = await this.loadPlayer(playerId);\n    const updated = { ...current, ...updates };\n    \n    // Direct JSON write (atomic)\n    await fs.writeFile(jsonPath, JSON.stringify(updated));\n    this.cache.set(playerId, updated);\n    \n    // DB sync in background (non-blocking)\n    this.syncToDatabase(playerId, updated).catch(console.error);\n    \n    return updated;\n  }\n}",
+    "preventionChecks": [
+      "NEVER use AsyncLock in player state operations",
+      "NEVER use proper-lockfile for JSON persistence",
+      "Operations must complete in <1s, not 5s+",
+      "Use direct JSON I/O with atomic writes",
+      "Database sync must be background/non-blocking",
+      "Add timing instrumentation to detect slowdowns",
+      "Prefer simple cache + JSON over complex state management"
+    ]
+  },
+  {
+    "timestamp": "2025-11-08T01:30:39.003Z",
+    "errorPattern": "player/patch: Unexpected token 'T', ...\"isAdmin\": TRUE,\n  \"l\"... is not valid JSON",
+    "errorType": "DATABASE_FIELD",
+    "impact": "HIGH",
+    "solution": "Fixed player/patch with proper error handling and safe defaults",
+    "preventionChecks": [
+      "Always null-guard player/patch responses",
+      "Return complete player objects with defaults"
+    ]
   }
 ]

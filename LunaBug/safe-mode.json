@@ -1,0 +1,7 @@
+{
+  "enabled": true,
+  "bypassAsyncLock": true,
+  "bypassProperLockfile": true,
+  "maxOperationTimeMs": 1000,
+  "autoFixEnabled": true
+}
