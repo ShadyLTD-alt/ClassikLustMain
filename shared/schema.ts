@@ -71,21 +71,18 @@ export const characters = pgTable("characters", {
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
-// Levels EXCLUDING experienceRequired and xpRequired
+// Levels EXCLUDING experienceRequired and xpRequired, rewards includes character/unlocks
 export const levels = pgTable("levels", {
   level: integer("level").primaryKey(),
-  cost: integer("cost").notNull().default(100), // Points cost to level up
-  pointsReward: integer("pointsReward").default(0).notNull(), // Bonus points on level up
-  // rewards: object -- can contain lustPoints, lustGems, characterUnlock
-  rewards: jsonb("rewards").notNull().default('{}').$type<{ lustPoints?: number, lustGems?: number, characterUnlock?: string }>(),
-  // requirements: array of { upgradeId, minLevel }
+  cost: integer("cost").notNull().default(100),
+  pointsReward: integer("pointsReward").default(0).notNull(),
+  // rewards: object -- can contain lustPoints, lustGems, characterUnlocks, upgradeUnlocks
+  rewards: jsonb("rewards").notNull().default('{}').$type<{ lustPoints?: number, lustGems?: number, characterUnlocks?: string[], upgradeUnlocks?: string[] }>(),
   requirements: jsonb("requirements").notNull().default('[]').$type<{ upgradeId: string; minLevel: number }[]>(),
   unlocks: jsonb("unlocks").notNull().default('[]').$type<string[]>(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
-
-// ... (leave other tables unchanged)
 
 export const insertLevelSchema = createInsertSchema(levels).omit({
   createdAt: true,
