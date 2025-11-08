@@ -257,7 +257,7 @@ async function deleteFromDatabase(contentType: ContentType, id: string): Promise
 }
 
 /**
- * Load all game data into memory cache
+ * Load all game data into memory cache and sync characters to DB
  */
 export async function syncAllGameData(): Promise<void> {
   console.log('🚀 Loading all game data from main-gamedata directories...');
@@ -271,6 +271,20 @@ export async function syncAllGameData(): Promise<void> {
     for (const item of data) {
       const key = 'level' in item ? String(item.level) : item.id;
       dataCache[type].set(key, item);
+    }
+    
+    // ✅ Sync all loaded characters to database after file load
+    if (type === 'characters' && data.length > 0) {
+      console.log(`🔄 Syncing ${data.length} characters to database...`);
+      for (const character of data) {
+        try {
+          await storage.createCharacter(character);
+        } catch {
+          // If create fails (duplicate), update instead
+          await storage.updateCharacter(character.id, character);
+        }
+      }
+      console.log(`✅ All ${data.length} characters synced to database`);
     }
   }
   
