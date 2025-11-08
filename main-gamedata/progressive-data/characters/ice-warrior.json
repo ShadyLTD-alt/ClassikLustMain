@@ -1,0 +1,10 @@
+{
+  "id": "ice-warrior",
+  "name": "Frost",
+  "description": "An ice warrior with frozen powers",
+  "unlockLevel": 5,
+  "rarity": "rare",
+  "defaultImage": "/uploads/characters/Frost/character/default.png",
+  "avatarImage": "/uploads/characters/Frost/avatar/default.png",
+  "displayImage": "/uploads/characters/Frost/character/default.png"
+}
