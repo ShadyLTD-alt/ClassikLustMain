@@ -7,13 +7,15 @@ export const players = pgTable("players", {
   id: varchar("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   telegramId: text("telegramId").unique(),
   username: text("username").notNull(),
-  points: integer("points").default(0).notNull(),
+  points: integer("points").default(0).notNull(), // Legacy field
+  lustPoints: integer("lustPoints").default(0).notNull(), // 👉 NEW: Primary currency
   lustGems: integer("lustGems").default(0).notNull(),
   energy: integer("energy").default(1000).notNull(),
   energyMax: integer("energyMax").default(1000).notNull(),
   level: integer("level").default(1).notNull(),
   experience: integer("experience").default(0).notNull(),
   passiveIncomeRate: integer("passiveIncomeRate").default(0).notNull(),
+  lastTapValue: integer("lastTapValue").default(1).notNull(), // 👉 NEW: Current tap power
   isAdmin: boolean("isAdmin").default(false).notNull(),
   selectedCharacterId: text("selectedCharacterId"),
   selectedImageId: text("selectedImageId"),
@@ -22,10 +24,17 @@ export const players = pgTable("players", {
   unlockedCharacters: jsonb("unlockedCharacters").default("[]").notNull().$type<string[]>(),
   totalTapsAllTime: integer("totalTapsAllTime").default(0).notNull(),
   totalTapsToday: integer("totalTapsToday").default(0).notNull(),
+  lpEarnedToday: integer("lpEarnedToday").default(0).notNull(), // 👉 NEW: Daily LP tracking
+  upgradesPurchasedToday: integer("upgradesPurchasedToday").default(0).notNull(), // 👉 NEW: Daily upgrade tracking
+  consecutiveDays: integer("consecutiveDays").default(0).notNull(), // 👉 NEW: Login streak
+  claimedTasks: jsonb("claimedTasks").default("[]").notNull().$type<string[]>(), // 👉 NEW: Claimed task IDs
+  claimedAchievements: jsonb("claimedAchievements").default("[]").notNull().$type<string[]>(), // 👉 NEW: Claimed achievement IDs
   boostExpiresAt: timestamp("boostExpiresAt"),
+  boostEndTime: timestamp("boostEndTime"), // Alias for boostExpiresAt
   boostMultiplier: real("boostMultiplier").default(1.0).notNull(),
   boostActive: boolean("boostActive").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(), // 👉 NEW: Track last update
   lastLogin: timestamp("lastLogin").defaultNow().notNull(),
   lastEnergyUpdate: timestamp("lastEnergyUpdate").defaultNow().notNull(),
   lastWeeklyReset: timestamp("lastWeeklyReset").defaultNow().notNull(),
@@ -47,6 +56,7 @@ export const upgrades = pgTable("upgrades", {
   valueIncrement: real("valueIncrement").notNull(),
   isHidden: boolean("isHidden").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
 export const characters = pgTable("characters", {
@@ -60,17 +70,28 @@ export const characters = pgTable("characters", {
   displayImage: text("displayImage"),
   isHidden: boolean("isHidden").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
 // Enhanced levels for admin editor with cost and requirements
 export const levels = pgTable("levels", {
   level: integer("level").primaryKey(),
-  cost: integer("cost").notNull().default(100), // Points cost to level up
+  xpRequired: integer("xpRequired").notNull().default(100), // 👉 Renamed from cost to match JSON
+  cost: integer("cost").notNull().default(100), // Points cost to level up (legacy)
   experienceRequired: integer("experienceRequired"), // Optional/dormant XP system
   pointsReward: integer("pointsReward").default(0).notNull(), // Bonus points on level up
-  requirements: jsonb("requirements").notNull().default("[]").$type<Array<{ upgradeId: string; minLevel: number }>>(),
+  rewards: jsonb("rewards").notNull().default("{}").$type<{
+    lustPoints?: number;
+    lustGems?: number;
+    energyMax?: number;
+  }>(), // 👉 NEW: Structured rewards
+  requirements: jsonb("requirements").notNull().default("{}").$type<{
+    minUpgrades?: number;
+    upgradeRequirements?: Array<{ upgradeId: string; minLevel: number }>;
+  }>(), // 👉 Updated structure
   unlocks: jsonb("unlocks").notNull().default("[]").$type<string[]>(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
 // 🏆 NEW: Tasks (Daily/Weekly recurring objectives)
@@ -89,6 +110,7 @@ export const tasks = pgTable("tasks", {
   isActive: boolean("isActive").default(true).notNull(),
   isHidden: boolean("isHidden").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
 // 🏅 NEW: Achievements (Permanent unlocks)
@@ -108,6 +130,7 @@ export const achievements = pgTable("achievements", {
   isSecret: boolean("isSecret").default(false).notNull(), // Hidden until unlocked
   isActive: boolean("isActive").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
 // 📊 NEW: Player task progress (resets based on task resetType)
@@ -198,29 +221,35 @@ export const mediaUploads = pgTable("mediaUploads", {
 export const insertPlayerSchema = createInsertSchema(players).omit({
   id: true,
   createdAt: true,
+  updatedAt: true,
   lastLogin: true,
   lastEnergyUpdate: true,
 });
 
 export const insertUpgradeSchema = createInsertSchema(upgrades).omit({
   createdAt: true,
+  updatedAt: true,
 });
 
 export const insertCharacterSchema = createInsertSchema(characters).omit({
   createdAt: true,
+  updatedAt: true,
 });
 
 export const insertLevelSchema = createInsertSchema(levels).omit({
-  createdAt: true
+  createdAt: true,
+  updatedAt: true,
 });
 
 // 📋 NEW: Task and Achievement schemas
 export const insertTaskSchema = createInsertSchema(tasks).omit({
   createdAt: true,
+  updatedAt: true,
 });
 
 export const insertAchievementSchema = createInsertSchema(achievements).omit({
   createdAt: true,
+  updatedAt: true,
 });
 
 export const insertPlayerTaskProgressSchema = createInsertSchema(playerTaskProgress).omit({
