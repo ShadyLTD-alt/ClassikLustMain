@@ -1,7 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log as viteLog } from "./vite";
-import { syncAllGameData } from "./utils/dataLoader";
+import { syncAllGameData } from "./utils/unifiedDataLoader"; // ✅ CHANGED: Use unified loader
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
@@ -46,7 +46,7 @@ app.use((req, res, next) => {
   let capturedJsonResponse: Record<string, any> | undefined = undefined;
 
   const originalResJson = res.json;
-  res.json = function (bodyJson: any, ...args: any[]) {  // ← Change this line
+  res.json = function (bodyJson: any, ...args: any[]) {
     capturedJsonResponse = bodyJson;
     return originalResJson.apply(res, [bodyJson, ...args]);
   } as any;
@@ -91,15 +91,16 @@ app.use((req, res, next) => {
     setLunaInstance(luna);
     logger.info('✅ Luna Bug initialized');
   } catch (err) {
-    const error = err as Error;  // ← Add this line
-    logger.warn('⚠️ Luna init skipped:', error?.message || err);  // ← Use 'error' here
+    const error = err as Error;
+    logger.warn('⚠️ Luna init skipped:', error?.message || err);
   }
 
-  // Sync game data from JSON files FIRST (blocking)
-  logger.info('🔄 Starting game data sync...');
+  // ✅ UNIFIED DATA LOADER: Sync ALL game data from progressive-data directories ONLY
+  logger.info('🔄 Starting unified game data sync from progressive-data...');
   try {
     await syncAllGameData();
-    logger.info('✅ Game data synced successfully - memory cache populated');
+    logger.info('✅ Game data synced successfully from progressive-data - memory cache populated');
+    logger.info('📍 Data Source: main-gamedata/progressive-data/ (SINGLE SOURCE OF TRUTH)');
   } catch (err) {
     logger.error("❌ CRITICAL: Failed to sync game data on startup:", err);
     logger.warn("⚠️ Server may not work correctly without game data");
@@ -154,6 +155,7 @@ app.use((req, res, next) => {
   }, () => {
     logger.info(`✅ Server listening on port ${port}`);
     logger.info(`✅ Server is ready and accepting connections on http://0.0.0.0:${port}`);
+    logger.info(`📦 Game Config: Using unifiedDataLoader (progressive-data only)`);
 
     // Start Luna monitoring if initialized
     if (luna) {
