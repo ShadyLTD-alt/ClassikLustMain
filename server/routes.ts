@@ -13,17 +13,13 @@ import {
   getAchievementsFromMemory,
   getTaskFromMemory,
   getAchievementFromMemory,
-  saveUpgradeToJSON,
-  saveCharacterToJSON,
-  saveLevelToJSON,
-  saveTaskToJSON,
-  saveAchievementToJSON,
+  saveGameData,
   syncUpgrades,
   syncCharacters,
   syncTasks,
-  syncAchievements
-} from './utils/dataLoader';
-import { syncLevels } from './utils/levelsProgressive';
+  syncAchievements,
+  syncLevels
+} from './utils/unifiedDataLoader';
 import { getPlayerState, updatePlayerState, selectCharacterForPlayer, setDisplayImageForPlayer, purchaseUpgradeForPlayer, playerStateManager } from './utils/playerStateManager';
 import masterDataService from './utils/MasterDataService';
 import { storage } from './storage';
@@ -387,10 +383,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       
       console.log(`📝 [ADMIN LEVEL] Writing to JSON: level-${levelData.level}.json`);
-      await saveLevelToJSON(levelData);
-      
-      console.log(`💾 [ADMIN LEVEL] Syncing to database...`);
-      try { await storage.createLevel(levelData); } catch { await storage.updateLevel(levelData.level, levelData); }
+      await saveGameData('levels', levelData);
       
       console.log(`🔄 [ADMIN LEVEL] Reloading levels cache...`);
       await syncLevels();
@@ -407,8 +400,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       console.log(`🔧 [ADMIN CHAR] Saving character ${req.body.id}...`);
       const characterData = req.body;
-      await saveCharacterToJSON(characterData);
-      try { await storage.createCharacter(characterData); } catch { await storage.updateCharacter(characterData.id, characterData); }
+      await saveGameData('characters', characterData);
       await syncCharacters();
       console.log(`✅ [ADMIN CHAR] Character ${characterData.id} saved!`);
       res.json({ success: true, character: characterData, characters: getCharactersFromMemory() });
@@ -422,8 +414,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       console.log(`🔧 [ADMIN UPG] Saving upgrade ${req.body.id}...`);
       const upgradeData = req.body;
-      await saveUpgradeToJSON(upgradeData);
-      try { await storage.createUpgrade(upgradeData); } catch { await storage.updateUpgrade(upgradeData.id, upgradeData); }
+      await saveGameData('upgrades', upgradeData);
       await syncUpgrades();
       console.log(`✅ [ADMIN UPG] Upgrade ${upgradeData.id} saved!`);
       res.json({ success: true, upgrade: upgradeData, upgrades: getUpgradesFromMemory() });
@@ -437,7 +428,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       console.log(`🔧 [ADMIN TASK] Saving task ${req.body.id}...`);
       const taskData = req.body;
-      await saveTaskToJSON(taskData);
+      await saveGameData('tasks', taskData);
       await syncTasks();
       console.log(`✅ [ADMIN TASK] Task ${taskData.id} saved!`);
       res.json({ success: true, task: taskData, tasks: getTasksFromMemory() });
@@ -451,7 +442,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       console.log(`🔧 [ADMIN ACH] Saving achievement ${req.body.id}...`);
       const achData = req.body;
-      await saveAchievementToJSON(achData);
+      await saveGameData('achievements', achData);
       await syncAchievements();
       console.log(`✅ [ADMIN ACH] Achievement ${achData.id} saved!`);
       res.json({ success: true, achievement: achData, achievements: getAchievementsFromMemory() });
