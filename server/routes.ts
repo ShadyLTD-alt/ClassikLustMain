@@ -3,6 +3,7 @@ import { createServer, type Server } from 'http';
 import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs/promises';
 import { requireAuth, requireAdmin } from './middleware/auth';
 import { 
   getUpgradesFromMemory, 
@@ -67,6 +68,38 @@ function calculateAchievementProgress(player: any, achievement: any): number {
   }
 }
 
+/**
+ * 🔍 Find existing player folder by searching player-data directory (case-insensitive)
+ */
+async function findExistingPlayerData(username: string): Promise<any | null> {
+  const playerDataDir = path.join(process.cwd(), 'main-gamedata', 'player-data');
+  
+  try {
+    const folders = await fs.readdir(playerDataDir);
+    const targetUsername = username.toLowerCase();
+    
+    // Look for folders containing the username
+    for (const folder of folders) {
+      if (folder.toLowerCase().includes(targetUsername)) {
+        const playerFilePath = path.join(playerDataDir, folder, 'player-state.json');
+        try {
+          const fileContent = await fs.readFile(playerFilePath, 'utf-8');
+          const playerData = JSON.parse(fileContent);
+          console.log(`✅ [DEV AUTH] Found existing player save: ${folder}`);
+          return { folder, data: playerData };
+        } catch (e) {
+          console.warn(`⚠️  [DEV AUTH] Found folder ${folder} but couldn't read player-state.json`);
+        }
+      }
+    }
+    
+    return null;
+  } catch (e) {
+    console.error('[DEV AUTH] Error searching player-data:', e);
+    return null;
+  }
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   const { createServer } = await import('http');
   const server = createServer(app);
@@ -88,28 +121,90 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const sanitizedUsername = username.trim().toLowerCase();
-      const playerId = `dev_${sanitizedUsername}`;
-      let player = await storage.getPlayer(playerId);
-
-      if (!player) {
-        const now = new Date();
-        player = await storage.createPlayer({
-          id: playerId, username: sanitizedUsername, telegramId: null,
-          points: 0, lustPoints: 0, lustGems: 0, energy: 1000, energyMax: 1000,
-          level: 1, experience: 0, passiveIncomeRate: 0, lastTapValue: 1,
-          selectedCharacterId: null, displayImage: null, isAdmin: true,
-          consecutiveDays: 0, createdAt: now, updatedAt: now
-        });
-        console.log(`✅ [DEV AUTH] Created admin dev user: ${playerId}`);
+      
+      // 🔍 STEP 1: Search for existing player data in player-data directory
+      console.log(`🔍 [DEV AUTH] Searching for existing player data for username: ${sanitizedUsername}`);
+      const existingPlayerData = await findExistingPlayerData(sanitizedUsername);
+      
+      let player: any;
+      
+      if (existingPlayerData) {
+        // ✅ Found existing save file - use that player's actual ID and data
+        console.log(`🎮 [DEV AUTH] Loading existing player from ${existingPlayerData.folder}`);
+        const savedData = existingPlayerData.data;
+        
+        // Create/update database record with the save file's ID
+        player = await storage.getPlayer(savedData.id);
+        if (!player) {
+          console.log(`💾 [DEV AUTH] Creating DB record for existing save: ${savedData.id}`);
+          player = await storage.createPlayer({
+            id: savedData.id,
+            username: savedData.username,
+            telegramId: savedData.telegramId,
+            points: savedData.points || 0,
+            lustPoints: savedData.lustPoints || 0,
+            lustGems: savedData.lustGems || 0,
+            energy: savedData.energy || 1000,
+            energyMax: savedData.energyMax || 1000,
+            level: savedData.level || 1,
+            experience: savedData.experience || 0,
+            passiveIncomeRate: savedData.passiveIncomeRate || 0,
+            lastTapValue: savedData.lastTapValue || 1,
+            selectedCharacterId: savedData.selectedCharacterId,
+            displayImage: savedData.displayImage,
+            isAdmin: savedData.isAdmin || false,
+            consecutiveDays: savedData.consecutiveDays || 0,
+            createdAt: new Date(savedData.createdAt),
+            updatedAt: new Date(savedData.updatedAt)
+          });
+        } else {
+          console.log(`✅ [DEV AUTH] Found existing DB record: ${savedData.id}`);
+        }
+      } else {
+        // 🆕 No existing save - create new player
+        const playerId = `dev_${sanitizedUsername}`;
+        console.log(`🆕 [DEV AUTH] Creating new player: ${playerId}`);
+        
+        player = await storage.getPlayer(playerId);
+        if (!player) {
+          const now = new Date();
+          player = await storage.createPlayer({
+            id: playerId, 
+            username: sanitizedUsername, 
+            telegramId: null,
+            points: 0, 
+            lustPoints: 0, 
+            lustGems: 0, 
+            energy: 1000, 
+            energyMax: 1000,
+            level: 1, 
+            experience: 0, 
+            passiveIncomeRate: 0, 
+            lastTapValue: 1,
+            selectedCharacterId: null, 
+            displayImage: null, 
+            isAdmin: true,
+            consecutiveDays: 0, 
+            createdAt: now, 
+            updatedAt: now
+          });
+          console.log(`✅ [DEV AUTH] Created new admin dev user: ${playerId}`);
+        }
       }
 
+      // Create session
       const sessionToken = crypto.randomBytes(32).toString('hex');
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + 30);
       await storage.createSession({ token: sessionToken, playerId: player.id, expiresAt });
+      
+      // Load full player state from player-data directory
       const playerState = await getPlayerState(player);
+      console.log(`🎮 [DEV AUTH] Loaded player state - isAdmin: ${playerState.isAdmin}, LP: ${playerState.lustPoints}`);
+      
       res.json({ success: true, sessionToken, player: playerState });
     } catch (error: any) {
+      console.error('[DEV AUTH] Error:', error);
       res.status(500).json({ success: false, error: error.message || 'Dev login failed' });
     }
   });
