@@ -1,0 +1,15 @@
+{
+  "id": "daily-tap-100",
+  "name": "Daily Tapper",
+  "description": "Tap 100 times today",
+  "icon": "👆",
+  "category": "daily",
+  "requirementType": "tapCount",
+  "target": 100,
+  "rewardType": "lp",
+  "rewardAmount": 500,
+  "resetType": "daily",
+  "sortOrder": 1,
+  "isActive": true,
+  "isHidden": false
+}
