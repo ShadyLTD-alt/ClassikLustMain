@@ -73,22 +73,17 @@ export const characters = pgTable("characters", {
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
-// Enhanced levels for admin editor with cost and requirements
+// ✅ FIXED: Match actual JSON structure exactly
 export const levels = pgTable("levels", {
   level: integer("level").primaryKey(),
-  xpRequired: integer("xpRequired").notNull().default(100), // 👉 Renamed from cost to match JSON
+  xpRequired: integer("xpRequired").notNull().default(100), // Renamed from cost to match JSON
   cost: integer("cost").notNull().default(100), // Points cost to level up (legacy)
   experienceRequired: integer("experienceRequired"), // Optional/dormant XP system
   pointsReward: integer("pointsReward").default(0).notNull(), // Bonus points on level up
-  rewards: jsonb("rewards").notNull().default("{}").$type<{
-    lustPoints?: number;
-    lustGems?: number;
-    energyMax?: number;
-  }>(), // 👉 NEW: Structured rewards
-  requirements: jsonb("requirements").notNull().default("{}").$type<{
-    minUpgrades?: number;
-    upgradeRequirements?: Array<{ upgradeId: string; minLevel: number }>;
-  }>(), // 👉 Updated structure
+  // ✅ FIXED: rewards is an ARRAY, not object (to match JSON files - you changed {} to [])
+  rewards: jsonb("rewards").notNull().default("[]").$type<Array<string> | Record<string, number>>(),
+  // ✅ FIXED: requirements is ARRAY of objects, NOT nested object
+  requirements: jsonb("requirements").notNull().default("[]").$type<Array<{ upgradeId: string; minLevel: number }>>(),
   unlocks: jsonb("unlocks").notNull().default("[]").$type<string[]>(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
