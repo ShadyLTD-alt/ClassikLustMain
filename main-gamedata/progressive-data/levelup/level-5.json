@@ -1,31 +1,18 @@
 {
   "level": 5,
-  "experienceRequired": 500,
-  "xpRequired": 500,
-  "cost": 1500,
+  "cost": 2000,
   "requirements": [
-    {
-      "upgradeId": "perTap",
-      "minLevel": 5
-    },
-    {
-      "upgradeId": "perHour",
-      "minLevel": 5
-    },
-    {
-      "upgradeId": "energyMax",
-      "minLevel": 3
-    }
+    { "upgradeId": "perTap", "minLevel": 5 },
+    { "upgradeId": "perHour", "minLevel": 5 },
+    { "upgradeId": "energyMax", "minLevel": 3 }
   ],
+  "rewards": {
+    "lustPoints": 1200,
+    "lustGems": 25,
+    "characterUnlocks": ["Frost"]
+  },
   "unlocks": [
     "Character: Frost",
     "New image slots"
-  ],
-  "rewards": {
-    "lustPoints": 500,
-    "lustGems": 25,
-    "energyMax": 200
-  },
-  "createdAt": "2025-11-04T09:06:55.523Z",
-  "updatedAt": "2025-11-08T05:00:00.000Z"
+  ]
 }

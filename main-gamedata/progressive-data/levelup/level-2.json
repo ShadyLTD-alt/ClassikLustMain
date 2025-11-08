@@ -1,9 +1,13 @@
 {
   "level": 2,
+  "cost": 500,
   "requirements": [
     { "upgradeId": "tap-power", "minLevel": 1 },
     { "upgradeId": "energy-capacity", "minLevel": 1 }
   ],
-  "experienceRequired": 100,
+  "rewards": {
+    "lustPoints": 200,
+    "lustGems": 5
+  },
   "unlocks": ["New character slot available"]
 }

@@ -1,10 +1,14 @@
 {
   "level": 10,
+  "cost": 5000,
   "requirements": [
-    { "upgradeId": "tap-power", "minLevel": 10 },
-    { "upgradeId": "passive-income", "minLevel": 8 },
-    { "upgradeId": "critical-chance", "minLevel": 5 }
+    { "upgradeId": "tap-power", "minLevel": 15 },
+    { "upgradeId": "passive-income", "minLevel": 12 },
+    { "upgradeId": "energy-capacity", "minLevel": 8 }
   ],
-  "experienceRequired": 1000,
-  "unlocks": ["Character: Stella", "VIP features"]
+  "rewards": {
+    "lustPoints": 3000,
+    "lustGems": 50
+  },
+  "unlocks": ["Epic tier unlocked", "Advanced features"]
 }
