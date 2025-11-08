@@ -39,13 +39,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Check if player already exists
       const sanitizedUsername = username.trim().toLowerCase();
-      let player = await storage.getPlayer(`dev_${sanitizedUsername}`);
+      const playerId = `dev_${sanitizedUsername}`;
+      let player = await storage.getPlayer(playerId);
 
       if (!player) {
-        // Create new dev player
+        // Create new dev player with PROPER Date objects
         console.log(`🆕 [DEV AUTH] Creating new dev player: ${sanitizedUsername}`);
+        const now = new Date(); // 🔧 FIXED: Use actual Date object
+        
         player = await storage.createPlayer({
-          id: `dev_${sanitizedUsername}`,
+          id: playerId,
           username: sanitizedUsername,
           telegramId: null,
           points: 0,
@@ -61,8 +64,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           displayImage: null,
           isAdmin: false,
           consecutiveDays: 0,
-          createdAt: new Date(),
-          updatedAt: new Date()
+          createdAt: now, // 👉 FIXED: Use Date object, not new Date()
+          updatedAt: now  // 👉 FIXED: Use Date object, not new Date()
         });
         console.log(`✅ [DEV AUTH] Created dev player:`, player.id);
       } else {
