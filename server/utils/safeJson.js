@@ -1,6 +1,5 @@
 // server/utils/safeJson.js
 const stringify = require('fast-safe-stringify');
-const safeParse = require('safe-json-parse');
 
 // Safe stringify that handles circular references and errors
 const safeStringify = (data) => {
@@ -8,8 +7,12 @@ const safeStringify = (data) => {
     if (data === null || data === undefined) return '{}';
     if (typeof data === 'string') {
       // Test if it's already valid JSON
-      const testParse = safeParse(data);
-      return testParse.error ? '{}' : data;
+      try {
+        JSON.parse(data);
+        return data;
+      } catch {
+        return '{}';
+      }
     }
     return stringify(data);
   } catch (error) {
@@ -18,19 +21,20 @@ const safeStringify = (data) => {
   }
 };
 
-// Safe parse that never throws errors
+// ✅ FIXED: Safe parse using native JSON.parse (synchronous) instead of safe-json-parse (callback)
 const safeParseJson = (jsonString) => {
   try {
     if (!jsonString || jsonString.trim() === '') return {};
     
-    const result = safeParse(jsonString);
-    if (result.error) {
-      console.error('🔥 Server SafeParse Error:', result.error);
-      return {};
-    }
-    return result.value || {};
+    // Use native JSON.parse - it's synchronous and doesn't require callbacks
+    const parsed = JSON.parse(jsonString);
+    return parsed || {};
   } catch (error) {
-    console.error('🔥 Server SafeParse Catch Error:', error);
+    console.error('🔥 Server SafeParse Catch Error:', {
+      error: error.message,
+      input: typeof jsonString,
+      preview: typeof jsonString === 'string' ? jsonString.substring(0, 100) : String(jsonString)
+    });
     return {};
   }
 };
