@@ -7,14 +7,15 @@ import type { UpgradeConfig, CharacterConfig, LevelConfig } from "@shared/gameCo
 import { syncLevels, getLevelsFromMemory, getLevelFromMemory } from "./levelsProgressive";
 import { writeSnapshot, throttledInfo } from "./lunaSnapshots";
 import masterDataService from "./MasterDataService";
+import fileLock from "./fileLock";  // 🆕 NEW: File locking
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 let upgradesCache: Map<string, UpgradeConfig> = new Map();
 let charactersCache: Map<string, CharacterConfig> = new Map();
-let tasksCache: Map<string, any> = new Map();  // 🆕 NEW: Tasks cache
-let achievementsCache: Map<string, any> = new Map();  // 🆕 NEW: Achievements cache
+let tasksCache: Map<string, any> = new Map();
+let achievementsCache: Map<string, any> = new Map();
 
 async function loadJSONFile<T>(filePath: string): Promise<T | null> {
   try { const content = await fs.readFile(filePath, "utf-8"); return JSON.parse(content); }
@@ -45,7 +46,6 @@ export async function syncCharacters() {
   }
 }
 
-// 🆕 NEW: Sync tasks from progressive-data/task/*.json
 export async function syncTasks() {
   try {
     console.log('📋 [SYNC] Loading tasks from JSON files...');
@@ -60,7 +60,6 @@ export async function syncTasks() {
   }
 }
 
-// 🆕 NEW: Sync achievements from progressive-data/achievements/*.json
 export async function syncAchievements() {
   try {
     console.log('🏆 [SYNC] Loading achievements from JSON files...');
@@ -79,65 +78,82 @@ export async function syncAllGameData() {
   await syncUpgrades(); 
   await syncCharacters(); 
   await syncLevels(); 
-  await syncTasks();  // 🆕 NEW
-  await syncAchievements();  // 🆕 NEW
+  await syncTasks();
+  await syncAchievements();
 }
 
 export function getUpgradesFromMemory(): UpgradeConfig[] { return Array.from(upgradesCache.values()); }
 export function getUpgradeFromMemory(id: string): UpgradeConfig | undefined { return upgradesCache.get(id); }
 export function getCharactersFromMemory(): CharacterConfig[] { return Array.from(charactersCache.values()); }
 export function getCharacterFromMemory(id: string): CharacterConfig | undefined { return charactersCache.get(id); }
-
-// 🆕 NEW: Export tasks and achievements from memory (JSON-first!)
 export function getTasksFromMemory(): any[] { return Array.from(tasksCache.values()); }
 export function getTaskFromMemory(id: string): any | undefined { return tasksCache.get(id); }
 export function getAchievementsFromMemory(): any[] { return Array.from(achievementsCache.values()); }
 export function getAchievementFromMemory(id: string): any | undefined { return achievementsCache.get(id); }
-
 export { getLevelsFromMemory, getLevelFromMemory };
 
+// 🔒 PROTECTED: File-locked JSON save operations
 export async function saveUpgradeToJSON(upgrade: UpgradeConfig): Promise<void> {
   const upgradesPath = path.join(__dirname, "../../main-gamedata/master-data/upgrades-master.json");
-  const current = await loadJSONFile<{ upgrades: UpgradeConfig[] }>(upgradesPath);
-  if (!current) return;
-  const i = current.upgrades.findIndex(u => u.id === upgrade.id);
-  if (i>=0) current.upgrades[i] = upgrade; else current.upgrades.push(upgrade);
-  await fs.writeFile(upgradesPath, JSON.stringify(current, null, 2));
-  upgradesCache.set(upgrade.id, upgrade);
+  
+  await fileLock.withLock(upgradesPath, async () => {
+    const current = await loadJSONFile<{ upgrades: UpgradeConfig[] }>(upgradesPath);
+    if (!current) return;
+    const i = current.upgrades.findIndex(u => u.id === upgrade.id);
+    if (i>=0) current.upgrades[i] = upgrade; else current.upgrades.push(upgrade);
+    await fs.writeFile(upgradesPath, JSON.stringify(current, null, 2));
+    upgradesCache.set(upgrade.id, upgrade);
+    console.log(`✅ [SAVE] Upgrade ${upgrade.id} saved to JSON with file lock`);
+  });
 }
 
 export async function saveCharacterToJSON(character: CharacterConfig): Promise<void> {
   const charactersPath = path.join(__dirname, "../../main-gamedata/master-data/character-master.json");
-  const current = await loadJSONFile<{ characters: CharacterConfig[] }>(charactersPath);
-  if (!current) return;
-  const i = current.characters.findIndex(c => c.id === character.id);
-  if (i>=0) current.characters[i] = character; else current.characters.push(character);
-  await fs.writeFile(charactersPath, JSON.stringify(current, null, 2));
-  charactersCache.set(character.id, character);
+  
+  await fileLock.withLock(charactersPath, async () => {
+    const current = await loadJSONFile<{ characters: CharacterConfig[] }>(charactersPath);
+    if (!current) return;
+    const i = current.characters.findIndex(c => c.id === character.id);
+    if (i>=0) current.characters[i] = character; else current.characters.push(character);
+    await fs.writeFile(charactersPath, JSON.stringify(current, null, 2));
+    charactersCache.set(character.id, character);
+    console.log(`✅ [SAVE] Character ${character.id} saved to JSON with file lock`);
+  });
 }
 
 export async function saveLevelToJSON(level: LevelConfig): Promise<void> {
   const levelDir = path.join(__dirname, "../../main-gamedata/progressive-data/levelup");
-  await fs.mkdir(levelDir, { recursive: true });
-  await fs.writeFile(path.join(levelDir, `level-${level.level}.json`), JSON.stringify(level, null, 2));
+  const levelPath = path.join(levelDir, `level-${level.level}.json`);
+  
+  await fileLock.withLock(levelPath, async () => {
+    await fs.mkdir(levelDir, { recursive: true });
+    await fs.writeFile(levelPath, JSON.stringify(level, null, 2));
+    console.log(`✅ [SAVE] Level ${level.level} saved to JSON with file lock`);
+  });
 }
 
-// 🆕 NEW: Save task to JSON (progressive-data/task/*.json)
 export async function saveTaskToJSON(task: any): Promise<void> {
   const taskDir = path.join(__dirname, "../../main-gamedata/progressive-data/task");
-  await fs.mkdir(taskDir, { recursive: true });
-  await fs.writeFile(path.join(taskDir, `${task.id}.json`), JSON.stringify(task, null, 2));
-  tasksCache.set(task.id, task);
-  console.log(`✅ [SAVE] Task ${task.id} saved to JSON`);
+  const taskPath = path.join(taskDir, `${task.id}.json`);
+  
+  await fileLock.withLock(taskPath, async () => {
+    await fs.mkdir(taskDir, { recursive: true });
+    await fs.writeFile(taskPath, JSON.stringify(task, null, 2));
+    tasksCache.set(task.id, task);
+    console.log(`✅ [SAVE] Task ${task.id} saved to JSON with file lock`);
+  });
 }
 
-// 🆕 NEW: Save achievement to JSON (progressive-data/achievements/*.json)
 export async function saveAchievementToJSON(achievement: any): Promise<void> {
   const achDir = path.join(__dirname, "../../main-gamedata/progressive-data/achievements");
-  await fs.mkdir(achDir, { recursive: true });
-  await fs.writeFile(path.join(achDir, `${achievement.id}.json`), JSON.stringify(achievement, null, 2));
-  achievementsCache.set(achievement.id, achievement);
-  console.log(`✅ [SAVE] Achievement ${achievement.id} saved to JSON`);
+  const achPath = path.join(achDir, `${achievement.id}.json`);
+  
+  await fileLock.withLock(achPath, async () => {
+    await fs.mkdir(achDir, { recursive: true });
+    await fs.writeFile(achPath, JSON.stringify(achievement, null, 2));
+    achievementsCache.set(achievement.id, achievement);
+    console.log(`✅ [SAVE] Achievement ${achievement.id} saved to JSON with file lock`);
+  });
 }
 
 export async function savePlayerDataToJSON(player: Player): Promise<void> {
@@ -174,3 +190,5 @@ export async function savePlayerDataToJSON(player: Player): Promise<void> {
     throttledInfo('Saved player snapshot', { user: player.username, points: player.points, energy: player.energy });
   } catch {}
 }
+
+console.log('✅ [DATA LOADER] All save operations now protected with file locking');
