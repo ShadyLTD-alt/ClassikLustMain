@@ -1,0 +1,4 @@
+# Upgrades Progressive Data
+
+This folder contains individual upgrade JSON files.
+Each upgrade should be saved as `{upgrade-id}.json`.
