@@ -42,6 +42,27 @@ class PlayerStateManager {
     } catch (e) {}
   }
   
+  /**
+   * 🔧 CASE-INSENSITIVE FOLDER LOOKUP
+   * Searches for existing player folder regardless of case
+   */
+  private async findPlayerFolder(targetKey: string): Promise<string | null> {
+    try {
+      const folders = await fs.readdir(this.DATA_DIR);
+      const targetLower = targetKey.toLowerCase();
+      
+      for (const folder of folders) {
+        if (folder.toLowerCase() === targetLower) {
+          return folder; // Return the actual folder name (preserves original case)
+        }
+      }
+      
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+  
   private getPlayerFilePath(playerKey: string) {
     return path.join(this.DATA_DIR, playerKey, 'player-state.json');
   }
@@ -153,11 +174,20 @@ class PlayerStateManager {
   
   async loadPlayer(player: any) {
     const playerKey = resolvePlayerKey(player);
-    await this.ensurePlayerDirectory(playerKey);
-    const filePath = this.getPlayerFilePath(playerKey);
+    
+    // 🔧 CASE-INSENSITIVE: Find existing folder regardless of case
+    const existingFolder = await this.findPlayerFolder(playerKey);
+    const actualPlayerKey = existingFolder || playerKey;
+    
+    console.log(`🔍 [PLAYER LOAD] Looking for: ${playerKey}, Found: ${actualPlayerKey || 'NEW'}`);
+    
+    await this.ensurePlayerDirectory(actualPlayerKey);
+    const filePath = this.getPlayerFilePath(actualPlayerKey);
     let data: any;
     try {
-      data = JSON.parse(await fs.readFile(filePath, 'utf8'));
+      const fileContent = await fs.readFile(filePath, 'utf8');
+      data = JSON.parse(fileContent);
+      console.log(`✅ [PLAYER LOAD] Loaded existing save for ${actualPlayerKey} - isAdmin: ${data.isAdmin}`);
     } catch (e: any) {
       data = null;
       // Auto-repair blank or missing file
@@ -166,20 +196,24 @@ class PlayerStateManager {
       data.id = player.id;
       data.username = player.username;
       data.telegramId = player.telegramId || '';
+      data.isAdmin = player.isAdmin || false; // Preserve admin status from database
       await fs.writeFile(filePath, JSON.stringify(data, null, 2));
-      console.warn(`🌙 Luna: repaired new/blank/corrupt file for ${playerKey}: ${e.message}`);
+      console.warn(`🌙 Luna: created new save file for ${actualPlayerKey}: ${e.message}`);
     }
     const withDefaults = { ...this.createSafeDefaults(), ...data };
-    this.cache.set(playerKey, withDefaults);
+    this.cache.set(actualPlayerKey, withDefaults);
     return withDefaults;
   }
   
   async savePlayer(player: any, data: any) {
     const playerKey = resolvePlayerKey(player);
-    await this.ensurePlayerDirectory(playerKey);
+    const existingFolder = await this.findPlayerFolder(playerKey);
+    const actualPlayerKey = existingFolder || playerKey;
+    
+    await this.ensurePlayerDirectory(actualPlayerKey);
     const sanitizedData = this.sanitizeForDatabase(data);
-    await fs.writeFile(this.getPlayerFilePath(playerKey), JSON.stringify(sanitizedData, null, 2));
-    this.cache.set(playerKey, sanitizedData);
+    await fs.writeFile(this.getPlayerFilePath(actualPlayerKey), JSON.stringify(sanitizedData, null, 2));
+    this.cache.set(actualPlayerKey, sanitizedData);
   }
   
   private startSyncTimer() { 
@@ -229,8 +263,8 @@ class PlayerStateManager {
       cacheSize: this.cache.size,
       syncQueueSize: this.syncQueue.size,
       dataDirectory: this.DATA_DIR,
-      playerFolders: this.playerFolders.length, // 👉 FIXED: Return count
-      playerJsonFiles: this.playerJsonFiles.length, // 👉 FIXED: Return count  
+      playerFolders: this.playerFolders.length,
+      playerJsonFiles: this.playerJsonFiles.length,
       errorReports: this.errorReports,
       status: 'healthy',
     };
