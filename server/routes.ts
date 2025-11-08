@@ -34,28 +34,21 @@ const __dirname = path.dirname(__filename);
 
 const withTracking = async <T,>(name: string, op: () => Promise<T>): Promise<T> => { try { return await op(); } catch (e: any) { console.error(`[${name}] Error:`, e.message); throw e; } };
 
-// 🖼️ Configure multer for image uploads
 const uploadsDir = path.join(__dirname, '../uploads');
 const upload = multer({
   storage: multer.diskStorage({
-    destination: (req, file, cb) => {
-      cb(null, uploadsDir);
-    },
+    destination: (req, file, cb) => { cb(null, uploadsDir); },
     filename: (req, file, cb) => {
       const uniqueName = `${Date.now()}-${Math.random().toString(36).substring(7)}${path.extname(file.originalname)}`;
       cb(null, uniqueName);
     }
   }),
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const allowedTypes = /jpeg|jpg|png|gif|webp/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
     const mimetype = allowedTypes.test(file.mimetype);
-    if (extname && mimetype) {
-      cb(null, true);
-    } else {
-      cb(new Error('Only image files are allowed'));
-    }
+    if (extname && mimetype) { cb(null, true); } else { cb(new Error('Only image files are allowed')); }
   }
 });
 
@@ -108,9 +101,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           id: playerId, username: sanitizedUsername, telegramId: null,
           points: 0, lustPoints: 0, lustGems: 0, energy: 1000, energyMax: 1000,
           level: 1, experience: 0, passiveIncomeRate: 0, lastTapValue: 1,
-          selectedCharacterId: null, displayImage: null, isAdmin: false,
+          selectedCharacterId: null, displayImage: null, isAdmin: true,  // ✅ Auto-admin for dev users
           consecutiveDays: 0, createdAt: now, updatedAt: now
         });
+        console.log(`✅ [DEV AUTH] Created admin dev user: ${playerId}`);
       }
 
       const sessionToken = crypto.randomBytes(32).toString('hex');
@@ -209,26 +203,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // 🖼️ CRITICAL: Add POST /api/media for image uploads
   app.post('/api/media', requireAuth, upload.single('file'), async (req, res) => {
     try {
-      if (!req.file) {
-        return res.status(400).json({ error: 'No file uploaded' });
-      }
-
+      if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
       const fileUrl = `/uploads/${req.file.filename}`;
       const mediaUpload = await storage.createMediaUpload({
-        fileName: req.file.filename,
-        originalName: req.file.originalname,
-        mimeType: req.file.mimetype,
-        size: req.file.size,
-        url: fileUrl,
-        uploadedBy: req.player!.id,
-        category: req.body.category || 'general',
+        fileName: req.file.filename, originalName: req.file.originalname,
+        mimeType: req.file.mimetype, size: req.file.size, url: fileUrl,
+        uploadedBy: req.player!.id, category: req.body.category || 'general',
         isNsfw: req.body.isNsfw === 'true' || req.body.isNsfw === true,
         isHidden: req.body.hideFromGallery === 'true' || req.body.hideFromGallery === true
       });
-
       console.log(`✅ [UPLOAD] Image uploaded: ${req.file.filename}`);
       res.json({ success: true, media: mediaUpload, url: fileUrl });
     } catch (e: any) {
@@ -240,10 +225,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/levels', requireAuth, (_req, res) => { 
     try { 
       const lvls = getLevelsFromMemory().map(l => ({ 
-        level: Number(l.level) || 0, xpRequired: Number(l.xpRequired) || 0, 
-        cost: Number(l.cost) || 0, experienceRequired: Number(l.experienceRequired || l.xpRequired) || 0,
-        rewards: l.rewards || {}, requirements: l.requirements || [], unlocks: l.unlocks || [],
-        createdAt: l.createdAt || new Date().toISOString(), updatedAt: l.updatedAt || new Date().toISOString(), ...l 
+        level: Number(l.level) || 0, xpRequired: Number(l.xpRequired) || 0, cost: Number(l.cost) || 0,
+        experienceRequired: Number(l.experienceRequired || l.xpRequired) || 0,
+        rewards: l.rewards || {}, requirements: Array.isArray(l.requirements) ? l.requirements : [],
+        unlocks: Array.isArray(l.unlocks) ? l.unlocks : [], createdAt: l.createdAt || new Date().toISOString(),
+        updatedAt: l.updatedAt || new Date().toISOString(), ...l 
       })); 
       res.json({ levels: lvls }); 
     } catch (e: any) { 
@@ -257,10 +243,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const lvl = getLevelsFromMemory().find(l => l.level === requestedLevel);
       if (!lvl) return res.status(404).json({ error: 'Level not found' });
       const formatted = {
-        level: Number(lvl.level) || 0, xpRequired: Number(lvl.xpRequired) || 0,
-        cost: Number(lvl.cost) || 0, experienceRequired: Number(lvl.experienceRequired || lvl.xpRequired) || 0,
-        rewards: lvl.rewards || {}, requirements: lvl.requirements || [], unlocks: lvl.unlocks || [],
-        createdAt: lvl.createdAt || new Date().toISOString(), updatedAt: lvl.updatedAt || new Date().toISOString(), ...lvl
+        level: Number(lvl.level) || 0, xpRequired: Number(lvl.xpRequired) || 0, cost: Number(lvl.cost) || 0,
+        experienceRequired: Number(lvl.experienceRequired || lvl.xpRequired) || 0, rewards: lvl.rewards || {},
+        requirements: Array.isArray(lvl.requirements) ? lvl.requirements : [],
+        unlocks: Array.isArray(lvl.unlocks) ? lvl.unlocks : [], createdAt: lvl.createdAt || new Date().toISOString(),
+        updatedAt: lvl.updatedAt || new Date().toISOString(), ...lvl
       };
       res.json({ level: formatted });
     } catch (e: any) {
@@ -339,7 +326,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } 
   });
   
-  app.get('/api/admin/players', requireAdmin, async (_req, res) => { 
+  app.get('/api/admin/players', requireAuth, requireAdmin, async (_req, res) => { 
     try { 
       const ps = await storage.getAllPlayers(); 
       res.json({ players: ps }); 
@@ -348,65 +335,88 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } 
   });
 
-  // ✅ FIXED: Admin level edits now save to JSON
-  app.post('/api/admin/levels', requireAdmin, async (req, res) => { 
-    try { 
-      const levelData = req.body;
-      await saveLevelToJSON(levelData);  // Save to JSON FIRST
-      await storage.createLevel(levelData);  // Then sync to DB
-      await syncLevels();  // Reload memory cache
+  // ✅ FIXED: Proper admin auth chain + array validation
+  app.post('/api/admin/levels', requireAuth, requireAdmin, async (req, res) => { 
+    try {
+      console.log(`🔧 [ADMIN LEVEL] Saving level ${req.body.level}...`);
+      const levelData = {
+        ...req.body,
+        requirements: Array.isArray(req.body.requirements) ? req.body.requirements : [],
+        unlocks: Array.isArray(req.body.unlocks) ? req.body.unlocks : [],
+        rewards: req.body.rewards || {}
+      };
+      
+      console.log(`📝 [ADMIN LEVEL] Writing to JSON: level-${levelData.level}.json`);
+      await saveLevelToJSON(levelData);
+      
+      console.log(`💾 [ADMIN LEVEL] Syncing to database...`);
+      try { await storage.createLevel(levelData); } catch { await storage.updateLevel(levelData.level, levelData); }
+      
+      console.log(`🔄 [ADMIN LEVEL] Reloading levels cache...`);
+      await syncLevels();
+      
+      console.log(`✅ [ADMIN LEVEL] Level ${levelData.level} saved successfully!`);
       res.json({ success: true, level: levelData, levels: getLevelsFromMemory() }); 
-    } catch (e: any) { 
+    } catch (e: any) {
+      console.error(`❌ [ADMIN LEVEL] Save failed:`, e);
       res.status(500).json({ error: e.message }); 
     } 
   });
 
-  // ✅ FIXED: Admin character edits now save to JSON
-  app.post('/api/admin/characters', requireAdmin, async (req, res) => {
+  app.post('/api/admin/characters', requireAuth, requireAdmin, async (req, res) => {
     try {
+      console.log(`🔧 [ADMIN CHAR] Saving character ${req.body.id}...`);
       const characterData = req.body;
-      await saveCharacterToJSON(characterData);  // Save to JSON FIRST
+      await saveCharacterToJSON(characterData);
       try { await storage.createCharacter(characterData); } catch { await storage.updateCharacter(characterData.id, characterData); }
-      await syncCharacters();  // Reload memory cache
+      await syncCharacters();
+      console.log(`✅ [ADMIN CHAR] Character ${characterData.id} saved!`);
       res.json({ success: true, character: characterData, characters: getCharactersFromMemory() });
     } catch (e: any) {
+      console.error(`❌ [ADMIN CHAR] Save failed:`, e);
       res.status(500).json({ error: e.message });
     }
   });
 
-  // ✅ FIXED: Admin upgrade edits now save to JSON
-  app.post('/api/admin/upgrades', requireAdmin, async (req, res) => {
+  app.post('/api/admin/upgrades', requireAuth, requireAdmin, async (req, res) => {
     try {
+      console.log(`🔧 [ADMIN UPG] Saving upgrade ${req.body.id}...`);
       const upgradeData = req.body;
-      await saveUpgradeToJSON(upgradeData);  // Save to JSON FIRST
+      await saveUpgradeToJSON(upgradeData);
       try { await storage.createUpgrade(upgradeData); } catch { await storage.updateUpgrade(upgradeData.id, upgradeData); }
-      await syncUpgrades();  // Reload memory cache
+      await syncUpgrades();
+      console.log(`✅ [ADMIN UPG] Upgrade ${upgradeData.id} saved!`);
       res.json({ success: true, upgrade: upgradeData, upgrades: getUpgradesFromMemory() });
     } catch (e: any) {
+      console.error(`❌ [ADMIN UPG] Save failed:`, e);
       res.status(500).json({ error: e.message });
     }
   });
 
-  // ✅ NEW: Admin task management
-  app.post('/api/admin/tasks', requireAdmin, async (req, res) => {
+  app.post('/api/admin/tasks', requireAuth, requireAdmin, async (req, res) => {
     try {
+      console.log(`🔧 [ADMIN TASK] Saving task ${req.body.id}...`);
       const taskData = req.body;
-      await saveTaskToJSON(taskData);  // Save to JSON FIRST
-      await syncTasks();  // Reload memory cache
+      await saveTaskToJSON(taskData);
+      await syncTasks();
+      console.log(`✅ [ADMIN TASK] Task ${taskData.id} saved!`);
       res.json({ success: true, task: taskData, tasks: getTasksFromMemory() });
     } catch (e: any) {
+      console.error(`❌ [ADMIN TASK] Save failed:`, e);
       res.status(500).json({ error: e.message });
     }
   });
 
-  // ✅ NEW: Admin achievement management
-  app.post('/api/admin/achievements', requireAdmin, async (req, res) => {
+  app.post('/api/admin/achievements', requireAuth, requireAdmin, async (req, res) => {
     try {
+      console.log(`🔧 [ADMIN ACH] Saving achievement ${req.body.id}...`);
       const achData = req.body;
-      await saveAchievementToJSON(achData);  // Save to JSON FIRST
-      await syncAchievements();  // Reload memory cache
+      await saveAchievementToJSON(achData);
+      await syncAchievements();
+      console.log(`✅ [ADMIN ACH] Achievement ${achData.id} saved!`);
       res.json({ success: true, achievement: achData, achievements: getAchievementsFromMemory() });
     } catch (e: any) {
+      console.error(`❌ [ADMIN ACH] Save failed:`, e);
       res.status(500).json({ error: e.message });
     }
   });
@@ -414,4 +424,4 @@ export async function registerRoutes(app: Express): Promise<Server> {
   return server;
 }
 
-console.log('✅ [ROUTES] All routes registered - JSON-first + file locking enabled');
+console.log('✅ [ROUTES] All routes registered with proper admin auth');
