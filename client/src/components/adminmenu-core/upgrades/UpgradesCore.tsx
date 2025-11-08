@@ -1,0 +1,149 @@
+import React, { useState, useEffect } from 'react';
+import { Plus, Edit, Trash2, Save } from 'lucide-react';
+import UpgradesEdit from './UpgradesEdit';
+import UpgradesCreate from './UpgradesCreate';
+
+interface Upgrade {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  type: string;
+  maxLevel: number;
+  baseCost: number;
+  baseValue: number;
+}
+
+/**
+ * UpgradesCore - Lists all upgrades from progressive-data/upgrades
+ * Manages viewing, editing, and creating upgrades
+ */
+export default function UpgradesCore() {
+  const [upgrades, setUpgrades] = useState<Upgrade[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editingUpgrade, setEditingUpgrade] = useState<Upgrade | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
+
+  useEffect(() => {
+    loadUpgrades();
+  }, []);
+
+  const loadUpgrades = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch('/api/admin/upgrades');
+      const data = await response.json();
+      setUpgrades(data.upgrades || []);
+    } catch (error) {
+      console.error('Failed to load upgrades:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async (upgradeId: string) => {
+    if (!confirm(`Delete upgrade "${upgradeId}"? This cannot be undone.`)) return;
+    
+    try {
+      const response = await fetch(`/api/admin/upgrades/${upgradeId}`, {
+        method: 'DELETE',
+      });
+      
+      if (response.ok) {
+        await loadUpgrades();
+      }
+    } catch (error) {
+      console.error('Failed to delete upgrade:', error);
+    }
+  };
+
+  const handleSaveEdit = async () => {
+    await loadUpgrades();
+    setEditingUpgrade(null);
+  };
+
+  const handleSaveCreate = async () => {
+    await loadUpgrades();
+    setIsCreating(false);
+  };
+
+  if (isCreating) {
+    return (
+      <UpgradesCreate
+        onSave={handleSaveCreate}
+        onCancel={() => setIsCreating(false)}
+      />
+    );
+  }
+
+  if (editingUpgrade) {
+    return (
+      <UpgradesEdit
+        upgrade={editingUpgrade}
+        onSave={handleSaveEdit}
+        onCancel={() => setEditingUpgrade(null)}
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex justify-between items-center">
+        <h3 className="text-lg font-semibold text-white">Upgrade Management</h3>
+        <button
+          onClick={() => setIsCreating(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+          Create Upgrade
+        </button>
+      </div>
+
+      {/* Upgrades List */}
+      <div className="space-y-3">
+        {loading ? (
+          <p className="text-gray-400">Loading upgrades...</p>
+        ) : upgrades.length === 0 ? (
+          <p className="text-gray-400">No upgrades found. Create your first upgrade!</p>
+        ) : (
+          upgrades.map((upgrade) => (
+            <div
+              key={upgrade.id}
+              className="bg-gray-800 rounded-lg p-4 flex items-center justify-between"
+            >
+              <div className="flex-1">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">{upgrade.icon}</span>
+                  <div>
+                    <h4 className="font-semibold text-white">{upgrade.name}</h4>
+                    <p className="text-sm text-gray-400">{upgrade.description}</p>
+                  </div>
+                </div>
+                <div className="flex gap-4 mt-2 text-xs text-gray-500">
+                  <span>Type: {upgrade.type}</span>
+                  <span>Max: {upgrade.maxLevel}</span>
+                  <span>Base: {upgrade.baseCost} LP</span>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setEditingUpgrade(upgrade)}
+                  className="p-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+                >
+                  <Edit className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => handleDelete(upgrade.id)}
+                  className="p-2 bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
