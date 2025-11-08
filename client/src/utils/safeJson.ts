@@ -31,17 +31,21 @@ export const safeParseJson = (jsonString: string): any => {
   }
 };
 
+/**
+ * ✅ FIXED: prepareFormDataForAPI no longer double-stringifies arrays/objects
+ * Arrays and objects are kept as native types - they'll be stringified ONCE 
+ * when the entire payload is sent via fetch()
+ */
 export const prepareFormDataForAPI = (formData: any): any => {
   const cleaned: any = {};
   for (const [key, value] of Object.entries(formData)) {
+    // Skip null/undefined/empty strings
     if (value === null || value === undefined || value === '') continue;
-    if (typeof value === 'object' && !Array.isArray(value)) {
-      cleaned[key] = safeStringify(value);
-    } else if (Array.isArray(value)) {
-      cleaned[key] = safeStringify(value);
-    } else {
-      cleaned[key] = value;
-    }
+    
+    // ✅ CRITICAL FIX: Keep arrays and objects as-is
+    // They will be stringified ONCE when the whole payload is sent
+    // Previously, this was stringifying them here, causing double-stringify
+    cleaned[key] = value;
   }
   return cleaned;
 };
