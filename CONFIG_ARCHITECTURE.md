@@ -13,17 +13,18 @@ ClassikLustMain/
 ├── server/
 │   ├── gameConfig.ts          ✅ Types, interfaces, constants ONLY
 │   └── utils/
-│       └── unifiedDataLoader.ts  ✅ SINGLE data loader (progressive-data)
+│       ├── masterDataSync.ts     ✏️  Syncs master-data → progressive-data
+│       └── unifiedDataLoader.ts  ✅ RUNTIME loader (progressive-data)
 │
 └── main-gamedata/
-    ├── master-data/          ✏️  Admin editing ONLY
+    ├── master-data/          ✏️  Admin bulk editing templates
     │   ├── achievements-master.json
     │   ├── character-master.json
     │   ├── levelup-master.json
     │   ├── tasks-master.json
     │   └── upgrades-master.json
     │
-    └── progressive-data/     ✅ RUNTIME SOURCE (single source of truth)
+    └── progressive-data/     ✅ GAME RUNTIME (single source of truth)
         ├── levelup/
         │   ├── level-1.json
         │   ├── level-2.json
@@ -54,60 +55,80 @@ ClassikLustMain/
   - Helper functions (`calculateExpRequirement`, etc.)
 - **Does NOT contain**: Actual game data arrays
 
-### 2. **unifiedDataLoader.ts** - Single Data Loader
+### 2. **master-data/*.json** - Admin Bulk Edit Templates
+- **Purpose**: Bulk editing interface for admins (via admin panel UI)
+- **Format**: Arrays of all items in one file (e.g., `{"levels": [...]}`)
+- **Example**: `levelup-master.json` contains ALL levels
+- **Usage**: 
+  1. Admin opens admin panel
+  2. Edits master JSON via UI
+  3. **Clicks "Sync to Progressive Data"**
+  4. `masterDataSync.ts` copies to progressive-data/
+- **NOT used for**: Game runtime
+
+### 3. **masterDataSync.ts** - Sync Master → Progressive
+- **Purpose**: Converts bulk master JSONs to individual progressive files
+- **Trigger**: Admin clicks sync button in admin panel
+- **Process**:
+  ```typescript
+  // Read master-data/levelup-master.json { levels: [...] }
+  // Write progressive-data/levelup/level-1.json
+  // Write progressive-data/levelup/level-2.json
+  // etc.
+  ```
+- **Functions**:
+  - `syncLevelsFromMaster()`
+  - `syncTasksFromMaster()`
+  - `syncAchievementsFromMaster()`
+  - `syncUpgradesFromMaster()`
+  - `syncCharactersFromMaster()`
+  - `syncAllMasterData()` - syncs everything
+
+### 4. **unifiedDataLoader.ts** - Runtime Data Loader
 - **Purpose**: THE ONLY file that loads game data at runtime
-- **Data Source**: `main-gamedata/progressive-data/` directories
+- **Data Source**: `main-gamedata/progressive-data/` directories **ONLY**
+- **Never reads from**: master-data/
 - **Features**:
   - In-memory caching for fast access
   - File-lock protected writes
   - Database synchronization
   - CRUD operations for all content types
-- **Used by**: All routes, game logic, admin panel
+- **Used by**: All routes, game logic, admin panel for display
 
-### 3. **progressive-data/** - Runtime Data (Single Source of Truth)
-- **Purpose**: Contains ALL active game data
+### 5. **progressive-data/** - Game Runtime Source (Single Source of Truth)
+- **Purpose**: Contains ALL active game data that game actually uses
 - **Structure**: Individual JSON files per item
 - **Example**: `level-5.json`, `upgrade-energy-regen.json`
-- **When modified**: Changes take effect immediately on next sync
+- **When modified**: Changes take effect immediately on next sync/restart
 - **Backup**: Git-tracked, version-controlled
-
-### 4. **master-data/** - Admin UI Templates
-- **Purpose**: Templates for bulk editing in admin panel
-- **Usage**: Admin can edit these, then sync to progressive-data
-- **NOT used**: For runtime game logic
-- **Example workflow**:
-  1. Admin edits `levelup-master.json` in admin panel
-  2. Clicks "Sync to Progressive Data"
-  3. System creates/updates individual files in `progressive-data/levelup/`
-  4. Game runtime reads from `progressive-data/levelup/`
+- **This is where the game reads from!**
 
 ---
 
-## ❌ Deleted Files (REMOVED)
+## 🔄 Complete Data Flow
 
-These files were **redundant** and caused configuration conflicts:
-
-- ❌ `server/utils/dataLoader.ts` - Replaced by unifiedDataLoader
-- ❌ `server/utils/levelsProgressive.ts` - Levels now in unifiedDataLoader
-- ❌ Any standalone `gameContext.ts` with hardcoded data arrays
-
----
-
-## 🔄 Data Flow
-
-### Runtime (Game Playing)
+### ✏️ Admin Editing Workflow (Correct)
 ```
-Game Request → unifiedDataLoader.getDataFromMemory() → progressive-data/ → Response
+1. Admin opens Admin Panel
+2. Admin edits master-data/levelup-master.json via UI
+3. Admin clicks "Sync to Progressive Data" button
+4. masterDataSync.syncLevelsFromMaster() executes:
+   └─ Reads master-data/levelup-master.json
+   └─ For each level:
+       └─ Writes progressive-data/levelup/level-X.json
+5. unifiedDataLoader.syncLevels() reloads from progressive-data/
+6. Game now uses updated data
 ```
 
-### Admin Editing
+### 🎮 Game Runtime (What Players See)
 ```
-Admin UI → Edit master-data/*.json → Click Sync → Write to progressive-data/ → unifiedDataLoader syncs
+Player Action → API Route → unifiedDataLoader.getLevelsFromMemory() 
+              → Returns data from progressive-data/ cache → Response
 ```
 
-### Server Startup
+### 🚀 Server Startup
 ```
-index.ts → syncAllGameData() → Load all progressive-data/ into memory cache
+index.ts → syncAllGameData() → unifiedDataLoader loads progressive-data/ into RAM
 ```
 
 ---
@@ -115,58 +136,114 @@ index.ts → syncAllGameData() → Load all progressive-data/ into memory cache
 ## 🛠️ Development Guidelines
 
 ### ✅ DO:
-1. **Always read from `unifiedDataLoader`**
+
+1. **Edit master JSONs via admin panel**
+   - Open admin panel UI
+   - Edit `master-data/*.json` files
+   - Click "Sync to Progressive Data"
+
+2. **Always read from `unifiedDataLoader` in code**
    ```typescript
-   import { getLevelsFromMemory, getUpgradesFromMemory } from './utils/unifiedDataLoader';
-   const levels = getLevelsFromMemory();
+   import { getLevelsFromMemory } from './utils/unifiedDataLoader';
+   const levels = getLevelsFromMemory(); // Reads from progressive-data
    ```
 
-2. **Always write via `unifiedDataLoader`**
+3. **Use masterDataSync for bulk updates**
    ```typescript
-   import { saveGameData } from './utils/unifiedDataLoader';
-   await saveGameData('levels', levelConfig);
+   import { syncAllMasterData } from './utils/masterDataSync';
+   await syncAllMasterData(); // Syncs master → progressive
    ```
 
-3. **Use gameConfig.ts for types only**
+4. **Use gameConfig.ts for types only**
    ```typescript
-   import type { LevelConfig, UpgradeConfig } from './gameConfig';
+   import type { LevelConfig } from './gameConfig';
    ```
 
 ### ❌ DON'T:
-1. ❌ Create new data loaders or config files
-2. ❌ Hardcode game data in TypeScript files
-3. ❌ Read from `master-data/` at runtime
+
+1. ❌ Read from `master-data/` at runtime (use progressive-data via unifiedDataLoader)
+2. ❌ Create new data loaders or config files
+3. ❌ Hardcode game data in TypeScript files
 4. ❌ Create data arrays in route files
 5. ❌ Bypass `unifiedDataLoader` for data access
+6. ❌ Edit progressive-data files manually (use admin panel + sync)
+
+---
+
+## 🧪 Why This Two-Step System?
+
+### Master JSONs (Bulk Templates)
+**Advantages**:
+- ✅ Easy to edit all items at once in admin UI
+- ✅ Can see relationships between items
+- ✅ Copy/paste friendly
+- ✅ Good for initial setup
+
+### Progressive Data (Individual Files)
+**Advantages**:
+- ✅ Git-friendly (each change = one file)
+- ✅ Easy rollback (git history per item)
+- ✅ Parallel editing (no conflicts)
+- ✅ Scalable (thousands of items)
+- ✅ Fast loading (can lazy-load)
+
+**Result**: Best of both worlds! Bulk editing + granular version control.
 
 ---
 
 ## 🔍 Debugging Config Issues
 
-### Problem: "Data not loading"
+### Problem: "Data not loading in game"
 **Check**:
-1. Does the file exist in `progressive-data/`?
-2. Is `syncAllGameData()` called in `index.ts`?
-3. Check server logs for sync errors
+1. Does the data exist in `progressive-data/` (NOT just master-data/)?
+2. If not, run sync: `syncAllMasterData()` or use admin panel sync button
+3. Check server logs for `unifiedDataLoader` errors
+4. Verify `syncAllGameData()` is called in `index.ts`
 
-### Problem: "Admin changes not reflected"
+### Problem: "Admin edits not reflected in game"
 **Solution**:
-1. Admin edits affect `master-data/` only
-2. Must click "Sync to Progressive Data" button
-3. Check that sync created files in `progressive-data/`
+1. Admin edits affect `master-data/` **only**
+2. **Must click "Sync to Progressive Data" button**
+3. Verify sync created/updated files in `progressive-data/`
+4. May need to restart server to reload cache
 
-### Problem: "Conflicting data sources"
-**This should NOT happen anymore** - we deleted all redundant loaders.
+### Problem: "Changes lost after restart"
+**Cause**: You edited progressive-data directly, but master-data still has old values  
+**Solution**: Always edit via master JSON + sync, so both stay in sync
 
 ---
 
 ## 📚 API Reference
 
-### unifiedDataLoader.ts
+### masterDataSync.ts (Admin Panel Backend)
 
-#### Load Data
 ```typescript
-// Get all items of a type
+// Sync specific type from master to progressive
+await syncLevelsFromMaster();
+await syncTasksFromMaster();
+await syncAchievementsFromMaster();
+await syncUpgradesFromMaster();
+await syncCharactersFromMaster();
+
+// Sync everything
+await syncAllMasterData();
+
+// Returns:
+// {
+//   success: boolean,
+//   results: {
+//     levels: { count: 50, error?: string },
+//     tasks: { count: 20, error?: string },
+//     ...
+//   }
+// }
+```
+
+### unifiedDataLoader.ts (Game Runtime)
+
+#### Load Data (Always from progressive-data)
+```typescript
+// Get all items
 getLevelsFromMemory(): LevelConfig[]
 getTasksFromMemory(): TaskConfig[]
 getAchievementsFromMemory(): AchievementConfig[]
@@ -179,8 +256,10 @@ getTaskFromMemory(id: string): TaskConfig | undefined
 // etc.
 ```
 
-#### Save Data
+#### Save Data (Writes to progressive-data)
 ```typescript
+// These write directly to progressive-data/
+// Use when creating/editing individual items
 await saveGameData('levels', levelConfig);
 await saveGameData('tasks', taskConfig);
 await saveGameData('achievements', achievementConfig);
@@ -188,53 +267,71 @@ await saveGameData('upgrades', upgradeConfig);
 await saveGameData('characters', characterConfig);
 ```
 
-#### Sync Operations
+#### Reload from Disk
 ```typescript
-// Reload all data from disk
+// Reload all data from progressive-data/ into memory
 await syncAllGameData();
 
 // Sync specific type
 await syncLevels();
 await syncTasks();
-await syncAchievements();
-await syncUpgrades();
-await syncCharacters();
+// etc.
 ```
 
 ---
 
 ## 🔒 Benefits of This Architecture
 
-1. **No Config Conflicts**: Single source = no sync issues
-2. **Git-Friendly**: Each item is a separate file
-3. **Easy Rollback**: Git history tracks every change
-4. **Fast Performance**: In-memory cache for reads
-5. **Safe Writes**: File locking prevents corruption
-6. **Clear Separation**: Master templates vs runtime data
-7. **Scalable**: Easy to add new content types
+1. **No Config Conflicts**: Progressive-data is single source for runtime
+2. **Easy Bulk Editing**: Master JSONs for admin convenience
+3. **Git-Friendly**: Individual files in progressive-data
+4. **Easy Rollback**: Git history tracks every item change
+5. **Fast Performance**: In-memory cache from progressive-data
+6. **Safe Writes**: File locking prevents corruption
+7. **Clear Workflow**: Edit master → Sync → Progressive → Game
+8. **Scalable**: Works with thousands of items
 
 ---
 
 ## 🚨 Critical Rules
 
-1. **NEVER create arrays of game data in TypeScript files**
-2. **NEVER read from master-data/ at runtime**
-3. **ALWAYS use unifiedDataLoader for data access**
-4. **ALWAYS sync master-data to progressive-data via admin UI**
-5. **gameConfig.ts contains ONLY types and constants**
+1. **master-data/**: Admin editing ONLY, never used by game runtime
+2. **progressive-data/**: SINGLE source of truth for game runtime
+3. **Always sync**: After editing master, sync to progressive
+4. **unifiedDataLoader**: ONLY reads from progressive-data
+5. **gameConfig.ts**: Types and constants ONLY, no data
+6. **Never hardcode**: Game data always comes from JSON files
+
+---
+
+## 👥 Quick Reference for Different Roles
+
+### For Game Developers (Coding)
+- Use `unifiedDataLoader` for ALL data access
+- Import types from `gameConfig.ts`
+- Never hardcode game data
+
+### For Content Designers (Admin Panel)
+- Edit `master-data/*.json` via admin UI
+- Click "Sync to Progressive Data" after changes
+- Changes appear in game after sync
+
+### For DevOps/Deployment
+- Ensure both `master-data/` and `progressive-data/` are deployed
+- Server startup calls `syncAllGameData()` (loads progressive)
+- Can run `syncAllMasterData()` to rebuild progressive from master
 
 ---
 
 ## ✉️ Questions?
 
 If you need to:
-- Add a new content type (e.g., "skills")
-- Modify data structure
-- Debug data loading
-
-Refer to `unifiedDataLoader.ts` and follow existing patterns.
+- **Add new content**: Edit master JSON → Sync → Done
+- **Add new content type**: Update both `masterDataSync.ts` and `unifiedDataLoader.ts`
+- **Restore from backup**: Copy progressive-data files from git history
+- **Bulk import**: Edit master JSON with all items → Sync once
 
 ---
 
 **Last Updated**: November 8, 2025  
-**Architecture Version**: 2.0 (Unified Data Loader)
+**Architecture Version**: 2.0 (Master → Progressive → Runtime)
