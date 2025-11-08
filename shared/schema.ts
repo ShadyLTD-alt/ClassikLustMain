@@ -71,11 +71,10 @@ export const characters = pgTable("characters", {
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
-// Levels EXCLUDING experienceRequired and xpRequired, rewards includes character/unlocks
+// Levels (NO xpRequired, experienceRequired, or pointsReward fields)
 export const levels = pgTable("levels", {
   level: integer("level").primaryKey(),
-  cost: integer("cost").notNull().default(100),
-  pointsReward: integer("pointsReward").default(0).notNull(),
+  cost: integer("cost").notNull().default(100), // Points cost to level up
   // rewards: object -- can contain lustPoints, lustGems, characterUnlocks, upgradeUnlocks
   rewards: jsonb("rewards").notNull().default('{}').$type<{ lustPoints?: number, lustGems?: number, characterUnlocks?: string[], upgradeUnlocks?: string[] }>(),
   requirements: jsonb("requirements").notNull().default('[]').$type<{ upgradeId: string; minLevel: number }[]>(),
