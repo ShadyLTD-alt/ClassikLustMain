@@ -9,11 +9,10 @@ const __dirname = path.dirname(__filename);
 
 /**
  * Unified Data Loader - Single Source of Truth Pattern
- * ALL game data reads from progressive-data ONLY
- * NO master JSON reading at runtime
+ * Game data reads from main-gamedata subdirectories
  */
 
-const PROGRESSIVE_DATA_ROOT = path.join(__dirname, '../../main-gamedata/progressive-data');
+const GAMEDATA_ROOT = path.join(__dirname, '../../main-gamedata');
 
 // In-memory caches for fast access
 const dataCache = {
@@ -24,13 +23,13 @@ const dataCache = {
   characters: new Map<string, any>()
 };
 
-// Content type to folder mapping
+// Content type to folder mapping - USING YOUR EXISTING DIRECTORY STRUCTURE
 const FOLDER_MAP = {
-  levels: 'levelup',
-  tasks: 'tasks',
-  achievements: 'achievements',
-  upgrades: 'upgrades',
-  characters: 'characters'
+  levels: 'progressive-data/levelup',
+  tasks: 'progressive-data/tasks',
+  achievements: 'progressive-data/achievements',
+  upgrades: 'progressive-data/upgrades',
+  characters: 'character-data'  // ✅ USE character-data, NOT progressive-data/characters
 } as const;
 
 type ContentType = keyof typeof FOLDER_MAP;
@@ -53,7 +52,7 @@ async function loadJSONFile<T>(filePath: string): Promise<T | null> {
  */
 export async function loadGameData<T = any>(contentType: ContentType): Promise<T[]> {
   const folderName = FOLDER_MAP[contentType];
-  const dirPath = path.join(PROGRESSIVE_DATA_ROOT, folderName);
+  const dirPath = path.join(GAMEDATA_ROOT, folderName);
   
   try {
     // Ensure directory exists
@@ -72,7 +71,7 @@ export async function loadGameData<T = any>(contentType: ContentType): Promise<T
       }
     }
     
-    console.log(`📦 Loaded ${data.length} ${contentType} from progressive-data/${folderName}`);
+    console.log(`📦 Loaded ${data.length} ${contentType} from ${folderName}`);
     return data;
   } catch (error) {
     console.error(`❌ Error loading ${contentType}:`, error);
@@ -97,7 +96,7 @@ export async function loadGameDataById<T = any>(
     fileName = `${id}.json`;
   }
   
-  const filePath = path.join(PROGRESSIVE_DATA_ROOT, folderName, fileName);
+  const filePath = path.join(GAMEDATA_ROOT, folderName, fileName);
   
   try {
     const content = await fs.readFile(filePath, 'utf-8');
@@ -108,7 +107,7 @@ export async function loadGameDataById<T = any>(
 }
 
 /**
- * Save item to progressive-data + sync to DB
+ * Save item to gamedata folder + sync to DB
  */
 export async function saveGameData<T extends { id: string } | { level: number }>(
   contentType: ContentType,
@@ -129,7 +128,7 @@ export async function saveGameData<T extends { id: string } | { level: number }>
     return { success: false, error: 'Data must have id or level field' };
   }
   
-  const dirPath = path.join(PROGRESSIVE_DATA_ROOT, folderName);
+  const dirPath = path.join(GAMEDATA_ROOT, folderName);
   const filePath = path.join(dirPath, fileName);
   
   try {
@@ -164,7 +163,7 @@ export async function saveGameData<T extends { id: string } | { level: number }>
 }
 
 /**
- * Delete item from progressive-data + DB
+ * Delete item from gamedata folder + DB
  */
 export async function deleteGameData(
   contentType: ContentType,
@@ -172,7 +171,7 @@ export async function deleteGameData(
 ): Promise<{ success: boolean; error?: string }> {
   const folderName = FOLDER_MAP[contentType];
   const fileName = contentType === 'levels' ? `level-${id}.json` : `${id}.json`;
-  const filePath = path.join(PROGRESSIVE_DATA_ROOT, folderName, fileName);
+  const filePath = path.join(GAMEDATA_ROOT, folderName, fileName);
   
   try {
     // 1. Delete file
@@ -261,7 +260,7 @@ async function deleteFromDatabase(contentType: ContentType, id: string): Promise
  * Load all game data into memory cache
  */
 export async function syncAllGameData(): Promise<void> {
-  console.log('🚀 Loading all game data from progressive-data...');
+  console.log('🚀 Loading all game data from main-gamedata directories...');
   
   const types: ContentType[] = ['levels', 'tasks', 'achievements', 'upgrades', 'characters'];
   
@@ -342,4 +341,4 @@ export const syncCharacters = () => loadGameData('characters').then(data => {
   data.forEach(item => dataCache.characters.set(item.id, item));
 });
 
-console.log('✅ [UNIFIED DATA LOADER] Progressive-data is now single source of truth');
+console.log('✅ [UNIFIED DATA LOADER] Using character-data and progressive-data directories');
