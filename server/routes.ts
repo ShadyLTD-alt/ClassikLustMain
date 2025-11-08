@@ -101,7 +101,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           id: playerId, username: sanitizedUsername, telegramId: null,
           points: 0, lustPoints: 0, lustGems: 0, energy: 1000, energyMax: 1000,
           level: 1, experience: 0, passiveIncomeRate: 0, lastTapValue: 1,
-          selectedCharacterId: null, displayImage: null, isAdmin: true,  // ✅ Auto-admin for dev users
+          selectedCharacterId: null, displayImage: null, isAdmin: true,
           consecutiveDays: 0, createdAt: now, updatedAt: now
         });
         console.log(`✅ [DEV AUTH] Created admin dev user: ${playerId}`);
@@ -222,14 +222,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ✅ FIXED: Removed xpRequired and experienceRequired
   app.get('/api/levels', requireAuth, (_req, res) => { 
     try { 
       const lvls = getLevelsFromMemory().map(l => ({ 
-        level: Number(l.level) || 0, xpRequired: Number(l.xpRequired) || 0, cost: Number(l.cost) || 0,
-        experienceRequired: Number(l.experienceRequired || l.xpRequired) || 0,
-        rewards: l.rewards || {}, requirements: Array.isArray(l.requirements) ? l.requirements : [],
-        unlocks: Array.isArray(l.unlocks) ? l.unlocks : [], createdAt: l.createdAt || new Date().toISOString(),
-        updatedAt: l.updatedAt || new Date().toISOString(), ...l 
+        level: Number(l.level) || 0,
+        cost: Number(l.cost) || 0,
+        rewards: l.rewards || {},
+        requirements: Array.isArray(l.requirements) ? l.requirements : [],
+        unlocks: Array.isArray(l.unlocks) ? l.unlocks : [],
+        createdAt: l.createdAt || new Date().toISOString(),
+        updatedAt: l.updatedAt || new Date().toISOString()
       })); 
       res.json({ levels: lvls }); 
     } catch (e: any) { 
@@ -237,17 +240,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } 
   });
   
+  // ✅ FIXED: Removed xpRequired and experienceRequired
   app.get('/api/levels/:level', requireAuth, (req, res) => {
     try {
       const requestedLevel = parseInt(req.params.level);
       const lvl = getLevelsFromMemory().find(l => l.level === requestedLevel);
       if (!lvl) return res.status(404).json({ error: 'Level not found' });
       const formatted = {
-        level: Number(lvl.level) || 0, xpRequired: Number(lvl.xpRequired) || 0, cost: Number(lvl.cost) || 0,
-        experienceRequired: Number(lvl.experienceRequired || lvl.xpRequired) || 0, rewards: lvl.rewards || {},
+        level: Number(lvl.level) || 0,
+        cost: Number(lvl.cost) || 0,
+        rewards: lvl.rewards || {},
         requirements: Array.isArray(lvl.requirements) ? lvl.requirements : [],
-        unlocks: Array.isArray(lvl.unlocks) ? lvl.unlocks : [], createdAt: lvl.createdAt || new Date().toISOString(),
-        updatedAt: lvl.updatedAt || new Date().toISOString(), ...lvl
+        unlocks: Array.isArray(lvl.unlocks) ? lvl.unlocks : [],
+        createdAt: lvl.createdAt || new Date().toISOString(),
+        updatedAt: lvl.updatedAt || new Date().toISOString()
       };
       res.json({ level: formatted });
     } catch (e: any) {
@@ -335,7 +341,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } 
   });
 
-  // ✅ FIXED: Proper admin auth chain + array validation
   app.post('/api/admin/levels', requireAuth, requireAdmin, async (req, res) => { 
     try {
       console.log(`🔧 [ADMIN LEVEL] Saving level ${req.body.level}...`);

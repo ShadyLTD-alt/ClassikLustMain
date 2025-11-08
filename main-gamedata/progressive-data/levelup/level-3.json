@@ -1,10 +1,13 @@
 {
   "level": 3,
+  "cost": 800,
   "requirements": [
     { "upgradeId": "tap-power", "minLevel": 3 },
     { "upgradeId": "passive-income", "minLevel": 2 }
   ],
-  "experienceRequired": 200,
-  "cost": 500,
-  "unlocks": ["Boost multiplier x1.2"]
+  "rewards": {
+    "lustPoints": 400,
+    "lustGems": 10
+  },
+  "unlocks": ["Bonus upgrade tier"]
 }
