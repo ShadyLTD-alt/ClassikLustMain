@@ -6,12 +6,15 @@ import type { InsertUpgrade, InsertCharacter, Player } from "@shared/schema";
 import type { UpgradeConfig, CharacterConfig, LevelConfig } from "@shared/gameConfig";
 import { syncLevels, getLevelsFromMemory, getLevelFromMemory } from "./levelsProgressive";
 import { writeSnapshot, throttledInfo } from "./lunaSnapshots";
+import masterDataService from "./MasterDataService";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 let upgradesCache: Map<string, UpgradeConfig> = new Map();
 let charactersCache: Map<string, CharacterConfig> = new Map();
+let tasksCache: Map<string, any> = new Map();  // 🆕 NEW: Tasks cache
+let achievementsCache: Map<string, any> = new Map();  // 🆕 NEW: Achievements cache
 
 async function loadJSONFile<T>(filePath: string): Promise<T | null> {
   try { const content = await fs.readFile(filePath, "utf-8"); return JSON.parse(content); }
@@ -42,12 +45,55 @@ export async function syncCharacters() {
   }
 }
 
-export async function syncAllGameData() { await syncUpgrades(); await syncCharacters(); await syncLevels(); }
+// 🆕 NEW: Sync tasks from progressive-data/task/*.json
+export async function syncTasks() {
+  try {
+    console.log('📋 [SYNC] Loading tasks from JSON files...');
+    const tasks = await masterDataService.getTasks();
+    tasksCache.clear();
+    for (const task of tasks) {
+      tasksCache.set(task.id, task);
+    }
+    console.log(`✅ [SYNC] Loaded ${tasksCache.size} tasks into memory`);
+  } catch (err) {
+    console.error('❌ [SYNC] Failed to load tasks:', err);
+  }
+}
+
+// 🆕 NEW: Sync achievements from progressive-data/achievements/*.json
+export async function syncAchievements() {
+  try {
+    console.log('🏆 [SYNC] Loading achievements from JSON files...');
+    const achievements = await masterDataService.getAchievements();
+    achievementsCache.clear();
+    for (const achievement of achievements) {
+      achievementsCache.set(achievement.id, achievement);
+    }
+    console.log(`✅ [SYNC] Loaded ${achievementsCache.size} achievements into memory`);
+  } catch (err) {
+    console.error('❌ [SYNC] Failed to load achievements:', err);
+  }
+}
+
+export async function syncAllGameData() { 
+  await syncUpgrades(); 
+  await syncCharacters(); 
+  await syncLevels(); 
+  await syncTasks();  // 🆕 NEW
+  await syncAchievements();  // 🆕 NEW
+}
 
 export function getUpgradesFromMemory(): UpgradeConfig[] { return Array.from(upgradesCache.values()); }
 export function getUpgradeFromMemory(id: string): UpgradeConfig | undefined { return upgradesCache.get(id); }
 export function getCharactersFromMemory(): CharacterConfig[] { return Array.from(charactersCache.values()); }
 export function getCharacterFromMemory(id: string): CharacterConfig | undefined { return charactersCache.get(id); }
+
+// 🆕 NEW: Export tasks and achievements from memory (JSON-first!)
+export function getTasksFromMemory(): any[] { return Array.from(tasksCache.values()); }
+export function getTaskFromMemory(id: string): any | undefined { return tasksCache.get(id); }
+export function getAchievementsFromMemory(): any[] { return Array.from(achievementsCache.values()); }
+export function getAchievementFromMemory(id: string): any | undefined { return achievementsCache.get(id); }
+
 export { getLevelsFromMemory, getLevelFromMemory };
 
 export async function saveUpgradeToJSON(upgrade: UpgradeConfig): Promise<void> {
@@ -76,7 +122,24 @@ export async function saveLevelToJSON(level: LevelConfig): Promise<void> {
   await fs.writeFile(path.join(levelDir, `level-${level.level}.json`), JSON.stringify(level, null, 2));
 }
 
-// ✅ Write player snapshot for Luna under LunaBug/snapshots and throttle console spam
+// 🆕 NEW: Save task to JSON (progressive-data/task/*.json)
+export async function saveTaskToJSON(task: any): Promise<void> {
+  const taskDir = path.join(__dirname, "../../main-gamedata/progressive-data/task");
+  await fs.mkdir(taskDir, { recursive: true });
+  await fs.writeFile(path.join(taskDir, `${task.id}.json`), JSON.stringify(task, null, 2));
+  tasksCache.set(task.id, task);
+  console.log(`✅ [SAVE] Task ${task.id} saved to JSON`);
+}
+
+// 🆕 NEW: Save achievement to JSON (progressive-data/achievements/*.json)
+export async function saveAchievementToJSON(achievement: any): Promise<void> {
+  const achDir = path.join(__dirname, "../../main-gamedata/progressive-data/achievements");
+  await fs.mkdir(achDir, { recursive: true });
+  await fs.writeFile(path.join(achDir, `${achievement.id}.json`), JSON.stringify(achievement, null, 2));
+  achievementsCache.set(achievement.id, achievement);
+  console.log(`✅ [SAVE] Achievement ${achievement.id} saved to JSON`);
+}
+
 export async function savePlayerDataToJSON(player: Player): Promise<void> {
   try {
     const snapshotName = `${player.username || player.id}.json`;
