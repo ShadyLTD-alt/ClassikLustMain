@@ -54,11 +54,17 @@ export interface LevelRequirement {
 
 export interface LevelConfig {
   level: number;
-  // Cost to level up (points); keep XP dormant but available
   cost: number;
-  experienceRequired?: number; // optional for future use
-  requirements: LevelRequirement[]; // pulled from master upgrades
-  unlocks: string[]; // free-form strings or IDs
+  requirements: LevelRequirement[];
+  unlocks: string[];
+  rewards?: {  // ADD THIS
+    lustPoints?: number;
+    lustGems?: number;
+    characterUnlocks?: string[];
+    upgradeUnlocks?: string[];
+  };
+  createdAt?: string;  // ADD THIS
+  updatedAt?: string;  // ADD THIS
 }
 
 export interface ThemeConfig {

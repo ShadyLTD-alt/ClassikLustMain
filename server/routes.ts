@@ -222,6 +222,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post('/api/upload', requireAuth, upload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    
+    const fileUrl = `/uploads/${req.file.filename}`;
+    const { characterId, imageType, unlockLevel, categories, poses, isHidden, chatEnable, chatSendPercent } = req.body;
+    
+    // Parse the JSON strings from FormData
+    const parsedCategories = categories ? JSON.parse(categories) : {};
+    const parsedPoses = poses ? JSON.parse(poses) : [];
+    
+    // Convert categories object to array of keys where value is true
+    const categoryArray: string[] = Object.keys(parsedCategories).filter(key => parsedCategories[key] === true);
+    
+    const mediaUpload = await storage.createMediaUpload({
+      characterId,
+      url: fileUrl,
+      type: imageType || 'character',
+      unlockLevel: unlockLevel ? parseInt(unlockLevel) : 1,
+      categories: categoryArray, // Array of strings
+      poses: parsedPoses, // Already an array
+      isHidden: isHidden === 'true' || isHidden === true,
+      chatEnable: chatEnable === 'true' || chatEnable === true,
+      chatSendPercent: chatSendPercent ? parseInt(chatSendPercent) : 0
+    });
+    
+    console.log(`✅ [UPLOAD] Image uploaded: ${req.file.filename} for character ${characterId}`);
+    res.json({ success: true, media: mediaUpload, url: fileUrl });
+  } catch (e: any) {
+    console.error('[UPLOAD] Failed:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+  
+
   // ✅ FIXED: Removed xpRequired and experienceRequired
   app.get('/api/levels', requireAuth, (_req, res) => { 
     try { 

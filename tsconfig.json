@@ -30,6 +30,7 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "baseUrl": ".",
+    "typeRoots": ["./node_modules/@types", "./server/@types"],
     "paths": {
       "@/*": ["./client/src/*"],
       "@shared/*": ["./shared/*"]

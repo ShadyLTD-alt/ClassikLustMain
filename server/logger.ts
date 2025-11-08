@@ -37,12 +37,15 @@ const createSpamFilter = () => {
       if (['error', 'warn'].includes(level)) {
         return true;
       }
-      
+
       // Production: only show important messages
       if (process.env.NODE_ENV === 'production' && level !== 'error') {
         return false;
       }
-      
+
+      // Convert message to string if it's not already
+      const msgStr = typeof message === 'string' ? message : JSON.stringify(message);
+
       // Block obvious spam patterns
       const spamPatterns = [
         /PostCSS plugin/i,
@@ -51,25 +54,25 @@ const createSpamFilter = () => {
         /Loading player.*state/i,
         /Health check/i
       ];
-      
-      if (spamPatterns.some(p => p.test(message))) {
+
+      if (spamPatterns.some(p => p.test(msgStr))) {
         return false;
       }
-      
+
       // Rate limiting
-      const key = message.slice(0, 50);
+      const key = msgStr.slice(0, 50);  // ← Now it's safe to use .slice()
       const now = Date.now();
       const entry = seen.get(key) || { count: 0, lastSeen: 0 };
-      
+
       // Reset count if it's been more than 1 minute
       if (now - entry.lastSeen > 60000) {
         entry.count = 0;
       }
-      
+
       entry.count++;
       entry.lastSeen = now;
       seen.set(key, entry);
-      
+
       // Allow up to 3 of the same message per minute
       return entry.count <= 3;
     }
@@ -80,11 +83,11 @@ const spamFilter = createSpamFilter();
 
 // 🔧 FIXED: Clean formatter with better error handling
 const formatter = winston.format.printf(({ level, message, timestamp, stack }) => {
-  const time = new Date(timestamp).toLocaleTimeString('en-US', { 
+  const time = new Date(timestamp as string).toLocaleTimeString('en-US', { 
     hour12: false,
     timeZone: 'America/New_York'
-  });
-  
+  } as any);
+
   let msg = '';
   try {
     if (typeof message === 'string') {
@@ -97,12 +100,12 @@ const formatter = winston.format.printf(({ level, message, timestamp, stack }) =
   } catch (err) {
     msg = '[LOGGER ERROR: Could not format message]';
   }
-  
+
   // Add stack trace for errors
   if (level === 'error' && stack) {
     msg += `\n${stack}`;
   }
-  
+
   return `${time} [${level.toUpperCase()}] ${msg}`;
 });
 
