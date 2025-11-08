@@ -4,6 +4,7 @@
  * Eliminates hardcoded defaults throughout the codebase
  * 🔧 FIXED: ES Module compatibility - no CommonJS exports
  * 🔧 ADDED: Tasks & Achievements JSON loading (no more hardcoded data!)
+ * 🔧 FIXED: Changed task folder from 'task' to 'tasks' (plural)
  */
 import fs from 'fs';
 import path from 'path';
@@ -35,8 +36,8 @@ interface MasterData {
   characters: any[];
   upgrades: any[];
   levels: any[];
-  tasks: any[];  // 🆕 NEW: Tasks loaded from JSON
-  achievements: any[];  // 🆕 NEW: Achievements loaded from JSON
+  tasks: any[];
+  achievements: any[];
   defaultPlayerState: PlayerDefaults;
 }
 
@@ -45,8 +46,8 @@ class MasterDataService {
     characters: [],
     upgrades: [],
     levels: [],
-    tasks: [],  // 🆕 NEW
-    achievements: [],  // 🆕 NEW
+    tasks: [],
+    achievements: [],
     defaultPlayerState: {
       points: 0,
       lustPoints: 0,
@@ -74,9 +75,9 @@ class MasterDataService {
     playerDefaults: path.join(__dirname, '../../main-gamedata/master-data/player-master.json')
   };
   
-  // 🆕 NEW: Progressive data directories
+  // 🔧 FIXED: Changed from 'task' to 'tasks' (plural)
   private progressivePaths = {
-    tasks: path.join(__dirname, '../../main-gamedata/progressive-data/task'),
+    tasks: path.join(__dirname, '../../main-gamedata/progressive-data/tasks'),  // ← FIXED
     achievements: path.join(__dirname, '../../main-gamedata/progressive-data/achievements'),
     levelup: path.join(__dirname, '../../main-gamedata/progressive-data/levelup')
   };
@@ -87,10 +88,10 @@ class MasterDataService {
     console.log('🎯 Luna: Initializing Enhanced Master Data Service (ES Module)');
   }
 
-  // 🆕 NEW: Load individual JSON files from a directory
+  // Load individual JSON files from a directory
   private loadProgressiveData(dirPath: string, dataType: string): any[] {
     if (!fs.existsSync(dirPath)) {
-      console.warn(`⚠️ Luna: ${dataType} directory not found at ${dirPath}`);
+      console.warn(`⚠️  Luna: ${dataType} directory not found at ${dirPath}`);
       return [];
     }
 
@@ -127,7 +128,7 @@ class MasterDataService {
         
         const state = this.masterData.defaultPlayerState as any;
         if ('maxEnergy' in state) {
-          console.warn('⚠️ Luna: Found maxEnergy instead of energyMax - auto-correcting');
+          console.warn('⚠️  Luna: Found maxEnergy instead of energyMax - auto-correcting');
           state.energyMax = state.maxEnergy;
           delete state.maxEnergy;
         }
@@ -149,13 +150,13 @@ class MasterDataService {
         console.log(`✅ Loaded ${this.masterData.characters.length} characters`);
       }
 
-      // 🆕 NEW: Load levels from progressive-data (individual JSON files)
+      // Load levels from progressive-data (individual JSON files)
       this.masterData.levels = this.loadProgressiveData(this.progressivePaths.levelup, 'levels');
       
-      // 🆕 NEW: Load tasks from progressive-data (individual JSON files)
+      // 🔧 FIXED: Load tasks from progressive-data/tasks (not task)
       this.masterData.tasks = this.loadProgressiveData(this.progressivePaths.tasks, 'tasks');
       
-      // 🆕 NEW: Load achievements from progressive-data (individual JSON files)
+      // Load achievements from progressive-data (individual JSON files)
       this.masterData.achievements = this.loadProgressiveData(this.progressivePaths.achievements, 'achievements');
 
       this.initialized = true;
@@ -167,7 +168,6 @@ class MasterDataService {
     }
   }
 
-  // 🆕 NEW: Public getters for tasks and achievements
   async getTasks(): Promise<any[]> {
     await this.loadMasterData();
     return this.masterData.tasks;
@@ -193,7 +193,6 @@ class MasterDataService {
     return this.masterData.characters;
   }
 
-  // 🆕 NEW: Reload methods for when admin edits JSON files
   async reloadTasks(): Promise<void> {
     this.masterData.tasks = this.loadProgressiveData(this.progressivePaths.tasks, 'tasks');
     console.log('🔄 Luna: Tasks reloaded from JSON files');
@@ -347,7 +346,7 @@ class MasterDataService {
                        this.masterData.characters[0];
     
     if (!defaultChar) {
-      console.warn('⚠️ No default character found, using fallback');
+      console.warn('⚠️  No default character found, using fallback');
       return { id: 'shadow', name: 'Shadow' };
     }
     
@@ -388,13 +387,13 @@ class MasterDataService {
       upgradesCount: this.masterData.upgrades.length,
       charactersCount: this.masterData.characters.length,
       levelsCount: this.masterData.levels.length,
-      tasksCount: this.masterData.tasks.length,  // 🆕 NEW
-      achievementsCount: this.masterData.achievements.length,  // 🆕 NEW
+      tasksCount: this.masterData.tasks.length,
+      achievementsCount: this.masterData.achievements.length,
       fieldNamingConsistent: validation.isValid,
       violations: validation.violations,
       adminRoutesClean: true,
       esModuleCompliant: true,
-      jsonFirstEnforced: true,  // 🆕 NEW: All data from JSON
+      jsonFirstEnforced: true,
       phase3Status: 'Complete - Tasks & Achievements now JSON-first (no more hardcoded data!)'
     };
   }
@@ -403,4 +402,4 @@ class MasterDataService {
 export const masterDataService = new MasterDataService();
 export default masterDataService;
 
-console.log('✅ Luna: MasterDataService loaded (JSON-first, tasks & achievements included)');
+console.log('✅ Luna: MasterDataService loaded (JSON-first, tasks folder fixed)');

@@ -1,0 +1,4 @@
+# Characters Progressive Data
+
+This folder contains individual character JSON files.
+Each character should be saved as `{character-id}.json`.

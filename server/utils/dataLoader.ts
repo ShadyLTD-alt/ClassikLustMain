@@ -7,7 +7,7 @@ import type { UpgradeConfig, CharacterConfig, LevelConfig } from "@shared/gameCo
 import { syncLevels, getLevelsFromMemory, getLevelFromMemory } from "./levelsProgressive";
 import { writeSnapshot, throttledInfo } from "./lunaSnapshots";
 import masterDataService from "./MasterDataService";
-import fileLock from "./fileLock";  // 🆕 NEW: File locking
+import fileLock from "./fileLock";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -132,8 +132,9 @@ export async function saveLevelToJSON(level: LevelConfig): Promise<void> {
   });
 }
 
+// ✅ FIXED: Changed from 'task' (singular) to 'tasks' (plural)
 export async function saveTaskToJSON(task: any): Promise<void> {
-  const taskDir = path.join(__dirname, "../../main-gamedata/progressive-data/task");
+  const taskDir = path.join(__dirname, "../../main-gamedata/progressive-data/tasks");  // ← FIXED: tasks (plural)
   const taskPath = path.join(taskDir, `${task.id}.json`);
   
   await fileLock.withLock(taskPath, async () => {
