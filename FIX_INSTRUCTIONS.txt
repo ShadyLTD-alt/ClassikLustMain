@@ -1,0 +1,25 @@
+CRITICAL FIX - ID Mismatch After Config Refactor
+
+PROBLEM: Your player save file uses OLD IDs but templates use NEW IDs
+
+Upgrade IDs Changed:
+- perTap -> tap-power
+- perHour -> passive-income  
+- energyMax -> energy-capacity
+- criticalChance -> critical-chance
+
+Character IDs Changed:
+- shadow -> dark-assassin
+- frost -> ice-warrior
+
+FIX: Run this command:
+
+  node migrate-complete.js
+
+Then:
+1. Restart server
+2. Hard refresh browser (Ctrl+Shift+R)
+3. Test upgrades and character selection
+
+This will rename all IDs in your player-state.json to match the new templates.
+A backup file will be created automatically.
