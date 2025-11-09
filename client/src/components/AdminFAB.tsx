@@ -153,8 +153,8 @@ export function AdminFAB({ onOpenDebugger }: AdminFABProps) {
 
   return (
     <>
-      {/* Floating Action Button - MOVED HIGHER */}
-      <div className="fixed bottom-20 right-6 z-50">  {/* Changed from bottom-6 to bottom-20 */}
+      {/* Floating Action Button - MOVED TO TOP-LEFT */}
+      <div className="fixed top-28 left-6 z-50">  {/* Changed from bottom-20 right-6 to top-28 left-6 */}
         <div className={`transition-all duration-300 ${isOpen ? 'mb-4 space-y-3' : ''}`}>
           {/* Action Buttons (appear when open) */}
           <div className={`flex flex-col gap-2 transition-all duration-300 ${
