@@ -1,5 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { DEFAULT_THEME, calculateUpgradeCost, calculateUpgradeValue, checkLevelRequirements, applyTheme, type UpgradeConfig, type CharacterConfig, type ImageConfig, type LevelConfig, type ThemeConfig } from '@shared/gameConfig';
+import { queryClient } from '@/lib/queryClient';
+import { invalidateAllGameQueries } from '@/utils/queryInvalidation';
 
 interface GameState {
   points: number;
@@ -74,11 +76,11 @@ const createInitialState = (): GameState => ({
   energy: 1000,
   energyMax: 1000,
   level: 1,
-  selectedCharacterId: 'aria',  // ✅ FIXED
+  selectedCharacterId: 'aria',
   selectedImageId: null,
   selectedAvatarId: null,
   upgrades: {},
-  unlockedCharacters: ['aria'],  // ✅ FIXED
+  unlockedCharacters: ['aria'],
   unlockedImages: [],
   passiveIncomeRate: 0,
   passiveIncomeCap: 10000,
@@ -473,10 +475,13 @@ export function GameProvider({ children }: { children: ReactNode }) {
       const result = await response.json();
       const updatedPlayer = result.player;
       
-      console.log('✅ [GAMECONTEXT] Upgrade purchased, reloading from server');
+      console.log('✅ [GAMECONTEXT] Upgrade purchased, syncing all caches...');
       
-      // ✅ CRITICAL FIX: Reload full state from server after purchase
+      // ✅ CRITICAL FIX: Reload local state AND invalidate React Query cache
       await loadAllData();
+      await invalidateAllGameQueries(queryClient);
+      
+      console.log('🔄 [GAMECONTEXT] All caches synced - UI should update instantly');
       
       return true;
     } catch (err) {
@@ -539,14 +544,13 @@ export function GameProvider({ children }: { children: ReactNode }) {
     setState(prev => ({ ...prev, selectedAvatarId: imageId }));
   }, []);
 
-  // ✅ FIXED: Use cost instead of experienceRequired
   const canLevelUp = useCallback(() => {
     const nextLevel = state.level + 1;
     const nextLevelConfig = levelConfigs.find(lc => lc.level === nextLevel);
     if (!nextLevelConfig) return false;
     
     const meetsRequirements = checkLevelRequirements(nextLevelConfig, state.upgrades);
-    const hasEnoughPoints = state.points >= (nextLevelConfig.cost || 0);  // ✅ Use cost
+    const hasEnoughPoints = state.points >= (nextLevelConfig.cost || 0);
     
     return meetsRequirements && hasEnoughPoints;
   }, [state.level, state.points, state.upgrades, levelConfigs]);

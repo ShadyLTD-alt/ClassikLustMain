@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
+import { invalidateTaskAchievementQueries } from '@/utils/queryInvalidation';
 import { X, Trophy, Award, Clock, CheckCircle, Star } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -8,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useToast } from '@/hooks/use-toast';
 
 interface TasksAchievementsMenuProps {
   isOpen: boolean;
@@ -52,13 +54,15 @@ interface Achievement {
 export default function TasksAchievementsMenuV2({ isOpen, onClose }: TasksAchievementsMenuProps) {
   const [activeTab, setActiveTab] = useState<'tasks' | 'achievements'>('tasks');
   const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   // Fetch tasks
   const { data: tasksData, isLoading: tasksLoading } = useQuery({
     queryKey: ['/api/tasks'],
     queryFn: async () => {
-      const response = await apiRequest('GET', '/api/tasks');
-      return await response.json();
+      const response = await apiRequest('/api/tasks', { method: 'GET' });
+      const data = await response.json();
+      return data;
     },
     enabled: isOpen,
     refetchInterval: 30000, // Refetch every 30 seconds for live progress
@@ -68,44 +72,73 @@ export default function TasksAchievementsMenuV2({ isOpen, onClose }: TasksAchiev
   const { data: achievementsData, isLoading: achievementsLoading } = useQuery({
     queryKey: ['/api/achievements'],
     queryFn: async () => {
-      const response = await apiRequest('GET', '/api/achievements');
-      return await response.json();
+      const response = await apiRequest('/api/achievements', { method: 'GET' });
+      const data = await response.json();
+      return data;
     },
     enabled: isOpen,
     refetchInterval: 60000, // Refetch every minute
   });
 
-  // Claim task reward mutation
+  // ✅ FIXED: Claim task reward mutation with proper invalidation
   const claimTaskMutation = useMutation({
     mutationFn: async (taskId: string) => {
-      const response = await apiRequest('POST', `/api/tasks/${taskId}/claim`);
+      const response = await apiRequest(`/api/tasks/${taskId}/claim`, { method: 'POST' });
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.error || 'Failed to claim task');
       }
       return await response.json();
     },
-    onSuccess: () => {
-      // Refetch both tasks and player data
-      queryClient.invalidateQueries({ queryKey: ['/api/tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/player/me'] });
+    onSuccess: async (data, taskId) => {
+      console.log(`✅ [TASK CLAIM] Successfully claimed ${taskId}`);
+      
+      // ✅ Invalidate all task/player queries for instant sync
+      await invalidateTaskAchievementQueries(queryClient);
+      
+      toast({
+        title: "Task Completed!",
+        description: "Your reward has been added to your account.",
+      });
+    },
+    onError: (error: any) => {
+      console.error('❌ [TASK CLAIM] Error:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to claim task reward.",
+        variant: "destructive",
+      });
     }
   });
 
-  // Claim achievement reward mutation
+  // ✅ FIXED: Claim achievement reward mutation with proper invalidation
   const claimAchievementMutation = useMutation({
     mutationFn: async (achievementId: string) => {
-      const response = await apiRequest('POST', `/api/achievements/${achievementId}/claim`);
+      const response = await apiRequest(`/api/achievements/${achievementId}/claim`, { method: 'POST' });
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.error || 'Failed to claim achievement');
       }
       return await response.json();
     },
-    onSuccess: () => {
-      // Refetch both achievements and player data
-      queryClient.invalidateQueries({ queryKey: ['/api/achievements'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/player/me'] });
+    onSuccess: async (data, achievementId) => {
+      console.log(`✅ [ACHIEVEMENT CLAIM] Successfully claimed ${achievementId}`);
+      
+      // ✅ Invalidate all achievement/player queries for instant sync
+      await invalidateTaskAchievementQueries(queryClient);
+      
+      toast({
+        title: "Achievement Unlocked!",
+        description: "Your reward has been added to your account.",
+      });
+    },
+    onError: (error: any) => {
+      console.error('❌ [ACHIEVEMENT CLAIM] Error:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to claim achievement reward.",
+        variant: "destructive",
+      });
     }
   });
 
@@ -164,7 +197,10 @@ export default function TasksAchievementsMenuV2({ isOpen, onClose }: TasksAchiev
             </div>
             Tasks & Achievements
             <Button 
-              onClick={onClose}
+              onClick={(e) => {
+                e.stopPropagation();
+                onClose();
+              }}
               variant="ghost" 
               size="icon"
               className="ml-auto hover:bg-red-500/20 hover:text-red-400"

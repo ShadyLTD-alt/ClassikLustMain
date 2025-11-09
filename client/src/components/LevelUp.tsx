@@ -16,7 +16,7 @@ interface LevelUpProps {
 export default function LevelUp({ isOpen, onClose }: LevelUpProps) {
   const [isLevelingUp, setIsLevelingUp] = useState(false);
   const { toast } = useToast();
-  const queryClient = useQueryClient();  // ✅ Query client for cache management
+  const queryClient = useQueryClient();
   
   // Fetch player data
   const { data: playerData, isLoading: playerLoading, refetch: refetchPlayer } = useQuery({
@@ -62,7 +62,15 @@ export default function LevelUp({ isOpen, onClose }: LevelUpProps) {
               <DialogTitle className="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
                 Level Up
               </DialogTitle>
-              <Button variant="ghost" size="sm" onClick={onClose} className="text-gray-400 hover:text-white">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onClose();
+                }} 
+                className="text-gray-400 hover:text-white"
+              >
                 <X className="w-5 h-5" />
               </Button>
             </div>
@@ -85,7 +93,15 @@ export default function LevelUp({ isOpen, onClose }: LevelUpProps) {
               <DialogTitle className="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
                 Level Up
               </DialogTitle>
-              <Button variant="ghost" size="sm" onClick={onClose} className="text-gray-400 hover:text-white">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onClose();
+                }} 
+                className="text-gray-400 hover:text-white"
+              >
                 <X className="w-5 h-5" />
               </Button>
             </div>
@@ -125,12 +141,12 @@ export default function LevelUp({ isOpen, onClose }: LevelUpProps) {
         
         console.log(`✅ [LEVEL-UP UI] Success! New level: ${data.newLevel}, spent ${data.pointsSpent} LP`);
         
-        // ✅ FIX 1: Invalidate ALL player-related cache
+        // ✅ FIX: Invalidate ALL player-related queries to refresh UI instantly
         await queryClient.invalidateQueries({ queryKey: ['/api/player/me'] });
         await queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
         await queryClient.invalidateQueries({ queryKey: ['/api/levels'] });
         
-        // ✅ FIX 2: Force immediate refetch to update the dialog
+        // ✅ FIX: Force immediate refetch to update the dialog
         await refetchPlayer();
         
         console.log(`🔄 [LEVEL-UP UI] All queries invalidated and refetched`);
@@ -140,7 +156,7 @@ export default function LevelUp({ isOpen, onClose }: LevelUpProps) {
           description: `Congratulations! You've reached level ${data.newLevel}`,
         });
         
-        // ✅ FIX 3: Close dialog after a short delay so user sees the success state
+        // ✅ FIX: Close dialog after a short delay so user sees the success state
         setTimeout(() => {
           onClose();
         }, 500);
@@ -168,7 +184,15 @@ export default function LevelUp({ isOpen, onClose }: LevelUpProps) {
             <DialogTitle className="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
               Level Up - Level {nextLevelData.level}
             </DialogTitle>
-            <Button variant="ghost" size="sm" onClick={onClose} className="text-gray-400 hover:text-white">
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={(e) => {
+                e.stopPropagation();
+                onClose();
+              }} 
+              className="text-gray-400 hover:text-white"
+            >
               <X className="w-5 h-5" />
             </Button>
           </div>
