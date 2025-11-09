@@ -4,10 +4,10 @@ const path = require('path');
 const fs = require('fs');
 
 async function scanOverlaysServerSide() {
-  // Scan main dist directory: /dist/index.html
-  const indexPath = path.join(process.cwd(), 'dist', 'index.html');
+  // Scan actual path: /dist/public/index.html
+  const indexPath = path.join(process.cwd(), 'dist', 'public', 'index.html');
   if (!fs.existsSync(indexPath)) {
-    console.warn('🔴 LunaBug Overlay Scanner: No dist/index.html found');
+    console.warn('🔴 LunaBug Overlay Scanner: No dist/public/index.html found');
     return null;
   }
   const html = fs.readFileSync(indexPath, 'utf8');
@@ -29,13 +29,13 @@ async function scanOverlaysServerSide() {
   if (overlays.length > 1) {
     console.warn('🔴 [LunaBug] Overlays Detected:', overlays);
   } else {
-    console.log('🟢 [LunaBug] No overlay/modal conflicts in dist/index.html/build!');
+    console.log('🟢 [LunaBug] No overlay/modal conflicts in dist/public/index.html/build!');
   }
   return overlays;
 }
 
 module.exports = {
   name: 'overlayScanner',
-  description: 'Scans built dist/index.html for modal/overlay DOM conflicts',
+  description: 'Scans built dist/public/index.html for modal/overlay DOM conflicts',
   run: scanOverlaysServerSide
 };
