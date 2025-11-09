@@ -42,15 +42,53 @@ try {
   console.error('Failed to create upload directories:', e);
 }
 
+// 📁 AUTO FOLDER ORGANIZATION HELPER
+async function organizeImageFile(
+  tempPath: string,
+  originalFilename: string,
+  characterId: string,
+  type: string
+): Promise<string> {
+  try {
+    // Create organized folder structure: /uploads/character/type/
+    const characterFolder = path.join(uploadsDir, characterId.toLowerCase());
+    const typeFolder = path.join(characterFolder, type.toLowerCase());
+    
+    // Create folders if they don't exist
+    await fs.mkdir(characterFolder, { recursive: true });
+    await fs.mkdir(typeFolder, { recursive: true });
+    
+    // Generate unique filename
+    const timestamp = Date.now();
+    const ext = path.extname(originalFilename);
+    const uniqueFilename = `${timestamp}-${Math.random().toString(36).substring(7)}${ext}`;
+    
+    const finalPath = path.join(typeFolder, uniqueFilename);
+    
+    // Move file from temp to organized location
+    await fs.rename(tempPath, finalPath);
+    
+    // Return web-accessible path
+    const webPath = `/uploads/${characterId.toLowerCase()}/${type.toLowerCase()}/${uniqueFilename}`;
+    console.log(`📁 [ORGANIZE] File organized: ${webPath}`);
+    
+    return webPath;
+  } catch (error) {
+    console.error('📁 [ORGANIZE] Failed:', error);
+    // If organization fails, return temp path
+    return `/uploads/${path.basename(tempPath)}`;
+  }
+}
+
 const upload = multer({
   storage: multer.diskStorage({
     destination: (req, file, cb) => { cb(null, uploadsDir); },
     filename: (req, file, cb) => {
-      const uniqueName = `${Date.now()}-${Math.random().toString(36).substring(7)}${path.extname(file.originalname)}`;
+      const uniqueName = `temp-${Date.now()}-${Math.random().toString(36).substring(7)}${path.extname(file.originalname)}`;
       cb(null, uniqueName);
     }
   }),
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const allowedTypes = /jpeg|jpg|png|gif|webp/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
@@ -102,6 +140,42 @@ async function findExistingPlayerData(username: string): Promise<any | null> {
     return null;
   } catch (e) {
     console.error('[DEV AUTH] Error searching player-data:', e);
+    return null;
+  }
+}
+
+// 🗂️ RECURSIVE FILE FINDER FOR ORGANIZED STRUCTURE
+async function findImageFile(filename: string): Promise<string | null> {
+  // Search through organized folder structure
+  try {
+    const characters = await fs.readdir(uploadsDir);
+    for (const char of characters) {
+      const charPath = path.join(uploadsDir, char);
+      const stat = await fs.stat(charPath);
+      if (!stat.isDirectory()) continue;
+      
+      const types = await fs.readdir(charPath);
+      for (const type of types) {
+        const typePath = path.join(charPath, type);
+        const typeStat = await fs.stat(typePath);
+        if (!typeStat.isDirectory()) continue;
+        
+        const files = await fs.readdir(typePath);
+        if (files.includes(filename)) {
+          return path.join(typePath, filename);
+        }
+      }
+    }
+  } catch (e) {
+    console.error('🔍 [SEARCH] Error searching for file:', e);
+  }
+  
+  // Fallback: check root uploads folder
+  const rootPath = path.join(uploadsDir, filename);
+  try {
+    await fs.access(rootPath);
+    return rootPath;
+  } catch {
     return null;
   }
 }
@@ -165,8 +239,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       } else {
         const playerId = `dev_${sanitizedUsername}`;
-        console.log(`🆕 [DEV AUTH] Creating new player: ${playerId}`);
-        
+        console.log(`🆕 [DEV AUTH] Creating new player: ${playerId}`);        
         player = await storage.getPlayer(playerId);
         if (!player) {
           const now = new Date();
@@ -274,16 +347,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const nextLevel = currentLevel + 1;
       
       const nextLevelData = getLevelsFromMemory().find(l => l.level === nextLevel);
-      if (!nextLevelData) {
-        return res.status(400).json({ error: 'Maximum level reached' });
-      }
+      if (!nextLevelData) return res.status(400).json({ error: 'Maximum level reached' });
       
       const cost = nextLevelData.cost || 100;
       const currentLP = player.lustPoints || 0;
       
-      if (currentLP < cost) {
-        return res.status(400).json({ error: 'Insufficient points' });
-      }
+      if (currentLP < cost) return res.status(400).json({ error: 'Insufficient points' });
       
       const requirements = nextLevelData.requirements || [];
       const requirementsMet = requirements.every((req: any) => {
@@ -291,9 +360,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return playerUpgradeLevel >= req.minLevel;
       });
       
-      if (!requirementsMet) {
-        return res.status(400).json({ error: 'Requirements not met' });
-      }
+      if (!requirementsMet) return res.status(400).json({ error: 'Requirements not met' });
       
       const newLP = Math.round(currentLP - cost);
       const updatedPlayer = await updatePlayerState(req.player!, {
@@ -302,13 +369,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         points: newLP
       });
       
-      res.json({ 
-        success: true, 
-        player: updatedPlayer,
-        leveledUp: true,
-        newLevel: nextLevel,
-        pointsSpent: cost
-      });
+      res.json({ success: true, player: updatedPlayer, leveledUp: true, newLevel: nextLevel, pointsSpent: cost });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
@@ -332,72 +393,144 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } 
   });
 
+  // 🗂️ GET ALL MEDIA (recursively searches organized folders)
   app.get('/api/media', requireAuth, async (_req, res) => {
     try {
-      const files = await fs.readdir(uploadsDir);
-      const imageFiles = files.filter(f => /\.(jpg|jpeg|png|gif|webp)$/i.test(f));
+      const media: any[] = [];
       
-      const media = await Promise.all(
-        imageFiles.map(async (filename) => {
-          const filePath = path.join(uploadsDir, filename);
-          const stats = await fs.stat(filePath);
+      // Recursively search through organized structure
+      async function scanDirectory(dirPath: string, webBasePath: string) {
+        const entries = await fs.readdir(dirPath, { withFileTypes: true });
+        
+        for (const entry of entries) {
+          const fullPath = path.join(dirPath, entry.name);
+          const webPath = `${webBasePath}/${entry.name}`;
           
-          // Try to load metadata
-          let metadata = null;
-          try {
-            const metaPath = path.join(metadataDir, `${filename}.meta.json`);
-            const metaContent = await fs.readFile(metaPath, 'utf-8');
-            metadata = JSON.parse(metaContent);
-          } catch {}
-          
-          return {
-            filename,
-            path: `/uploads/${filename}`,
-            size: stats.size,
-            uploadedAt: stats.birthtime.toISOString(),
-            metadata
-          };
-        })
-      );
+          if (entry.isDirectory()) {
+            await scanDirectory(fullPath, webPath);
+          } else if (/\.(jpg|jpeg|png|gif|webp)$/i.test(entry.name)) {
+            const stats = await fs.stat(fullPath);
+            
+            // Try to load metadata
+            let metadata = null;
+            try {
+              const metaPath = path.join(metadataDir, `${entry.name}.meta.json`);
+              const metaContent = await fs.readFile(metaPath, 'utf-8');
+              metadata = JSON.parse(metaContent);
+            } catch {}
+            
+            media.push({
+              filename: entry.name,
+              path: webPath,
+              size: stats.size,
+              uploadedAt: stats.birthtime.toISOString(),
+              metadata
+            });
+          }
+        }
+      }
       
+      await scanDirectory(uploadsDir, '/uploads');
+      
+      console.log(`📸 [GALLERY] Found ${media.length} images`);
       res.json({ media });
     } catch (e: any) {
+      console.error('📸 [GALLERY] Error:', e);
       res.status(500).json({ error: e.message });
     }
   });
 
-  // ✅ ENHANCED: Media upload with metadata support
+  // 📤 UPLOAD MEDIA (with auto folder organization)
   app.post('/api/media', requireAuth, upload.single('file'), async (req, res) => {
     try {
       if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
       
-      const fileUrl = `/uploads/${req.file.filename}`;
-      
-      // Parse metadata from request body
       let metadata = null;
       if (req.body.metadata) {
         try {
           metadata = JSON.parse(req.body.metadata);
-          
-          // Save metadata to file
-          const metaPath = path.join(metadataDir, `${req.file.filename}.meta.json`);
+        } catch (e) {
+          console.warn('⚠️  [UPLOAD] Failed to parse metadata');
+        }
+      }
+      
+      // 📁 ORGANIZE FILE INTO CHARACTER/TYPE STRUCTURE
+      const characterId = metadata?.characterId || 'other';
+      const type = metadata?.type || 'other';
+      const tempPath = req.file.path;
+      
+      const organizedPath = await organizeImageFile(tempPath, req.file.originalname, characterId, type);
+      const finalFilename = path.basename(organizedPath);
+      
+      // Save metadata
+      if (metadata) {
+        try {
+          const metaPath = path.join(metadataDir, `${finalFilename}.meta.json`);
           await fs.writeFile(metaPath, JSON.stringify(metadata, null, 2));
-          console.log(`✅ [UPLOAD] Metadata saved: ${req.file.filename}.meta.json`);
+          console.log(`✅ [UPLOAD] Metadata saved: ${finalFilename}.meta.json`);
         } catch (e) {
           console.warn(`⚠️  [UPLOAD] Failed to save metadata:`, e);
         }
       }
       
-      console.log(`✅ [UPLOAD] Image uploaded: ${req.file.filename}`);
+      console.log(`✅ [UPLOAD] Image uploaded and organized: ${organizedPath}`);
       res.json({ 
         success: true, 
-        url: fileUrl,
-        filename: req.file.filename,
+        url: organizedPath,
+        filename: finalFilename,
         size: req.file.size,
         metadata
       });
     } catch (e: any) {
       console.error('[UPLOAD] Failed:', e);
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // 🔄 UPDATE METADATA
+  app.put('/api/media/:filename', requireAuth, async (req, res) => {
+    try {
+      const { filename } = req.params;
+      const { metadata } = req.body;
+      
+      if (!metadata) return res.status(400).json({ error: 'Metadata required' });
+      
+      // Save updated metadata
+      const metaPath = path.join(metadataDir, `${filename}.meta.json`);
+      await fs.writeFile(metaPath, JSON.stringify(metadata, null, 2));
+      
+      console.log(`✅ [UPDATE] Metadata updated for ${filename}`);
+      res.json({ success: true, metadata });
+    } catch (e: any) {
+      console.error('[UPDATE] Failed:', e);
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // 🗑️ DELETE MEDIA
+  app.delete('/api/media/:filename', requireAuth, async (req, res) => {
+    try {
+      const { filename } = req.params;
+      
+      // Find file in organized structure
+      const filePath = await findImageFile(filename);
+      if (!filePath) {
+        return res.status(404).json({ error: 'File not found' });
+      }
+      
+      // Delete file
+      await fs.unlink(filePath);
+      
+      // Delete metadata if exists
+      try {
+        const metaPath = path.join(metadataDir, `${filename}.meta.json`);
+        await fs.unlink(metaPath);
+      } catch {}
+      
+      console.log(`✅ [DELETE] Deleted ${filename}`);
+      res.json({ success: true });
+    } catch (e: any) {
+      console.error('[DELETE] Failed:', e);
       res.status(500).json({ error: e.message });
     }
   });
@@ -580,4 +713,4 @@ export async function registerRoutes(app: Express): Promise<Server> {
   return server;
 }
 
-console.log('✅ [ROUTES] All routes registered with enhanced media upload');
+console.log('✅ [ROUTES] All routes registered with auto folder organization');
