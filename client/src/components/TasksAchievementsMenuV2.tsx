@@ -264,7 +264,8 @@ export default function TasksAchievementsMenuV2({ isOpen, onClose }: TasksAchiev
                               <p className="text-sm text-gray-300">{task.description}</p>
                               <div className="flex items-center gap-2 mt-1">
                                 <Badge variant="secondary" className="text-xs">
-                                  {task.category.toUpperCase()}
+                 {(task.category || 'DAILY').toUpperCase()}
+
                                 </Badge>
                                 {task.timeRemaining && (
                                   <div className="flex items-center gap-1 text-xs text-orange-300">
@@ -382,7 +383,9 @@ export default function TasksAchievementsMenuV2({ isOpen, onClose }: TasksAchiev
                                 <Badge 
                                   className={`text-xs ${getRarityColor(achievement.rarity)} text-white border-0 font-bold`}
                                 >
-                                  {achievement.rarity.toUpperCase()}
+      {(achievement.category || 'GENERAL').toUpperCase()}
+
+
                                 </Badge>
                                 {achievement.isSecret && (
                                   <Star className="w-4 h-4 text-yellow-400" />
@@ -392,7 +395,8 @@ export default function TasksAchievementsMenuV2({ isOpen, onClose }: TasksAchiev
                                 {achievement.isSecret && !achievement.isUnlocked ? 'Hidden until unlocked' : achievement.description}
                               </p>
                               <Badge variant="outline" className="mt-1 text-xs border-gray-600">
-                                {achievement.category.toUpperCase()}
+         {(achievement.rarity || 'common').toUpperCase()}
+
                               </Badge>
                             </div>
                           </div>
