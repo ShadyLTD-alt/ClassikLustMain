@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { useGame } from "@/contexts/GameContext";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import AdminPanel from "@/components/AdminPanel";
 import LunaBugDebugger from "@/components/LunaBugDebugger";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
@@ -298,9 +297,6 @@ export function AdminFAB({ onOpenDebugger }: AdminFABProps) {
           </div>
         </div>
       )}
-
-      {/* Admin Panel Modal */}
-      <AdminPanel />
       
       {/* LunaBug Debugger Modal - NEW */}
       <LunaBugDebugger 
