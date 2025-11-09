@@ -6,16 +6,13 @@ import type { InsertUpgrade, InsertCharacter, InsertLevel } from '@shared/schema
 
 const router = Router();
 
-// File locking utilities
 const locks = new Map<string, Promise<void>>();
 
 async function withFileLock<T>(filePath: string, operation: () => Promise<T>): Promise<T> {
-  // Wait for any existing lock on this file
   while (locks.has(filePath)) {
     await locks.get(filePath);
   }
 
-  // Create a new lock
   let releaseLock: () => void;
   const lockPromise = new Promise<void>((resolve) => {
     releaseLock = resolve;
@@ -23,11 +20,9 @@ async function withFileLock<T>(filePath: string, operation: () => Promise<T>): P
   locks.set(filePath, lockPromise);
 
   try {
-    // Perform the operation
     const result = await operation();
     return result;
   } finally {
-    // Release the lock
     locks.delete(filePath);
     releaseLock!();
   }
@@ -75,7 +70,6 @@ async function getAllJSONFiles(dirPath: string): Promise<any[]> {
 // UPGRADES ROUTES
 // ============================================
 
-// GET /api/admin/upgrades - List all upgrades
 router.get('/upgrades', async (req: Request, res: Response) => {
   try {
     const upgradesDir = path.join(process.cwd(), 'main-gamedata', 'progressive-data', 'upgrades');
@@ -87,7 +81,6 @@ router.get('/upgrades', async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/admin/upgrades - Create new upgrade
 router.post('/upgrades', async (req: Request, res: Response) => {
   try {
     const upgradeData = req.body;
@@ -100,16 +93,13 @@ router.post('/upgrades', async (req: Request, res: Response) => {
     const filePath = path.join(process.cwd(), 'main-gamedata', 'progressive-data', 'upgrades', `${upgradeId}.json`);
     
     await withFileLock(filePath, async () => {
-      // Check if upgrade already exists
       const existing = await readJSONFile(filePath);
       if (existing) {
         throw new Error(`Upgrade ${upgradeId} already exists`);
       }
 
-      // Write to JSON file
       await writeJSONFile(filePath, upgradeData);
       
-      // Sync to database
       try {
         await storage.createUpgrade(upgradeData as InsertUpgrade);
       } catch (dbError) {
@@ -124,7 +114,6 @@ router.post('/upgrades', async (req: Request, res: Response) => {
   }
 });
 
-// PUT /api/admin/upgrades/:id - Update upgrade
 router.put('/upgrades/:id', async (req: Request, res: Response) => {
   try {
     const upgradeId = req.params.id;
@@ -132,19 +121,14 @@ router.put('/upgrades/:id', async (req: Request, res: Response) => {
     const filePath = path.join(process.cwd(), 'main-gamedata', 'progressive-data', 'upgrades', `${upgradeId}.json`);
 
     await withFileLock(filePath, async () => {
-      // Read current data
       const current = await readJSONFile(filePath);
       if (!current) {
         throw new Error(`Upgrade ${upgradeId} not found`);
       }
 
-      // Merge updates
       const updated = { ...current, ...updates, id: upgradeId };
-      
-      // Write to JSON file
       await writeJSONFile(filePath, updated);
       
-      // Sync to database
       try {
         await storage.updateUpgrade(upgradeId, updates);
       } catch (dbError) {
@@ -159,17 +143,14 @@ router.put('/upgrades/:id', async (req: Request, res: Response) => {
   }
 });
 
-// DELETE /api/admin/upgrades/:id - Delete upgrade
 router.delete('/upgrades/:id', async (req: Request, res: Response) => {
   try {
     const upgradeId = req.params.id;
     const filePath = path.join(process.cwd(), 'main-gamedata', 'progressive-data', 'upgrades', `${upgradeId}.json`);
 
     await withFileLock(filePath, async () => {
-      // Delete JSON file
       await fs.unlink(filePath);
       
-      // Delete from database
       try {
         await storage.deleteUpgrade(upgradeId);
       } catch (dbError) {
@@ -271,7 +252,7 @@ router.delete('/levels/:id', async (req: Request, res: Response) => {
 });
 
 // ============================================
-// CHARACTERS ROUTES
+// CHARACTERS ROUTES - ✅ FIXED: progressive-data/characters
 // ============================================
 
 router.get('/characters', async (req: Request, res: Response) => {
@@ -541,3 +522,5 @@ router.delete('/images/:filename', async (req: Request, res: Response) => {
 });
 
 export default router;
+
+console.log('✅ [ADMIN ROUTES] Using progressive-data for ALL game data (upgrades, characters, levels, tasks, achievements)');
