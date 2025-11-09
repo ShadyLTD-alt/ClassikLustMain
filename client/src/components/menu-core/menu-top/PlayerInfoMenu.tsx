@@ -28,8 +28,6 @@ export default function PlayerInfoMenu({ isOpen, onClose, openMenu }: Props) {
   
   if (!state) return null;
 
-  // ✅ FIX: Removed experience calculation (no longer using XP system)
-  
   const handleCharacterGalleryClick = () => {
     onClose(); // Close profile
     if (openMenu) {
@@ -39,7 +37,7 @@ export default function PlayerInfoMenu({ isOpen, onClose, openMenu }: Props) {
   
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl bg-gray-900/95 border-purple-500/30">
+      <DialogContent className="max-w-2xl bg-gray-900/95 border-purple-500/30 z-[9999]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-purple-300">
             <User className="w-5 h-5" />Player Profile
@@ -110,7 +108,6 @@ export default function PlayerInfoMenu({ isOpen, onClose, openMenu }: Props) {
 
           {/* Player Stats Grid */}
           <div className="grid grid-cols-2 gap-4">
-            {/* ✅ FIX: Use totalTapsAllTime for all-time taps */}
             <div className="p-3 bg-gray-800/30 rounded-lg border border-gray-700/50">
               <div className="text-lg font-bold text-white">
                 {Math.round(state.totalTapsAllTime || 0).toLocaleString()}
@@ -140,14 +137,13 @@ export default function PlayerInfoMenu({ isOpen, onClose, openMenu }: Props) {
             </div>
           </div>
 
-          {/* ✅ FIX: Today's Progress with correct data mapping */}
+          {/* Today's Progress */}
           <div className="p-4 bg-gray-800/30 rounded-lg border border-gray-700/50">
             <h3 className="text-purple-300 font-semibold mb-3 flex items-center gap-2">
               <Clock className="w-4 h-4" />
               Today's Progress
             </h3>
             <div className="grid grid-cols-3 gap-4 text-sm">
-              {/* ✅ FIX: Use totalTapsToday for daily taps */}
               <div className="text-center">
                 <div className="text-white font-bold">
                   {Math.round(state.totalTapsToday || 0).toLocaleString()}
