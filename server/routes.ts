@@ -257,7 +257,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } 
   });
   
-  // ✅ NEW: Level-up endpoint
+  // ✅ LEVEL-UP: Uses lustPoints (LP) as currency
   app.post('/api/player/level-up', requireAuth, async (req, res) => {
     try {
       const player = await getPlayerState(req.player!);
@@ -274,11 +274,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const cost = nextLevelData.cost || 100;
-      const playerPoints = player.points || player.lustPoints || 0;
+      const currentLP = player.lustPoints || 0;  // ✅ FIXED: Use lustPoints!
       
-      // Check if player has enough points
-      if (playerPoints < cost) {
-        console.log(`❌ [LEVEL-UP] Insufficient points: ${playerPoints} < ${cost}`);
+      // Check if player has enough LP
+      if (currentLP < cost) {
+        console.log(`❌ [LEVEL-UP] Insufficient LP: ${currentLP} < ${cost}`);
         return res.status(400).json({ error: 'Insufficient points' });
       }
       
@@ -294,15 +294,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: 'Requirements not met' });
       }
       
-      // Deduct points and upgrade level
-      const newPoints = Math.round(playerPoints - cost);
+      // Deduct LP and upgrade level
+      const newLP = Math.round(currentLP - cost);
       const updatedPlayer = await updatePlayerState(req.player!, {
         level: nextLevel,
-        points: newPoints,
-        lustPoints: newPoints
+        lustPoints: newLP,
+        points: newLP  // ✅ Keep points in sync with lustPoints
       });
       
-      console.log(`✅ [LEVEL-UP] Player ${player.id} leveled up! Level ${currentLevel} → ${nextLevel}, Points: ${playerPoints} → ${newPoints}`);
+      console.log(`✅ [LEVEL-UP] Player ${player.id} leveled up! Level ${currentLevel} → ${nextLevel}, LP: ${currentLP} → ${newLP}`);
       
       res.json({ 
         success: true, 
