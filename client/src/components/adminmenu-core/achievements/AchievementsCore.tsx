@@ -28,7 +28,7 @@ export default function AchievementsCore() {
   const loadAchievements = async () => {
     try {
       setLoading(true);
-      const response = await apiRequest('GET', '/api/admin/achievements');
+      const response = await apiRequest('/api/admin/achievements');
       const data = await response.json();
       setAchievements(data.achievements || []);
     } catch (error) {
@@ -43,7 +43,7 @@ export default function AchievementsCore() {
     if (!confirm(`Delete achievement "${achievementId}"? This cannot be undone.`)) return;
     
     try {
-      const response = await apiRequest('DELETE', `/api/admin/achievements/${achievementId}`);
+      const response = await apiRequest(`/api/admin/achievements/${achievementId}`, { method: 'DELETE' });
       if (response.ok) {
         await loadAchievements();
         alert('Achievement deleted successfully!');

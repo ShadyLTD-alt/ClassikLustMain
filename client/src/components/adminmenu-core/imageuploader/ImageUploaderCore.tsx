@@ -21,7 +21,7 @@ export default function ImageUploaderCore() {
   const loadImages = async () => {
     try {
       setLoading(true);
-      const response = await apiRequest('GET', '/api/admin/images');
+      const response = await apiRequest('/api/admin/images');
       const data = await response.json();
       setImages(data.images || []);
     } catch (error) {
@@ -61,7 +61,7 @@ export default function ImageUploaderCore() {
       alert('Failed to upload image.');
     } finally {
       setUploading(false);
-      event.target.value = ''; // Reset file input
+      event.target.value = '';
     }
   };
 
@@ -69,7 +69,7 @@ export default function ImageUploaderCore() {
     if (!confirm(`Delete image "${filename}"? This cannot be undone.`)) return;
     
     try {
-      const response = await apiRequest('DELETE', `/api/admin/images/${encodeURIComponent(filename)}`);
+      const response = await apiRequest(`/api/admin/images/${encodeURIComponent(filename)}`, { method: 'DELETE' });
       if (response.ok) {
         await loadImages();
         alert('Image deleted successfully!');

@@ -28,7 +28,7 @@ export default function TasksCore() {
   const loadTasks = async () => {
     try {
       setLoading(true);
-      const response = await apiRequest('GET', '/api/admin/tasks');
+      const response = await apiRequest('/api/admin/tasks');
       const data = await response.json();
       setTasks(data.tasks || []);
     } catch (error) {
@@ -43,7 +43,7 @@ export default function TasksCore() {
     if (!confirm(`Delete task "${taskId}"? This cannot be undone.`)) return;
     
     try {
-      const response = await apiRequest('DELETE', `/api/admin/tasks/${taskId}`);
+      const response = await apiRequest(`/api/admin/tasks/${taskId}`, { method: 'DELETE' });
       if (response.ok) {
         await loadTasks();
         alert('Task deleted successfully!');
