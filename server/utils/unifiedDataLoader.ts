@@ -7,14 +7,8 @@ import fileLock from './fileLock';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-/**
- * Unified Data Loader - Single Source of Truth Pattern
- * Game data reads from main-gamedata subdirectories
- */
-
 const GAMEDATA_ROOT = path.join(__dirname, '../../main-gamedata');
 
-// In-memory caches for fast access
 const dataCache = {
   levels: new Map<string, any>(),
   tasks: new Map<string, any>(),
@@ -23,20 +17,17 @@ const dataCache = {
   characters: new Map<string, any>()
 };
 
-// Content type to folder mapping - USING YOUR EXISTING DIRECTORY STRUCTURE
+// ✅ FIXED: All data from progressive-data
 const FOLDER_MAP = {
   levels: 'progressive-data/levelup',
   tasks: 'progressive-data/tasks',
   achievements: 'progressive-data/achievements',
   upgrades: 'progressive-data/upgrades',
-  characters: 'character-data'  // ✅ USE character-data, NOT progressive-data/characters
+  characters: 'progressive-data/characters'  // ✅ FIXED: Use progressive-data/characters
 } as const;
 
 type ContentType = keyof typeof FOLDER_MAP;
 
-/**
- * Load single JSON file
- */
 async function loadJSONFile<T>(filePath: string): Promise<T | null> {
   try {
     const content = await fs.readFile(filePath, 'utf-8');
@@ -47,18 +38,12 @@ async function loadJSONFile<T>(filePath: string): Promise<T | null> {
   }
 }
 
-/**
- * Load all files from a content type folder
- */
 export async function loadGameData<T = any>(contentType: ContentType): Promise<T[]> {
   const folderName = FOLDER_MAP[contentType];
   const dirPath = path.join(GAMEDATA_ROOT, folderName);
   
   try {
-    // Ensure directory exists
     await fs.mkdir(dirPath, { recursive: true });
-    
-    // Read all JSON files
     const files = await fs.readdir(dirPath);
     const jsonFiles = files.filter(f => f.endsWith('.json'));
     
@@ -79,9 +64,6 @@ export async function loadGameData<T = any>(contentType: ContentType): Promise<T
   }
 }
 
-/**
- * Load single item by ID
- */
 export async function loadGameDataById<T = any>(
   contentType: ContentType,
   id: string
@@ -89,7 +71,6 @@ export async function loadGameDataById<T = any>(
   const folderName = FOLDER_MAP[contentType];
   let fileName: string;
   
-  // Handle special naming for levels (level-X.json)
   if (contentType === 'levels') {
     fileName = `level-${id}.json`;
   } else {
@@ -106,9 +87,6 @@ export async function loadGameDataById<T = any>(
   }
 }
 
-/**
- * Save item to gamedata folder + sync to DB
- */
 export async function saveGameData<T extends { id: string } | { level: number }>(
   contentType: ContentType,
   data: T
@@ -117,7 +95,6 @@ export async function saveGameData<T extends { id: string } | { level: number }>
   let fileName: string;
   let itemId: string;
   
-  // Handle special naming for levels
   if (contentType === 'levels' && 'level' in data) {
     itemId = String(data.level);
     fileName = `level-${data.level}.json`;
@@ -132,7 +109,6 @@ export async function saveGameData<T extends { id: string } | { level: number }>
   const filePath = path.join(dirPath, fileName);
   
   try {
-    // 1. Write to file with lock protection
     await fileLock.withLock(filePath, async () => {
       await fs.mkdir(dirPath, { recursive: true });
       await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8');
@@ -140,16 +116,13 @@ export async function saveGameData<T extends { id: string } | { level: number }>
     
     console.log(`💾 Saved ${contentType}/${fileName}`);
     
-    // 2. Update in-memory cache
     dataCache[contentType].set(itemId, data);
     
-    // 3. Sync to database (non-blocking, log errors but don't fail)
     try {
       await syncToDatabase(contentType, data);
       console.log(`🔄 Synced ${contentType}/${itemId} to database`);
     } catch (dbError: any) {
       console.warn(`⚠️  DB sync warning for ${contentType}/${itemId}:`, dbError.message);
-      // File is saved, DB sync failed - not critical
     }
     
     return { success: true };
@@ -162,9 +135,6 @@ export async function saveGameData<T extends { id: string } | { level: number }>
   }
 }
 
-/**
- * Delete item from gamedata folder + DB
- */
 export async function deleteGameData(
   contentType: ContentType,
   id: string
@@ -174,7 +144,6 @@ export async function deleteGameData(
   const filePath = path.join(GAMEDATA_ROOT, folderName, fileName);
   
   try {
-    // 1. Delete file
     try {
       await fs.unlink(filePath);
       console.log(`🗑️  Deleted ${contentType}/${fileName}`);
@@ -182,10 +151,8 @@ export async function deleteGameData(
       if (error.code !== 'ENOENT') throw error;
     }
     
-    // 2. Remove from cache
     dataCache[contentType].delete(id);
     
-    // 3. Delete from DB
     try {
       await deleteFromDatabase(contentType, id);
     } catch (dbError: any) {
@@ -202,9 +169,6 @@ export async function deleteGameData(
   }
 }
 
-/**
- * Sync game data to database
- */
 async function syncToDatabase(contentType: ContentType, data: any): Promise<void> {
   switch (contentType) {
     case 'levels':
@@ -231,17 +195,12 @@ async function syncToDatabase(contentType: ContentType, data: any): Promise<void
       }
       break;
       
-    // Tasks and achievements don't have DB tables currently
     case 'tasks':
     case 'achievements':
-      // These are file-only for now
       break;
   }
 }
 
-/**
- * Delete from database
- */
 async function deleteFromDatabase(contentType: ContentType, id: string): Promise<void> {
   switch (contentType) {
     case 'levels':
@@ -256,11 +215,8 @@ async function deleteFromDatabase(contentType: ContentType, id: string): Promise
   }
 }
 
-/**
- * Load all game data into memory cache and sync characters to DB
- */
 export async function syncAllGameData(): Promise<void> {
-  console.log('🚀 Loading all game data from main-gamedata directories...');
+  console.log('🚀 Loading all game data from progressive-data...');
   
   const types: ContentType[] = ['levels', 'tasks', 'achievements', 'upgrades', 'characters'];
   
@@ -273,14 +229,12 @@ export async function syncAllGameData(): Promise<void> {
       dataCache[type].set(key, item);
     }
     
-    // ✅ Sync all loaded characters to database after file load
     if (type === 'characters' && data.length > 0) {
       console.log(`🔄 Syncing ${data.length} characters to database...`);
       for (const character of data) {
         try {
           await storage.createCharacter(character);
         } catch {
-          // If create fails (duplicate), update instead
           await storage.updateCharacter(character.id, character);
         }
       }
@@ -289,7 +243,7 @@ export async function syncAllGameData(): Promise<void> {
   }
   
   console.log(`
-  ✅ Game Data Loaded:
+  ✅ Game Data Loaded (progressive-data ONLY):
   - Levels: ${dataCache.levels.size}
   - Tasks: ${dataCache.tasks.size}
   - Achievements: ${dataCache.achievements.size}
@@ -298,9 +252,6 @@ export async function syncAllGameData(): Promise<void> {
   `);
 }
 
-/**
- * Get data from memory cache
- */
 export function getDataFromMemory<T = any>(contentType: ContentType): T[] {
   return Array.from(dataCache[contentType].values());
 }
@@ -309,7 +260,6 @@ export function getDataByIdFromMemory<T = any>(contentType: ContentType, id: str
   return dataCache[contentType].get(id);
 }
 
-// Re-export specific getters for backwards compatibility
 export const getLevelsFromMemory = () => getDataFromMemory('levels');
 export const getTasksFromMemory = () => getDataFromMemory('tasks');
 export const getAchievementsFromMemory = () => getDataFromMemory('achievements');
@@ -322,14 +272,12 @@ export const getAchievementFromMemory = (id: string) => getDataByIdFromMemory('a
 export const getUpgradeFromMemory = (id: string) => getDataByIdFromMemory('upgrades', id);
 export const getCharacterFromMemory = (id: string) => getDataByIdFromMemory('characters', id);
 
-// Re-export save functions for backwards compatibility
 export const saveLevelToJSON = (level: any) => saveGameData('levels', level);
 export const saveTaskToJSON = (task: any) => saveGameData('tasks', task);
 export const saveAchievementToJSON = (achievement: any) => saveGameData('achievements', achievement);
 export const saveUpgradeToJSON = (upgrade: any) => saveGameData('upgrades', upgrade);
 export const saveCharacterToJSON = (character: any) => saveGameData('characters', character);
 
-// Export sync functions
 export const syncLevels = () => loadGameData('levels').then(data => {
   dataCache.levels.clear();
   data.forEach(item => dataCache.levels.set(String(item.level), item));
@@ -355,4 +303,4 @@ export const syncCharacters = () => loadGameData('characters').then(data => {
   data.forEach(item => dataCache.characters.set(item.id, item));
 });
 
-console.log('✅ [UNIFIED DATA LOADER] Using character-data and progressive-data directories');
+console.log('✅ [UNIFIED DATA LOADER] Using progressive-data for ALL game data');
