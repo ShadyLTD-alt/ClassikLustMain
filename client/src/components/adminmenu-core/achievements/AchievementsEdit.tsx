@@ -1,13 +1,16 @@
 import React, { useState } from 'react';
 import { Save, X } from 'lucide-react';
+import { apiRequest } from '@/lib/queryClient';
 
 interface Achievement {
   id: string;
   name: string;
   description: string;
-  icon: string;
-  requirement: any;
-  reward: any;
+  requirementType: string;
+  target: number;
+  rewardType: string;
+  rewardAmount: number;
+  icon?: string;
 }
 
 interface AchievementsEditProps {
@@ -25,15 +28,16 @@ export default function AchievementsEdit({ achievement, onSave, onCancel }: Achi
     setSaving(true);
 
     try {
-      const response = await fetch(`/api/admin/achievements/${achievement.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      });
-
-      if (response.ok) onSave();
+      const response = await apiRequest('PUT', `/api/admin/achievements/${achievement.id}`, formData);
+      if (response.ok) {
+        alert('Achievement updated successfully!');
+        onSave();
+      } else {
+        throw new Error('Failed to update achievement');
+      }
     } catch (error) {
       console.error('Failed to update achievement:', error);
+      alert('Failed to update achievement. Check console for details.');
     } finally {
       setSaving(false);
     }
@@ -49,28 +53,48 @@ export default function AchievementsEdit({ achievement, onSave, onCancel }: Achi
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">Name</label>
+            <label className="block text-sm font-medium text-gray-300 mb-2">Name *</label>
             <input type="text" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white" required />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">Icon</label>
-            <input type="text" value={formData.icon} onChange={(e) => setFormData({ ...formData, icon: e.target.value })} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white" required />
+            <input type="text" value={formData.icon || ''} onChange={(e) => setFormData({ ...formData, icon: e.target.value })} placeholder="🏆" className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white" />
           </div>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-300 mb-2">Description</label>
-          <textarea value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white" rows={3} required />
+          <label className="block text-sm font-medium text-gray-300 mb-2">Description *</label>
+          <textarea value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white" rows={2} required />
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-2">Requirement (JSON)</label>
-          <textarea value={JSON.stringify(formData.requirement, null, 2)} onChange={(e) => { try { setFormData({ ...formData, requirement: JSON.parse(e.target.value) }); } catch {} }} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white font-mono text-sm" rows={4} />
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">Requirement Type *</label>
+            <select value={formData.requirementType} onChange={(e) => setFormData({ ...formData, requirementType: e.target.value })} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white">
+              <option value="lpTotal">LP Total</option>
+              <option value="upgradeCount">Upgrade Count</option>
+              <option value="characterUnlocked">Characters Unlocked</option>
+              <option value="level">Player Level</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">Target *</label>
+            <input type="number" value={formData.target} onChange={(e) => setFormData({ ...formData, target: parseInt(e.target.value) })} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white" min="1" required />
+          </div>
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-2">Reward (JSON)</label>
-          <textarea value={JSON.stringify(formData.reward, null, 2)} onChange={(e) => { try { setFormData({ ...formData, reward: JSON.parse(e.target.value) }); } catch {} }} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white font-mono text-sm" rows={4} />
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">Reward Type *</label>
+            <select value={formData.rewardType} onChange={(e) => setFormData({ ...formData, rewardType: e.target.value })} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white">
+              <option value="lp">Lust Points (LP)</option>
+              <option value="lg">Lust Gems (LG)</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">Reward Amount *</label>
+            <input type="number" value={formData.rewardAmount} onChange={(e) => setFormData({ ...formData, rewardAmount: parseInt(e.target.value) })} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white" min="0" required />
+          </div>
         </div>
 
         <div className="flex gap-3 pt-4">

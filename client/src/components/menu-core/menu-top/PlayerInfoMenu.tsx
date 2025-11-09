@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { User, Clock, TrendingUp, Crown, Trophy } from 'lucide-react';
+import { User, Clock, Crown } from 'lucide-react';
 import { apiRequest } from '@/lib/queryClient';
 
 interface Props { 
@@ -13,15 +13,14 @@ interface Props {
 }
 
 export default function PlayerInfoMenu({ isOpen, onClose, openMenu }: Props) {
-  // ✅ FIX: Use React Query for real-time player data sync
-  const { data: playerData, refetch } = useQuery({
+  const { data: playerData } = useQuery({
     queryKey: ['/api/player/me'],
     queryFn: async () => {
       const r = await apiRequest('GET', '/api/player/me');
       return await r.json();
     },
-    enabled: isOpen, // Only fetch when modal is open
-    refetchOnMount: 'always', // Always refetch when modal opens
+    enabled: isOpen,
+    refetchOnMount: 'always',
   });
 
   const state = playerData?.player;
@@ -29,15 +28,13 @@ export default function PlayerInfoMenu({ isOpen, onClose, openMenu }: Props) {
   if (!state) return null;
 
   const handleCharacterGalleryClick = () => {
-    onClose(); // Close profile
-    if (openMenu) {
-      openMenu('character-gallery'); // Open character gallery
-    }
+    onClose();
+    if (openMenu) openMenu('character-gallery');
   };
   
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl bg-gray-900/95 border-purple-500/30 z-[9999]">
+      <DialogContent className="max-w-2xl bg-gray-900/98 border-purple-500/30" style={{ zIndex: 99999 }}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-purple-300">
             <User className="w-5 h-5" />Player Profile
@@ -45,9 +42,7 @@ export default function PlayerInfoMenu({ isOpen, onClose, openMenu }: Props) {
         </DialogHeader>
         
         <div className="space-y-6">
-          {/* Player Info Header with Crown Button */}
           <div className="flex items-center gap-4 p-4 bg-gray-800/30 rounded-lg border border-gray-700/50">
-            {/* ✅ FIX: Crown button opens character gallery */}
             <Button
               onClick={handleCharacterGalleryClick}
               className="w-12 h-12 bg-purple-600/20 hover:bg-purple-600/30 rounded-lg flex items-center justify-center transition-colors border border-purple-500/30 p-0"
@@ -82,7 +77,6 @@ export default function PlayerInfoMenu({ isOpen, onClose, openMenu }: Props) {
             </div>
           </div>
 
-          {/* Main Stats Grid */}
           <div className="grid grid-cols-3 gap-4">
             <div className="p-4 bg-gray-800/30 rounded-lg border border-gray-700/50 text-center">
               <div className="text-2xl font-bold text-transparent bg-gradient-to-r from-pink-400 via-purple-400 to-pink-500 bg-clip-text">
@@ -106,7 +100,6 @@ export default function PlayerInfoMenu({ isOpen, onClose, openMenu }: Props) {
             </div>
           </div>
 
-          {/* Player Stats Grid */}
           <div className="grid grid-cols-2 gap-4">
             <div className="p-3 bg-gray-800/30 rounded-lg border border-gray-700/50">
               <div className="text-lg font-bold text-white">
@@ -137,7 +130,6 @@ export default function PlayerInfoMenu({ isOpen, onClose, openMenu }: Props) {
             </div>
           </div>
 
-          {/* Today's Progress */}
           <div className="p-4 bg-gray-800/30 rounded-lg border border-gray-700/50">
             <h3 className="text-purple-300 font-semibold mb-3 flex items-center gap-2">
               <Clock className="w-4 h-4" />
