@@ -1,0 +1,14 @@
+{
+  "level": 17,
+  "cost": 78000,
+  "requirements": [],
+  "rewards": {
+    "lustPoints": 40000,
+    "lustGems": 310
+  },
+  "unlocks": [
+    "Legendary Upgrades"
+  ],
+  "createdAt": "2025-11-09T07:00:00.000Z",
+  "updatedAt": "2025-11-09T07:00:00.000Z"
+}

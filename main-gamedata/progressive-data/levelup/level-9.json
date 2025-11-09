@@ -1,0 +1,14 @@
+{
+  "level": 9,
+  "cost": 9000,
+  "requirements": [],
+  "rewards": {
+    "lustPoints": 5000,
+    "lustGems": 65
+  },
+  "unlocks": [
+    "Advanced Upgrades"
+  ],
+  "createdAt": "2025-11-09T07:00:00.000Z",
+  "updatedAt": "2025-11-09T07:00:00.000Z"
+}

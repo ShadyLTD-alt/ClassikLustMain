@@ -1,0 +1,14 @@
+{
+  "level": 13,
+  "cost": 27500,
+  "requirements": [],
+  "rewards": {
+    "lustPoints": 16000,
+    "lustGems": 150
+  },
+  "unlocks": [
+    "VIP Features"
+  ],
+  "createdAt": "2025-11-09T07:00:00.000Z",
+  "updatedAt": "2025-11-09T07:00:00.000Z"
+}

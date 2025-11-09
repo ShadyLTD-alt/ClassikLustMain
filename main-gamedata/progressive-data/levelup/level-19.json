@@ -1,0 +1,14 @@
+{
+  "level": 19,
+  "cost": 130000,
+  "requirements": [],
+  "rewards": {
+    "lustPoints": 65000,
+    "lustGems": 450
+  },
+  "unlocks": [
+    "Ultimate Abilities"
+  ],
+  "createdAt": "2025-11-09T07:00:00.000Z",
+  "updatedAt": "2025-11-09T07:00:00.000Z"
+}

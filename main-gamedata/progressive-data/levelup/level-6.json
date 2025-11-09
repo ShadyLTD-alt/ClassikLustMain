@@ -1,0 +1,15 @@
+{
+  "level": 6,
+  "cost": 3000,
+  "requirements": [],
+  "rewards": {
+    "lustPoints": 1800,
+    "lustGems": 30,
+    "upgradeUnlocks": ["passive-income"]
+  },
+  "unlocks": [
+    "Upgrade: Passive Income"
+  ],
+  "createdAt": "2025-11-09T07:00:00.000Z",
+  "updatedAt": "2025-11-09T07:00:00.000Z"
+}

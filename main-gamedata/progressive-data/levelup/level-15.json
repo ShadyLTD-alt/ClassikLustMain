@@ -1,0 +1,14 @@
+{
+  "level": 15,
+  "cost": 45000,
+  "requirements": [],
+  "rewards": {
+    "lustPoints": 25000,
+    "lustGems": 220
+  },
+  "unlocks": [
+    "Master Tier Upgrades"
+  ],
+  "createdAt": "2025-11-09T07:00:00.000Z",
+  "updatedAt": "2025-11-09T07:00:00.000Z"
+}

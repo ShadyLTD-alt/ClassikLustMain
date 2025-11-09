@@ -1,0 +1,14 @@
+{
+  "level": 21,
+  "cost": 220000,
+  "requirements": [],
+  "rewards": {
+    "lustPoints": 110000,
+    "lustGems": 700
+  },
+  "unlocks": [
+    "Prestige System"
+  ],
+  "createdAt": "2025-11-09T07:00:00.000Z",
+  "updatedAt": "2025-11-09T07:00:00.000Z"
+}

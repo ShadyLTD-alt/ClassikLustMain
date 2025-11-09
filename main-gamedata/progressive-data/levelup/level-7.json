@@ -1,0 +1,15 @@
+{
+  "level": 7,
+  "cost": 4500,
+  "requirements": [],
+  "rewards": {
+    "lustPoints": 2500,
+    "lustGems": 40,
+    "characterUnlocks": ["Aria"]
+  },
+  "unlocks": [
+    "Character unlock: Aria"
+  ],
+  "createdAt": "2025-11-09T07:00:00.000Z",
+  "updatedAt": "2025-11-09T07:00:00.000Z"
+}

@@ -1,0 +1,15 @@
+{
+  "level": 12,
+  "cost": 21000,
+  "requirements": [],
+  "rewards": {
+    "lustPoints": 12500,
+    "lustGems": 120,
+    "upgradeUnlocks": ["energy-regeneration"]
+  },
+  "unlocks": [
+    "Upgrade: Energy Regeneration"
+  ],
+  "createdAt": "2025-11-09T07:00:00.000Z",
+  "updatedAt": "2025-11-09T07:00:00.000Z"
+}

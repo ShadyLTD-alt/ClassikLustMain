@@ -1,0 +1,15 @@
+{
+  "level": 8,
+  "cost": 6500,
+  "requirements": [],
+  "rewards": {
+    "lustPoints": 3500,
+    "lustGems": 50,
+    "upgradeUnlocks": ["critical-hit"]
+  },
+  "unlocks": [
+    "Upgrade: Critical Hit"
+  ],
+  "createdAt": "2025-11-09T07:00:00.000Z",
+  "updatedAt": "2025-11-09T07:00:00.000Z"
+}

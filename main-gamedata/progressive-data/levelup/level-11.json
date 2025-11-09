@@ -1,0 +1,14 @@
+{
+  "level": 11,
+  "cost": 16000,
+  "requirements": [],
+  "rewards": {
+    "lustPoints": 9500,
+    "lustGems": 100
+  },
+  "unlocks": [
+    "Energy System Upgrades"
+  ],
+  "createdAt": "2025-11-09T07:00:00.000Z",
+  "updatedAt": "2025-11-09T07:00:00.000Z"
+}

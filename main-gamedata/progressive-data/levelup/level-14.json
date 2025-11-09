@@ -1,0 +1,14 @@
+{
+  "level": 14,
+  "cost": 35000,
+  "requirements": [],
+  "rewards": {
+    "lustPoints": 20000,
+    "lustGems": 180
+  },
+  "unlocks": [
+    "Special Characters"
+  ],
+  "createdAt": "2025-11-09T07:00:00.000Z",
+  "updatedAt": "2025-11-09T07:00:00.000Z"
+}
