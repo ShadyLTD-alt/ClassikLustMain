@@ -216,7 +216,7 @@ export function AdminFAB({ onOpenDebugger }: AdminFABProps) {
             {/* Add LustPoints */}
             <Button
               onClick={() => {
-                handleAddCurrency('points', 10000);
+                handleAddCurrency('points', 100000);
                 setIsOpen(false);
               }}
               size="sm" 
