@@ -65,6 +65,7 @@ export interface LevelConfig {
   };
   createdAt?: string;  // ADD THIS
   updatedAt?: string;  // ADD THIS
+  unlockedAt?: string;
 }
 
 export interface ThemeConfig {

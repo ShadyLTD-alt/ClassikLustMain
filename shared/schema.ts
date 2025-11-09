@@ -13,7 +13,6 @@ export const players = pgTable("players", {
   energy: integer("energy").default(1000).notNull(),
   energyMax: integer("energyMax").default(1000).notNull(),
   level: integer("level").default(1).notNull(),
-  experience: integer("experience").default(0).notNull(),
   passiveIncomeRate: integer("passiveIncomeRate").default(0).notNull(),
   lastTapValue: integer("lastTapValue").default(1).notNull(),
   isAdmin: boolean("isAdmin").default(false).notNull(),
@@ -80,6 +79,7 @@ export const levels = pgTable("levels", {
   unlocks: jsonb("unlocks").notNull().default('[]').$type<string[]>(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+  unlockedAt: timestamp("unlockedAt").defaultNow().notNull()
 });
 
 export const tasks = pgTable("tasks", {

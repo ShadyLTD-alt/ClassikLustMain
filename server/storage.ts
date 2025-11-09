@@ -99,7 +99,7 @@ function sanitizeForDB(data: any): any {
   // Ensure numeric fields are actual numbers (not strings)
   const numericFields = [
     'points', 'lustPoints', 'lustGems', 'energy', 'energyMax', 'level',
-    'experience', 'passiveIncomeRate', 'lastTapValue', 'totalTapsAllTime',
+    'passiveIncomeRate', 'lastTapValue', 'totalTapsAllTime',
     'totalTapsToday', 'lpEarnedToday', 'upgradesPurchasedToday',
     'consecutiveDays', 'boostMultiplier'
   ];
