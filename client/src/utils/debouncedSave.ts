@@ -14,7 +14,6 @@ type PlayerData = {
   points?: number;
   energy?: number;
   level?: number;
-  experience?: number;
   lustPoints?: number;
   selectedCharacter?: string;
   upgrades?: Record<string, number>;

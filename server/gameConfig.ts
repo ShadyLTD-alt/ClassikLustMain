@@ -61,7 +61,6 @@ export interface TaskConfig {
   rewards: {
     lustPoints?: number;
     lustGems?: number;
-    experience?: number;
   };
   requirements?: {
     minLevel?: number;
@@ -79,7 +78,6 @@ export interface AchievementConfig {
   rewards: {
     lustPoints?: number;
     lustGems?: number;
-    experience?: number;
     title?: string;
   };
   isHidden?: boolean;
@@ -114,15 +112,7 @@ export const GAME_CONSTANTS = {
 // HELPER FUNCTIONS
 // ============================================================================
 
-/**
- * Calculate experience required for a level
- */
-export function calculateExpRequirement(level: number): number {
-  return Math.floor(
-    GAME_CONSTANTS.BASE_EXP_REQUIREMENT * 
-    Math.pow(GAME_CONSTANTS.EXP_MULTIPLIER, level - 1)
-  );
-}
+
 
 /**
  * Calculate upgrade cost for a level

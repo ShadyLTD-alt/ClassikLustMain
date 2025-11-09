@@ -119,7 +119,6 @@ class PlayerStateManager {
       energy: 1000,
       energyMax: 1000,
       level: 1, 
-      experience: 0, 
       passiveIncomeRate: 0, 
       energyRegenRate: 1,
       lastTapValue: 1, 
@@ -160,7 +159,7 @@ class PlayerStateManager {
         sanitized[field] = new Date().toISOString();
       }
     });
-    ['points', 'lustPoints', 'lustGems', 'energy', 'energyMax', 'level', 'experience', 'passiveIncomeRate', 'energyRegenRate', 'lastTapValue', 'totalTapsAllTime', 'totalTapsToday', 'lpEarnedToday', 'upgradesPurchasedToday', 'consecutiveDays', 'boostMultiplier'].forEach(f => { 
+    ['points', 'lustPoints', 'lustGems', 'energy', 'energyMax', 'level', 'passiveIncomeRate', 'energyRegenRate', 'lastTapValue', 'totalTapsAllTime', 'totalTapsToday', 'lpEarnedToday', 'upgradesPurchasedToday', 'consecutiveDays', 'boostMultiplier'].forEach(f => { 
       if (typeof sanitized[f] === 'number') sanitized[f] = Math.round(sanitized[f]); 
     });
     return sanitized;
@@ -362,7 +361,7 @@ export async function getPlayerState(player: any) {
 export async function updatePlayerState(player: any, updates: any) { 
   const current = await playerStateManager.loadPlayer(player); 
   const updated = { ...current, ...updates, updatedAt: new Date().toISOString() }; 
-  ['points', 'lustPoints', 'lustGems', 'energy', 'energyMax', 'level', 'experience', 'passiveIncomeRate', 'energyRegenRate', 'lastTapValue', 'totalTapsAllTime', 'totalTapsToday', 'lpEarnedToday', 'upgradesPurchasedToday', 'consecutiveDays', 'boostMultiplier'].forEach(field => { 
+  ['points', 'lustPoints', 'lustGems', 'energy', 'energyMax', 'level', 'passiveIncomeRate', 'energyRegenRate', 'lastTapValue', 'totalTapsAllTime', 'totalTapsToday', 'lpEarnedToday', 'upgradesPurchasedToday', 'consecutiveDays', 'boostMultiplier'].forEach(field => { 
     if (typeof updated[field] === 'number') updated[field] = Math.round(updated[field]); 
   }); 
   await playerStateManager.savePlayer(player, updated); 
