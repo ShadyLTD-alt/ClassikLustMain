@@ -31,7 +31,10 @@ export default function UpgradesEdit({ upgrade, onSave, onCancel }: UpgradesEdit
     e.preventDefault();
     setSaving(true);
     try {
-      const response = await apiRequest('PUT', `/api/admin/upgrades/${upgrade.id}`, formData);
+      const response = await apiRequest(`/api/admin/upgrades/${upgrade.id}`, {
+        method: 'PUT',
+        body: JSON.stringify(formData)
+      });
       if (response.ok) {
         alert('Upgrade updated successfully!');
         onSave();

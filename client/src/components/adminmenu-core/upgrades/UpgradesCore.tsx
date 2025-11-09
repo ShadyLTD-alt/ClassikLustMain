@@ -30,7 +30,7 @@ export default function UpgradesCore() {
   const loadUpgrades = async () => {
     try {
       setLoading(true);
-      const response = await apiRequest('GET', '/api/admin/upgrades');
+      const response = await apiRequest('/api/admin/upgrades');
       const data = await response.json();
       setUpgrades(data.upgrades || []);
     } catch (error) {
@@ -44,7 +44,7 @@ export default function UpgradesCore() {
   const handleDelete = async (upgradeId: string) => {
     if (!confirm(`Delete upgrade "${upgradeId}"? This cannot be undone.`)) return;
     try {
-      const response = await apiRequest('DELETE', `/api/admin/upgrades/${upgradeId}`);
+      const response = await apiRequest(`/api/admin/upgrades/${upgradeId}`, { method: 'DELETE' });
       if (response.ok) {
         await loadUpgrades();
         alert('Upgrade deleted successfully!');
@@ -70,7 +70,6 @@ export default function UpgradesCore() {
 
   return (
     <div className="space-y-4">
-      {/* Header */}
       <div className="flex justify-between items-center">
         <div>
           <h3 className="text-lg font-semibold text-white">Upgrade Management</h3>
@@ -85,7 +84,6 @@ export default function UpgradesCore() {
         </button>
       </div>
       
-      {/* Upgrades List */}
       <div className="space-y-3">
         {loading ? (
           <div className="text-center py-8">
@@ -141,7 +139,6 @@ export default function UpgradesCore() {
         )}
       </div>
       
-      {/* Stats */}
       {!loading && upgrades.length > 0 && (
         <div className="text-sm text-gray-400 text-center pt-2 border-t border-gray-800">
           Total Upgrades: {upgrades.length}
