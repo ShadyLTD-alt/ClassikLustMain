@@ -1,11 +1,13 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log as viteLog } from "./vite";
-import { syncAllGameData } from "./utils/unifiedDataLoader"; // ✅ CHANGED: Use unified loader
+import { syncAllGameData } from "./utils/unifiedDataLoader";
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
 import logger from "./logger";
+import adminRouter from "./routes/admin";
+import { requireAuth, requireAdmin } from "./middleware/auth";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -109,6 +111,11 @@ app.use((req, res, next) => {
   logger.info('📝 Registering routes...');
   const server = await registerRoutes(app);
 
+  // ✅ REGISTER ADMIN ROUTES - Full CRUD for all entities
+  logger.info('🔧 Registering admin routes...');
+  app.use('/api/admin', requireAuth, requireAdmin, adminRouter);
+  logger.info('✅ Admin routes registered at /api/admin/*');
+
   // Add Luna API routes if available
   if (luna && lunaRouter) {
     app.use('/api/luna', lunaRouter);
@@ -156,6 +163,7 @@ app.use((req, res, next) => {
     logger.info(`✅ Server listening on port ${port}`);
     logger.info(`✅ Server is ready and accepting connections on http://0.0.0.0:${port}`);
     logger.info(`📦 Game Config: Using unifiedDataLoader (progressive-data only)`);
+    logger.info(`🔧 Admin Panel API: http://0.0.0.0:${port}/api/admin/*`);
 
     // Start Luna monitoring if initialized
     if (luna) {
