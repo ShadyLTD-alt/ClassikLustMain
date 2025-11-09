@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Save, X } from 'lucide-react';
+import { apiRequest } from '@/lib/queryClient';
 
 interface Task {
   id: string;
@@ -25,15 +26,16 @@ export default function TasksEdit({ task, onSave, onCancel }: TasksEditProps) {
     setSaving(true);
 
     try {
-      const response = await fetch(`/api/admin/tasks/${task.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      });
-
-      if (response.ok) onSave();
+      const response = await apiRequest('PUT', `/api/admin/tasks/${task.id}`, formData);
+      if (response.ok) {
+        alert('Task updated successfully!');
+        onSave();
+      } else {
+        throw new Error('Failed to update task');
+      }
     } catch (error) {
       console.error('Failed to update task:', error);
+      alert('Failed to update task. Check console for details.');
     } finally {
       setSaving(false);
     }
@@ -48,12 +50,12 @@ export default function TasksEdit({ task, onSave, onCancel }: TasksEditProps) {
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-sm font-medium text-gray-300 mb-2">Name</label>
+          <label className="block text-sm font-medium text-gray-300 mb-2">Name *</label>
           <input type="text" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white" required />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-300 mb-2">Description</label>
+          <label className="block text-sm font-medium text-gray-300 mb-2">Description *</label>
           <textarea value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white" rows={2} required />
         </div>
 
