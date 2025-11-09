@@ -8,11 +8,13 @@ interface Task {
   id: string;
   name: string;
   description: string;
-  requirementType: string;
-  target: number;
-  rewardType: string;
-  rewardAmount: number;
+  requirementType?: string;
+  target?: number;
+  rewardType?: string;
+  rewardAmount?: number;
   resetInterval?: string;
+  requirement?: any;
+  reward?: any;
 }
 
 export default function TasksCore() {
@@ -106,10 +108,10 @@ export default function TasksCore() {
                 </div>
                 <div className="flex gap-3 mt-2 text-xs">
                   <span className="bg-gray-700 px-2 py-0.5 rounded">
-                    {task.requirementType}: {task.target}
+                    {task.requirementType || 'Custom'}: {task.target || 'N/A'}
                   </span>
                   <span className="bg-green-900/30 text-green-300 px-2 py-0.5 rounded">
-                    Reward: {task.rewardAmount} {task.rewardType.toUpperCase()}
+                    Reward: {task.rewardAmount || 0} {(task.rewardType?.toUpperCase() || 'LP')}
                   </span>
                 </div>
               </div>
