@@ -1,6 +1,6 @@
 import React from 'react';
 import { useGame } from '@/contexts/GameContext';
-import { User, Crown, Zap, Flame } from 'lucide-react';
+import { User, Zap, Flame } from 'lucide-react';
 import PlayerInfoMenu from './PlayerInfoMenu';
 import CharacterGalleryMenu from './CharacterGalleryMenu';
 import BoostStatusMenu from './BoostStatusMenu';
@@ -29,7 +29,7 @@ export default function TopMenuManager({ activeMenu, openMenu, closeMenu }: Prop
   
   return (
     <>
-      {/* ✅ REMOVED: Crown button from top nav bar (now only in PlayerInfoMenu) */}
+      {/* ✅ Top Nav Bar - Crown removed, only in PlayerInfoMenu */}
       <div className="fixed top-0 left-0 right-0 z-30 bg-black/90 backdrop-blur border-b border-gray-700">
         <div className="mx-auto max-w-5xl px-4 py-3">
           <div className="flex items-center justify-between">

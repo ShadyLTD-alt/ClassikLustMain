@@ -5,7 +5,8 @@ import { Badge } from '@/components/ui/badge';
 import UpgradesMenu from './UpgradesMenu';
 import ChatMenu from './ChatMenu';
 import LevelMenu from './LevelMenu';
-import TasksMenu from './TasksMenu';
+// ✅ FIX: Use TasksAchievementsMenuV2 instead of basic TasksMenu
+import TasksAchievementsMenuV2 from '@/components/TasksAchievementsMenuV2';
 
 export interface BottomMenuConfig {
   id: string;
@@ -40,7 +41,7 @@ const BOTTOM_MENUS: BottomMenuConfig[] = [
     id: 'tasks',
     label: 'Tasks',
     icon: '🏆',
-    component: TasksMenu,
+    component: TasksAchievementsMenuV2, // ✅ Using V2 now!
     getBadgeCount: () => {
       return (window as any).tasksBadgeCount || 0;
     }
