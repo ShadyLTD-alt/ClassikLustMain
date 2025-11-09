@@ -21,7 +21,7 @@ export default function LevelUp({ isOpen, onClose }: LevelUpProps) {
   const { data: playerData, isLoading: playerLoading } = useQuery({
     queryKey: ['/api/player/me'],
     queryFn: async () => {
-      const response = await apiRequest('GET', '/api/player/me');
+      const response = await apiRequest('/api/player/me', { method: 'GET' });
       const data = await response.json();
       return data.player;
     },
@@ -33,7 +33,7 @@ export default function LevelUp({ isOpen, onClose }: LevelUpProps) {
     queryKey: ['/api/levels', playerData?.level + 1],
     queryFn: async () => {
       if (!playerData) return null;
-      const response = await apiRequest('GET', `/api/levels/${playerData.level + 1}`);
+      const response = await apiRequest(`/api/levels/${playerData.level + 1}`, { method: 'GET' });
       if (!response.ok) return null;
       const data = await response.json();
       return data.level;
@@ -45,7 +45,7 @@ export default function LevelUp({ isOpen, onClose }: LevelUpProps) {
   const { data: upgradesData } = useQuery({
     queryKey: ['/api/upgrades'],
     queryFn: async () => {
-      const response = await apiRequest('GET', '/api/upgrades');
+      const response = await apiRequest('/api/upgrades', { method: 'GET' });
       const data = await response.json();
       return data;
     },
@@ -119,7 +119,7 @@ export default function LevelUp({ isOpen, onClose }: LevelUpProps) {
     
     setIsLevelingUp(true);
     try {
-      const response = await apiRequest('POST', '/api/player/level-up');
+      const response = await apiRequest('/api/player/level-up', { method: 'POST' });
       
       if (response.ok) {
         toast({
