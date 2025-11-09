@@ -257,6 +257,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } 
   });
   
+  // ✅ NEW: Level-up endpoint
+  app.post('/api/player/level-up', requireAuth, async (req, res) => {
+    try {
+      const player = await getPlayerState(req.player!);
+      const currentLevel = player.level || 1;
+      const nextLevel = currentLevel + 1;
+      
+      console.log(`🎮 [LEVEL-UP] Player ${player.id} attempting level-up from ${currentLevel} to ${nextLevel}`);
+      
+      // Get next level data
+      const nextLevelData = getLevelsFromMemory().find(l => l.level === nextLevel);
+      if (!nextLevelData) {
+        console.log(`❌ [LEVEL-UP] No level ${nextLevel} data found`);
+        return res.status(400).json({ error: 'Maximum level reached' });
+      }
+      
+      const cost = nextLevelData.cost || 100;
+      const playerPoints = player.points || player.lustPoints || 0;
+      
+      // Check if player has enough points
+      if (playerPoints < cost) {
+        console.log(`❌ [LEVEL-UP] Insufficient points: ${playerPoints} < ${cost}`);
+        return res.status(400).json({ error: 'Insufficient points' });
+      }
+      
+      // Check requirements
+      const requirements = nextLevelData.requirements || [];
+      const requirementsMet = requirements.every((req: any) => {
+        const playerUpgradeLevel = player.upgrades?.[req.upgradeId] || 0;
+        return playerUpgradeLevel >= req.minLevel;
+      });
+      
+      if (!requirementsMet) {
+        console.log(`❌ [LEVEL-UP] Requirements not met`);
+        return res.status(400).json({ error: 'Requirements not met' });
+      }
+      
+      // Deduct points and upgrade level
+      const newPoints = Math.round(playerPoints - cost);
+      const updatedPlayer = await updatePlayerState(req.player!, {
+        level: nextLevel,
+        points: newPoints,
+        lustPoints: newPoints
+      });
+      
+      console.log(`✅ [LEVEL-UP] Player ${player.id} leveled up! Level ${currentLevel} → ${nextLevel}, Points: ${playerPoints} → ${newPoints}`);
+      
+      res.json({ 
+        success: true, 
+        player: updatedPlayer,
+        leveledUp: true,
+        newLevel: nextLevel,
+        pointsSpent: cost
+      });
+    } catch (e: any) {
+      console.error('[LEVEL-UP] Error:', e);
+      res.status(500).json({ error: e.message });
+    }
+  });
+  
   app.get('/api/upgrades', requireAuth, (_req, res) => { 
     res.json({ upgrades: getUpgradesFromMemory() }); 
   });
