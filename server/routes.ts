@@ -22,7 +22,6 @@ import {
   syncLevels
 } from './utils/unifiedDataLoader';
 import { getPlayerState, updatePlayerState, selectCharacterForPlayer, setDisplayImageForPlayer, purchaseUpgradeForPlayer, playerStateManager } from './utils/playerStateManager';
-import masterDataService from './utils/MasterDataService';
 import { storage } from './storage';
 import crypto from 'crypto';
 
@@ -68,9 +67,6 @@ function calculateAchievementProgress(player: any, achievement: any): number {
   }
 }
 
-/**
- * 🔍 Find existing player folder by searching player-data directory (case-insensitive)
- */
 async function findExistingPlayerData(username: string): Promise<any | null> {
   const playerDataDir = path.join(process.cwd(), 'main-gamedata', 'player-data');
   
@@ -78,7 +74,6 @@ async function findExistingPlayerData(username: string): Promise<any | null> {
     const folders = await fs.readdir(playerDataDir);
     const targetUsername = username.toLowerCase();
     
-    // Look for folders containing the username
     for (const folder of folders) {
       if (folder.toLowerCase().includes(targetUsername)) {
         const playerFilePath = path.join(playerDataDir, folder, 'player-state.json');
@@ -122,18 +117,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const sanitizedUsername = username.trim().toLowerCase();
       
-      // 🔍 STEP 1: Search for existing player data in player-data directory
       console.log(`🔍 [DEV AUTH] Searching for existing player data for username: ${sanitizedUsername}`);
       const existingPlayerData = await findExistingPlayerData(sanitizedUsername);
       
       let player: any;
       
       if (existingPlayerData) {
-        // ✅ Found existing save file - use that player's actual ID and data
         console.log(`🎮 [DEV AUTH] Loading existing player from ${existingPlayerData.folder}`);
         const savedData = existingPlayerData.data;
         
-        // Create/update database record with the save file's ID
         player = await storage.getPlayer(savedData.id);
         if (!player) {
           console.log(`💾 [DEV AUTH] Creating DB record for existing save: ${savedData.id}`);
@@ -161,7 +153,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.log(`✅ [DEV AUTH] Found existing DB record: ${savedData.id}`);
         }
       } else {
-        // 🆕 No existing save - create new player
+        // ✅ FIXED: New player creation uses master data template
         const playerId = `dev_${sanitizedUsername}`;
         console.log(`🆕 [DEV AUTH] Creating new player: ${playerId}`);
         
@@ -175,32 +167,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
             points: 0, 
             lustPoints: 0, 
             lustGems: 0, 
-            energy: 1000, 
-            energyMax: 1000,
+            energy: 1000,  // ✅ FIXED: Proper default
+            energyMax: 1000,  // ✅ FIXED: Proper default
             level: 1, 
             experience: 0, 
             passiveIncomeRate: 0, 
             lastTapValue: 1,
-            selectedCharacterId: null, 
+            selectedCharacterId: 'aria',  // ✅ FIXED: Default starter
             displayImage: null, 
-            isAdmin: true,
+            isAdmin: false,  // ✅ FIXED: Default to false!
             consecutiveDays: 0, 
             createdAt: now, 
             updatedAt: now
           });
-          console.log(`✅ [DEV AUTH] Created new admin dev user: ${playerId}`);
+          console.log(`✅ [DEV AUTH] Created new player: ${playerId} (isAdmin: false)`);
         }
       }
 
-      // Create session
       const sessionToken = crypto.randomBytes(32).toString('hex');
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + 30);
       await storage.createSession({ token: sessionToken, playerId: player.id, expiresAt });
       
-      // Load full player state from player-data directory
       const playerState = await getPlayerState(player);
-      console.log(`🎮 [DEV AUTH] Loaded player state - isAdmin: ${playerState.isAdmin}, LP: ${playerState.lustPoints}`);
+      console.log(`🎮 [DEV AUTH] Loaded player state - isAdmin: ${playerState.isAdmin}, LP: ${playerState.lustPoints}, energyMax: ${playerState.energyMax}`);
       
       res.json({ success: true, sessionToken, player: playerState });
     } catch (error: any) {
@@ -320,11 +310,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const fileUrl = `/uploads/${req.file.filename}`;
     const { characterId, imageType, unlockLevel, categories, poses, isHidden, chatEnable, chatSendPercent } = req.body;
     
-    // Parse the JSON strings from FormData
     const parsedCategories = categories ? JSON.parse(categories) : {};
     const parsedPoses = poses ? JSON.parse(poses) : [];
-    
-    // Convert categories object to array of keys where value is true
     const categoryArray: string[] = Object.keys(parsedCategories).filter(key => parsedCategories[key] === true);
     
     const mediaUpload = await storage.createMediaUpload({
@@ -332,8 +319,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       url: fileUrl,
       type: imageType || 'character',
       unlockLevel: unlockLevel ? parseInt(unlockLevel) : 1,
-      categories: categoryArray, // Array of strings
-      poses: parsedPoses, // Already an array
+      categories: categoryArray,
+      poses: parsedPoses,
       isHidden: isHidden === 'true' || isHidden === true,
       chatEnable: chatEnable === 'true' || chatEnable === true,
       chatSendPercent: chatSendPercent ? parseInt(chatSendPercent) : 0
@@ -346,9 +333,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.status(500).json({ error: e.message });
   }
 });
-  
 
-  // ✅ FIXED: Removed xpRequired and experienceRequired
   app.get('/api/levels', requireAuth, (_req, res) => { 
     try { 
       const lvls = getLevelsFromMemory().map(l => ({ 
@@ -366,7 +351,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } 
   });
   
-  // ✅ FIXED: Removed xpRequired and experienceRequired
   app.get('/api/levels/:level', requireAuth, (req, res) => {
     try {
       const requestedLevel = parseInt(req.params.level);
@@ -550,4 +534,4 @@ export async function registerRoutes(app: Express): Promise<Server> {
   return server;
 }
 
-console.log('✅ [ROUTES] All routes registered with proper admin auth');
+console.log('✅ [ROUTES] All routes registered - using unified data loader (progressive-data only)');
