@@ -1,10 +1,9 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { storage } from '../storage';
+import { getUpgradesFromMemory } from './unifiedDataLoader';
 
-// 🔧 FIXED: Proper player key resolution matching folder structure
 function resolvePlayerKey(player: any): string {
-  // Format: {telegramId}_{username} or just {id} for backward compatibility
   if (player.telegramId && player.username) {
     return `${player.telegramId}_${player.username}`;
   }
@@ -12,6 +11,49 @@ function resolvePlayerKey(player: any): string {
     return `${player.id}_${player.username}`;
   }
   return player.id || player.username || 'unknown';
+}
+
+/**
+ * Calculate derived stats from upgrades
+ */
+function calculateDerivedStats(playerUpgrades: Record<string, number>) {
+  const upgrades = getUpgradesFromMemory();
+  
+  let energyMax = 1000; // Base value
+  let energyRegenRate = 1; // Base value
+  let passiveIncomeRate = 0;
+  
+  // Calculate energyMax from energy-capacity upgrades
+  const energyUpgrades = upgrades.filter(u => u.type === 'energyMax');
+  energyUpgrades.forEach(u => {
+    const level = playerUpgrades[u.id] || 0;
+    if (level > 0) {
+      const upgradeValue = u.baseValue + (u.valueIncrement * level);
+      energyMax += upgradeValue;
+    }
+  });
+  
+  // Calculate energyRegenRate from energy-regen upgrades
+  const regenUpgrades = upgrades.filter(u => u.type === 'energyRegen');
+  regenUpgrades.forEach(u => {
+    const level = playerUpgrades[u.id] || 0;
+    if (level > 0) {
+      const upgradeValue = u.baseValue + (u.valueIncrement * level);
+      energyRegenRate += upgradeValue;
+    }
+  });
+  
+  // Calculate passiveIncomeRate from passive-income upgrades
+  const incomeUpgrades = upgrades.filter(u => u.type === 'perHour');
+  incomeUpgrades.forEach(u => {
+    const level = playerUpgrades[u.id] || 0;
+    if (level > 0) {
+      const upgradeValue = u.baseValue + (u.valueIncrement * level);
+      passiveIncomeRate += upgradeValue;
+    }
+  });
+  
+  return { energyMax, energyRegenRate, passiveIncomeRate };
 }
 
 class PlayerStateManager {
@@ -42,10 +84,6 @@ class PlayerStateManager {
     } catch (e) {}
   }
   
-  /**
-   * 🔧 CASE-INSENSITIVE FOLDER LOOKUP
-   * Searches for existing player folder regardless of case
-   */
   private async findPlayerFolder(targetKey: string): Promise<string | null> {
     try {
       const folders = await fs.readdir(this.DATA_DIR);
@@ -53,7 +91,7 @@ class PlayerStateManager {
       
       for (const folder of folders) {
         if (folder.toLowerCase() === targetLower) {
-          return folder; // Return the actual folder name (preserves original case)
+          return folder;
         }
       }
       
@@ -75,22 +113,23 @@ class PlayerStateManager {
       points: 0, 
       lustPoints: 0, 
       lustGems: 0, 
-      energy: 3300, 
-      energyMax: 3300, 
+      energy: 1000,  // ✅ FIXED: Back to 1000
+      energyMax: 1000,  // ✅ FIXED: Back to 1000
       level: 1, 
       experience: 0, 
       passiveIncomeRate: 0, 
+      energyRegenRate: 1,  // ✅ ADD: Base regen rate
       lastTapValue: 1, 
-      selectedCharacterId: null, 
+      selectedCharacterId: 'aria',  // ✅ FIXED: Default to aria
       displayImage: null, 
       upgrades: {}, 
-      unlockedCharacters: [], 
+      unlockedCharacters: ['aria'],  // ✅ FIXED: Start with aria
       totalTapsAllTime: 0, 
       totalTapsToday: 0, 
       lpEarnedToday: 0, 
       upgradesPurchasedToday: 0, 
       consecutiveDays: 0, 
-      isAdmin: false, 
+      isAdmin: false,  // ✅ FIXED: Default to false
       boostActive: false, 
       boostMultiplier: 1, 
       boostEndTime: null, 
@@ -118,14 +157,13 @@ class PlayerStateManager {
         sanitized[field] = new Date().toISOString();
       }
     });
-    ['points', 'lustPoints', 'lustGems', 'energy', 'energyMax', 'level', 'experience', 'passiveIncomeRate', 'lastTapValue', 'totalTapsAllTime', 'totalTapsToday', 'lpEarnedToday', 'upgradesPurchasedToday', 'consecutiveDays', 'boostMultiplier'].forEach(f => { 
+    ['points', 'lustPoints', 'lustGems', 'energy', 'energyMax', 'level', 'experience', 'passiveIncomeRate', 'energyRegenRate', 'lastTapValue', 'totalTapsAllTime', 'totalTapsToday', 'lpEarnedToday', 'upgradesPurchasedToday', 'consecutiveDays', 'boostMultiplier'].forEach(f => { 
       if (typeof sanitized[f] === 'number') sanitized[f] = Math.round(sanitized[f]); 
     });
     return sanitized;
   }
   
   async scanAllPlayerFolders() {
-    // Luna self-diagnosis and repair
     this.errorReports = [];
     try {
       this.playerFolders = await fs.readdir(this.DATA_DIR);
@@ -139,7 +177,6 @@ class PlayerStateManager {
             this.playerJsonFiles.push(jsonPath);
             try {
               const data = JSON.parse(await fs.readFile(jsonPath, 'utf8'));
-              // Validate minimally required keys
               const templ = this.createSafeDefaults();
               let repaired = false;
               for (const key of Object.keys(templ)) {
@@ -154,7 +191,6 @@ class PlayerStateManager {
                 console.warn(`🌙 Luna: Repaired ${jsonPath} (added missing keys)`);
               }
             } catch (e: any) {
-              // Attempt to restore default if unreadable/corrupt
               await fs.writeFile(jsonPath, JSON.stringify(this.createSafeDefaults(), null, 2));
               this.errorReports.push(`Luna: Fixed corrupt ${jsonPath} (${e.message})`);
               console.error(`🌙 Luna: Fixed corrupt ${jsonPath} (${e.message})`);
@@ -174,8 +210,6 @@ class PlayerStateManager {
   
   async loadPlayer(player: any) {
     const playerKey = resolvePlayerKey(player);
-    
-    // 🔧 CASE-INSENSITIVE: Find existing folder regardless of case
     const existingFolder = await this.findPlayerFolder(playerKey);
     const actualPlayerKey = existingFolder || playerKey;
     
@@ -188,15 +222,26 @@ class PlayerStateManager {
       const fileContent = await fs.readFile(filePath, 'utf8');
       data = JSON.parse(fileContent);
       console.log(`✅ [PLAYER LOAD] Loaded existing save for ${actualPlayerKey} - isAdmin: ${data.isAdmin}`);
+      
+      // ✅ CRITICAL FIX: Recalculate energyMax and passive income from upgrades!
+      const derived = calculateDerivedStats(data.upgrades || {});
+      data.energyMax = derived.energyMax;
+      data.energyRegenRate = derived.energyRegenRate;
+      data.passiveIncomeRate = derived.passiveIncomeRate;
+      
+      // Cap energy to energyMax
+      if (data.energy > data.energyMax) {
+        data.energy = data.energyMax;
+      }
+      
+      console.log(`📊 [PLAYER LOAD] Recalculated stats - energyMax: ${data.energyMax}, passiveIncome: ${data.passiveIncomeRate}`);
     } catch (e: any) {
-      data = null;
-      // Auto-repair blank or missing file
       this.errorReports.push(`Luna: rebuilt ${filePath} for new or broken profile (${e.message})`);
       data = this.createSafeDefaults();
       data.id = player.id;
       data.username = player.username;
       data.telegramId = player.telegramId || '';
-      data.isAdmin = player.isAdmin || false; // Preserve admin status from database
+      data.isAdmin = player.isAdmin || false;
       await fs.writeFile(filePath, JSON.stringify(data, null, 2));
       console.warn(`🌙 Luna: created new save file for ${actualPlayerKey}: ${e.message}`);
     }
@@ -211,6 +256,18 @@ class PlayerStateManager {
     const actualPlayerKey = existingFolder || playerKey;
     
     await this.ensurePlayerDirectory(actualPlayerKey);
+    
+    // ✅ CRITICAL FIX: Recalculate energyMax before saving
+    const derived = calculateDerivedStats(data.upgrades || {});
+    data.energyMax = derived.energyMax;
+    data.energyRegenRate = derived.energyRegenRate;
+    data.passiveIncomeRate = derived.passiveIncomeRate;
+    
+    // Cap energy
+    if (data.energy > data.energyMax) {
+      data.energy = data.energyMax;
+    }
+    
     const sanitizedData = this.sanitizeForDatabase(data);
     await fs.writeFile(this.getPlayerFilePath(actualPlayerKey), JSON.stringify(sanitizedData, null, 2));
     this.cache.set(actualPlayerKey, sanitizedData);
@@ -232,8 +289,6 @@ class PlayerStateManager {
       
       try { 
         const sd = this.sanitizeForDatabase(playerData);
-        
-        // 🔧 FIXED: Convert Date objects to ISO strings before database insert
         const dbData = {
           ...sd,
           createdAt: sd.createdAt instanceof Date ? sd.createdAt : new Date(sd.createdAt),
@@ -273,13 +328,11 @@ class PlayerStateManager {
   async cleanup() {
     console.log('🧹 [PLAYER STATE] Starting cleanup...');
     
-    // Process any remaining sync queue
     if (this.syncQueue.size > 0) {
       console.log(`📦 [PLAYER STATE] Processing ${this.syncQueue.size} pending syncs...`);
       await this.processingSyncQueue();
     }
     
-    // Stop sync timer
     if (this.syncTimer) {
       clearInterval(this.syncTimer);
       this.syncTimer = null;
@@ -306,7 +359,7 @@ export async function getPlayerState(player: any) {
 export async function updatePlayerState(player: any, updates: any) { 
   const current = await playerStateManager.loadPlayer(player); 
   const updated = { ...current, ...updates, updatedAt: new Date().toISOString() }; 
-  ['points', 'lustPoints', 'lustGems', 'energy', 'energyMax', 'level', 'experience', 'passiveIncomeRate', 'lastTapValue', 'totalTapsAllTime', 'totalTapsToday', 'lpEarnedToday', 'upgradesPurchasedToday', 'consecutiveDays', 'boostMultiplier'].forEach(field => { 
+  ['points', 'lustPoints', 'lustGems', 'energy', 'energyMax', 'level', 'experience', 'passiveIncomeRate', 'energyRegenRate', 'lastTapValue', 'totalTapsAllTime', 'totalTapsToday', 'lpEarnedToday', 'upgradesPurchasedToday', 'consecutiveDays', 'boostMultiplier'].forEach(field => { 
     if (typeof updated[field] === 'number') updated[field] = Math.round(updated[field]); 
   }); 
   await playerStateManager.savePlayer(player, updated); 
@@ -328,10 +381,17 @@ export async function purchaseUpgradeForPlayer(player: any, upgradeId: string, l
   if (currentLP < cost) throw new Error('Insufficient Lust Points'); 
   const newUpgrades = { ...current.upgrades, [upgradeId]: level }; 
   const newLP = Math.round(currentLP - cost); 
+  
+  // ✅ CRITICAL FIX: Recalculate derived stats after purchase
+  const derived = calculateDerivedStats(newUpgrades);
+  
   return await updatePlayerState(player, { 
     upgrades: newUpgrades, 
     lustPoints: newLP, 
     points: newLP, 
-    upgradesPurchasedToday: Math.round((current.upgradesPurchasedToday || 0) + 1) 
+    upgradesPurchasedToday: Math.round((current.upgradesPurchasedToday || 0) + 1),
+    energyMax: derived.energyMax,
+    energyRegenRate: derived.energyRegenRate,
+    passiveIncomeRate: derived.passiveIncomeRate
   }); 
 }
