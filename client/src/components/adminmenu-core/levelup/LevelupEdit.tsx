@@ -2,11 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { Save, X, Plus, Trash2 } from 'lucide-react';
 import { apiRequest } from '@/lib/queryClient';
 
+interface Requirement {
+  upgradeId: string;
+  minLevel: number;
+}
+
 interface Level {
   level: number;
   cost: number;
   rewards?: any;
-  requirements?: any[];
+  requirements?: Requirement[];
   unlocks?: string[];
 }
 
@@ -29,6 +34,9 @@ export default function LevelupEdit({ level, onSave, onCancel }: LevelupEditProp
   // Unlocks state
   const [selectedUnlock, setSelectedUnlock] = useState('');
   const [unlocksList, setUnlocksList] = useState<string[]>(level.unlocks || []);
+  
+  // Requirements state
+  const [requirements, setRequirements] = useState<Requirement[]>(level.requirements || []);
 
   useEffect(() => {
     // Update rewards object when individual values change
@@ -42,6 +50,10 @@ export default function LevelupEdit({ level, onSave, onCancel }: LevelupEditProp
   useEffect(() => {
     setFormData(prev => ({ ...prev, unlocks: unlocksList }));
   }, [unlocksList]);
+
+  useEffect(() => {
+    setFormData(prev => ({ ...prev, requirements }));
+  }, [requirements]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,6 +89,20 @@ export default function LevelupEdit({ level, onSave, onCancel }: LevelupEditProp
     setUnlocksList(unlocksList.filter(u => u !== unlock));
   };
 
+  const addRequirement = () => {
+    setRequirements([...requirements, { upgradeId: '', minLevel: 1 }]);
+  };
+
+  const updateRequirement = (index: number, field: keyof Requirement, value: any) => {
+    const updated = [...requirements];
+    updated[index] = { ...updated[index], [field]: value };
+    setRequirements(updated);
+  };
+
+  const removeRequirement = (index: number) => {
+    setRequirements(requirements.filter((_, i) => i !== index));
+  };
+
   return (
     <div className="bg-gray-800 rounded-lg p-6 max-h-[80vh] overflow-y-auto">
       <div className="flex justify-between items-center mb-6">
@@ -85,9 +111,9 @@ export default function LevelupEdit({ level, onSave, onCancel }: LevelupEditProp
           <button 
             type="button"
             onClick={() => setAdvancedMode(!advancedMode)}
-            className="text-sm text-purple-400 hover:text-purple-300"
+            className="text-sm px-3 py-1 rounded bg-purple-900/30 text-purple-300 hover:bg-purple-900/50 transition-colors"
           >
-            {advancedMode ? 'Simple Mode' : 'Advanced Mode'}
+            {advancedMode ? '👁️ Simple' : '⚙️ Advanced'}
           </button>
           <button onClick={onCancel} className="text-gray-400 hover:text-white">
             <X className="w-5 h-5" />
@@ -124,7 +150,7 @@ export default function LevelupEdit({ level, onSave, onCancel }: LevelupEditProp
         {!advancedMode ? (
           <>
             {/* Simple Rewards UI */}
-            <div className="space-y-4 bg-gray-900/50 p-4 rounded-lg">
+            <div className="space-y-4 bg-gray-900/50 p-4 rounded-lg border border-purple-500/20">
               <h4 className="text-md font-semibold text-purple-300 flex items-center gap-2">
                 🎁 Rewards
               </h4>
@@ -166,8 +192,55 @@ export default function LevelupEdit({ level, onSave, onCancel }: LevelupEditProp
               </div>
             </div>
 
+            {/* Requirements UI */}
+            <div className="space-y-4 bg-gray-900/50 p-4 rounded-lg border border-orange-500/20">
+              <div className="flex justify-between items-center">
+                <h4 className="text-md font-semibold text-orange-300">⚠️ Requirements (Upgrades needed)</h4>
+                <button
+                  type="button"
+                  onClick={addRequirement}
+                  className="px-3 py-1 bg-orange-600 hover:bg-orange-700 text-white rounded text-sm flex items-center gap-1"
+                >
+                  <Plus className="w-3 h-3" />
+                  Add
+                </button>
+              </div>
+              {requirements.length === 0 ? (
+                <p className="text-sm text-gray-500 italic">No requirements set</p>
+              ) : (
+                <div className="space-y-2">
+                  {requirements.map((req, idx) => (
+                    <div key={idx} className="flex gap-2 items-center bg-gray-800 p-2 rounded">
+                      <input
+                        type="text"
+                        value={req.upgradeId}
+                        onChange={(e) => updateRequirement(idx, 'upgradeId', e.target.value)}
+                        placeholder="upgrade-id"
+                        className="flex-1 px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+                      />
+                      <input
+                        type="number"
+                        value={req.minLevel}
+                        onChange={(e) => updateRequirement(idx, 'minLevel', parseInt(e.target.value) || 1)}
+                        placeholder="Level"
+                        className="w-20 px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+                        min="1"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeRequirement(idx)}
+                        className="p-1 bg-red-600 hover:bg-red-700 text-white rounded"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* Simple Unlocks UI */}
-            <div className="space-y-4 bg-gray-900/50 p-4 rounded-lg">
+            <div className="space-y-4 bg-gray-900/50 p-4 rounded-lg border border-purple-500/20">
               <h4 className="text-md font-semibold text-purple-300 flex items-center gap-2">
                 🔓 Unlocks
               </h4>
@@ -176,7 +249,7 @@ export default function LevelupEdit({ level, onSave, onCancel }: LevelupEditProp
                   type="text"
                   value={selectedUnlock}
                   onChange={(e) => setSelectedUnlock(e.target.value)}
-                  placeholder="Enter character ID, upgrade ID, etc."
+                  placeholder="character-id or upgrade-id"
                   className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
                   onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addUnlock())}
                 />
@@ -210,17 +283,6 @@ export default function LevelupEdit({ level, onSave, onCancel }: LevelupEditProp
                 )}
               </div>
             </div>
-
-            {/* Requirements (Simple) */}
-            <div className="space-y-4 bg-gray-900/50 p-4 rounded-lg">
-              <h4 className="text-md font-semibold text-purple-300">⚠️ Requirements</h4>
-              <p className="text-xs text-gray-400">Currently set via JSON (see Advanced Mode)</p>
-              <div className="text-xs text-gray-500 font-mono bg-gray-800 p-2 rounded">
-                {formData.requirements && formData.requirements.length > 0 
-                  ? JSON.stringify(formData.requirements, null, 2)
-                  : 'No requirements set'}
-              </div>
-            </div>
           </>
         ) : (
           <>
@@ -233,7 +295,6 @@ export default function LevelupEdit({ level, onSave, onCancel }: LevelupEditProp
                 className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white font-mono text-sm" 
                 rows={4} 
               />
-              <p className="text-xs text-gray-500 mt-1">Array of requirement objects</p>
             </div>
 
             <div>

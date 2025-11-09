@@ -8,10 +8,10 @@ interface Achievement {
   id: string;
   name: string;
   description: string;
-  requirementType: string;
-  target: number;
-  rewardType: string;
-  rewardAmount: number;
+  requirementType?: string;
+  target?: number;
+  rewardType?: string;
+  rewardAmount?: number;
   icon?: string;
 }
 
@@ -95,16 +95,16 @@ export default function AchievementsCore() {
               <div className="flex items-start gap-3 mb-3">
                 <div className="text-3xl">{achievement.icon || '🏆'}</div>
                 <div className="flex-1">
-                  <h4 className="font-semibold text-white">{achievement.name}</h4>
-                  <p className="text-sm text-gray-400">{achievement.description}</p>
+                  <h4 className="font-semibold text-white">{achievement.name || 'Unnamed Achievement'}</h4>
+                  <p className="text-sm text-gray-400">{achievement.description || 'No description'}</p>
                 </div>
               </div>
               <div className="flex gap-2 mb-3 text-xs">
                 <span className="bg-gray-700 px-2 py-0.5 rounded">
-                  {achievement.requirementType}: {achievement.target}
+                  {achievement.requirementType || 'Custom'}: {achievement.target || 0}
                 </span>
                 <span className="bg-yellow-900/30 text-yellow-300 px-2 py-0.5 rounded">
-                  🎯 {achievement.rewardAmount} {achievement.rewardType.toUpperCase()}
+                  🎯 {achievement.rewardAmount || 0} {(achievement.rewardType?.toUpperCase() || 'LP')}
                 </span>
               </div>
               <div className="flex gap-2">
