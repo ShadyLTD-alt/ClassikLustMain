@@ -26,7 +26,10 @@ export default function CharactersEdit({ character, onSave, onCancel }: Characte
     setSaving(true);
 
     try {
-      const response = await apiRequest('PUT', `/api/admin/characters/${character.id}`, formData);
+      const response = await apiRequest(`/api/admin/characters/${character.id}`, {
+        method: 'PUT',
+        body: JSON.stringify(formData)
+      });
       if (response.ok) {
         alert('Character updated successfully!');
         onSave();

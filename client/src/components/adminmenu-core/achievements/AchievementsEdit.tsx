@@ -28,7 +28,10 @@ export default function AchievementsEdit({ achievement, onSave, onCancel }: Achi
     setSaving(true);
 
     try {
-      const response = await apiRequest('PUT', `/api/admin/achievements/${achievement.id}`, formData);
+      const response = await apiRequest(`/api/admin/achievements/${achievement.id}`, {
+        method: 'PUT',
+        body: JSON.stringify(formData)
+      });
       if (response.ok) {
         alert('Achievement updated successfully!');
         onSave();

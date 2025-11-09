@@ -26,7 +26,10 @@ export default function TasksEdit({ task, onSave, onCancel }: TasksEditProps) {
     setSaving(true);
 
     try {
-      const response = await apiRequest('PUT', `/api/admin/tasks/${task.id}`, formData);
+      const response = await apiRequest(`/api/admin/tasks/${task.id}`, {
+        method: 'PUT',
+        body: JSON.stringify(formData)
+      });
       if (response.ok) {
         alert('Task updated successfully!');
         onSave();

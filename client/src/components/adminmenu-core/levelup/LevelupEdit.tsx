@@ -25,7 +25,10 @@ export default function LevelupEdit({ level, onSave, onCancel }: LevelupEditProp
     setSaving(true);
 
     try {
-      const response = await apiRequest('PUT', `/api/admin/levels/${level.level}`, formData);
+      const response = await apiRequest(`/api/admin/levels/${level.level}`, {
+        method: 'PUT',
+        body: JSON.stringify(formData)
+      });
       if (response.ok) {
         alert('Level updated successfully!');
         onSave();
