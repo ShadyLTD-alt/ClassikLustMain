@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Save, X } from 'lucide-react';
+import { apiRequest } from '@/lib/queryClient';
 
 interface Upgrade {
   id: string;
@@ -30,14 +31,16 @@ export default function UpgradesEdit({ upgrade, onSave, onCancel }: UpgradesEdit
     e.preventDefault();
     setSaving(true);
     try {
-      const response = await fetch(`/api/admin/upgrades/${upgrade.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      });
-      if (response.ok) onSave();
+      const response = await apiRequest('PUT', `/api/admin/upgrades/${upgrade.id}`, formData);
+      if (response.ok) {
+        alert('Upgrade updated successfully!');
+        onSave();
+      } else {
+        throw new Error('Failed to update upgrade');
+      }
     } catch (error) {
       console.error('Failed to update upgrade:', error);
+      alert('Failed to update upgrade. Check console for details.');
     } finally {
       setSaving(false);
     }
@@ -99,7 +102,6 @@ export default function UpgradesEdit({ upgrade, onSave, onCancel }: UpgradesEdit
             <input type="number" value={formData.valueIncrement} onChange={e => setFormData({ ...formData, valueIncrement: parseInt(e.target.value) })} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white" min="0" required />
           </div>
         </div>
-        {/* New Fields Below */}
         <div className="grid grid-cols-2 gap-4">
           <div className="flex items-center gap-2">
             <input type="checkbox" id="isEvent" checked={formData.isEvent} onChange={e => setFormData({ ...formData, isEvent: e.target.checked })} className="form-checkbox h-5 w-5 text-purple-600" />
