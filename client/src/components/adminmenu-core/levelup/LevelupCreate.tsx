@@ -68,18 +68,35 @@ export default function LevelupCreate({ onSave, onCancel }: LevelupCreateProps) 
 
         <div>
           <label className="block text-sm font-medium text-gray-300 mb-2">Requirements (JSON Array)</label>
-          <textarea value={JSON.stringify(formData.requirements, null, 2)} onChange={(e) => { try { setFormData({ ...formData, requirements: JSON.parse(e.target.value) }); } catch {} }} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white font-mono text-sm" rows={4} placeholder='[{"upgradeId": "tap-power", "minLevel": 5}]' />
-          <p className="text-xs text-gray-500 mt-1">Example: [{"upgradeId": "tap-power", "minLevel": 10}]</p>
+          <textarea 
+            value={JSON.stringify(formData.requirements, null, 2)} 
+            onChange={(e) => { try { setFormData({ ...formData, requirements: JSON.parse(e.target.value) }); } catch {} }} 
+            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white font-mono text-sm" 
+            rows={4} 
+          />
+          <p className="text-xs text-gray-500 mt-1">Example: Array of objects with upgradeId and minLevel</p>
         </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-300 mb-2">Unlocks (JSON Array)</label>
-          <textarea value={JSON.stringify(formData.unlocks, null, 2)} onChange={(e) => { try { setFormData({ ...formData, unlocks: JSON.parse(e.target.value) }); } catch {} }} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white font-mono text-sm" rows={3} placeholder='["new-character", "new-upgrade"]' />
+          <textarea 
+            value={JSON.stringify(formData.unlocks, null, 2)} 
+            onChange={(e) => { try { setFormData({ ...formData, unlocks: JSON.parse(e.target.value) }); } catch {} }} 
+            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white font-mono text-sm" 
+            rows={3} 
+          />
+          <p className="text-xs text-gray-500 mt-1">Example: Array of strings like character IDs or upgrade IDs</p>
         </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-300 mb-2">Rewards (JSON Object)</label>
-          <textarea value={JSON.stringify(formData.rewards, null, 2)} onChange={(e) => { try { setFormData({ ...formData, rewards: JSON.parse(e.target.value) }); } catch {} }} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white font-mono text-sm" rows={3} placeholder='{"lustGems": 100, "bonusMultiplier": 1.1}' />
+          <textarea 
+            value={JSON.stringify(formData.rewards, null, 2)} 
+            onChange={(e) => { try { setFormData({ ...formData, rewards: JSON.parse(e.target.value) }); } catch {} }} 
+            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white font-mono text-sm" 
+            rows={3} 
+          />
+          <p className="text-xs text-gray-500 mt-1">Example: Object with reward types and amounts</p>
         </div>
 
         <div className="flex gap-3 pt-4">
