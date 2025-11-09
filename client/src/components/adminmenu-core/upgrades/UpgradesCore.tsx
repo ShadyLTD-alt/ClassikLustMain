@@ -12,12 +12,10 @@ interface Upgrade {
   maxLevel: number;
   baseCost: number;
   baseValue: number;
+  isEvent?: boolean;
+  levelRequirement?: number;
 }
 
-/**
- * UpgradesCore - Lists all upgrades from progressive-data/upgrades
- * Manages viewing, editing, and creating upgrades
- */
 export default function UpgradesCore() {
   const [upgrades, setUpgrades] = useState<Upgrade[]>([]);
   const [loading, setLoading] = useState(true);
@@ -43,15 +41,9 @@ export default function UpgradesCore() {
 
   const handleDelete = async (upgradeId: string) => {
     if (!confirm(`Delete upgrade "${upgradeId}"? This cannot be undone.`)) return;
-    
     try {
-      const response = await fetch(`/api/admin/upgrades/${upgradeId}`, {
-        method: 'DELETE',
-      });
-      
-      if (response.ok) {
-        await loadUpgrades();
-      }
+      const response = await fetch(`/api/admin/upgrades/${upgradeId}`, { method: 'DELETE' });
+      if (response.ok) await loadUpgrades();
     } catch (error) {
       console.error('Failed to delete upgrade:', error);
     }
@@ -67,24 +59,8 @@ export default function UpgradesCore() {
     setIsCreating(false);
   };
 
-  if (isCreating) {
-    return (
-      <UpgradesCreate
-        onSave={handleSaveCreate}
-        onCancel={() => setIsCreating(false)}
-      />
-    );
-  }
-
-  if (editingUpgrade) {
-    return (
-      <UpgradesEdit
-        upgrade={editingUpgrade}
-        onSave={handleSaveEdit}
-        onCancel={() => setEditingUpgrade(null)}
-      />
-    );
-  }
+  if (isCreating) return <UpgradesCreate onSave={handleSaveCreate} onCancel={() => setIsCreating(false)} />;
+  if (editingUpgrade) return <UpgradesEdit upgrade={editingUpgrade} onSave={handleSaveEdit} onCancel={() => setEditingUpgrade(null)} />;
 
   return (
     <div className="space-y-4">
@@ -99,7 +75,6 @@ export default function UpgradesCore() {
           Create Upgrade
         </button>
       </div>
-
       {/* Upgrades List */}
       <div className="space-y-3">
         {loading ? (
@@ -108,10 +83,7 @@ export default function UpgradesCore() {
           <p className="text-gray-400">No upgrades found. Create your first upgrade!</p>
         ) : (
           upgrades.map((upgrade) => (
-            <div
-              key={upgrade.id}
-              className="bg-gray-800 rounded-lg p-4 flex items-center justify-between"
-            >
+            <div key={upgrade.id} className="bg-gray-800 rounded-lg p-4 flex items-center justify-between">
               <div className="flex-1">
                 <div className="flex items-center gap-3">
                   <span className="text-2xl">{upgrade.icon}</span>
@@ -119,11 +91,17 @@ export default function UpgradesCore() {
                     <h4 className="font-semibold text-white">{upgrade.name}</h4>
                     <p className="text-sm text-gray-400">{upgrade.description}</p>
                   </div>
+                  {upgrade.isEvent && (
+                    <span className="ml-2 px-2 py-0.5 bg-yellow-700 text-yellow-300 rounded-full text-xs font-bold">EVENT</span>
+                  )}
                 </div>
                 <div className="flex gap-4 mt-2 text-xs text-gray-500">
                   <span>Type: {upgrade.type}</span>
                   <span>Max: {upgrade.maxLevel}</span>
                   <span>Base: {upgrade.baseCost} LP</span>
+                  {upgrade.levelRequirement && (
+                    <span className="bg-purple-900 text-purple-300 px-2 py-0.5 rounded-full">Lvl Req: {upgrade.levelRequirement}</span>
+                  )}
                 </div>
               </div>
               <div className="flex gap-2">
