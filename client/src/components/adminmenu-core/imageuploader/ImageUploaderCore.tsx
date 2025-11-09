@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Upload, Trash2, Image as ImageIcon, Copy, CheckCircle, X, Edit } from 'lucide-react';
+import { Upload, Trash2, Image as ImageIcon, Copy, CheckCircle, X } from 'lucide-react';
 import { apiRequest } from '@/lib/queryClient';
 
 interface ImageFile {
@@ -10,6 +10,7 @@ interface ImageFile {
 }
 
 interface ImageMetadata {
+  characterId: string;
   type: string;
   levelRequired: number;
   nsfw: boolean;
@@ -37,6 +38,18 @@ export default function ImageUploaderCore() {
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Available characters list
+  const availableCharacters = [
+    { id: 'aria', name: 'Aria' },
+    { id: 'frost', name: 'Frost' },
+    { id: 'shadow', name: 'Shadow' },
+    { id: 'ember', name: 'Ember' },
+    { id: 'luna', name: 'Luna' },
+    { id: 'stella', name: 'Stella' },
+    { id: 'nova', name: 'Nova' },
+    { id: 'other', name: 'Other/None' }
+  ];
+
   useEffect(() => {
     loadImages();
   }, []);
@@ -44,9 +57,10 @@ export default function ImageUploaderCore() {
   const loadImages = async () => {
     try {
       setLoading(true);
-      const response = await apiRequest('/api/admin/images');
+      const response = await apiRequest('/api/media');
       const data = await response.json();
-      setImages(data.images || []);
+      console.log('📷 [GALLERY] Loaded images:', data);
+      setImages(data.media || []);
     } catch (error) {
       console.error('Failed to load images:', error);
       alert('Failed to load images. Check console for details.');
@@ -89,6 +103,7 @@ export default function ImageUploaderCore() {
         file,
         preview,
         metadata: {
+          characterId: 'aria',
           type: 'Character',
           levelRequired: 1,
           nsfw: false,
@@ -152,6 +167,8 @@ export default function ImageUploaderCore() {
         formData.append('file', pending.file);
         formData.append('metadata', JSON.stringify(pending.metadata));
 
+        console.log('📤 [UPLOAD] Uploading:', pending.file.name, 'with metadata:', pending.metadata);
+
         const response = await fetch('/api/media', {
           method: 'POST',
           headers: {
@@ -161,9 +178,13 @@ export default function ImageUploaderCore() {
         });
 
         if (response.ok) {
+          const result = await response.json();
+          console.log('✅ [UPLOAD] Success:', result);
           successCount++;
           URL.revokeObjectURL(pending.preview);
         } else {
+          const errorText = await response.text();
+          console.error('❌ [UPLOAD] Failed:', response.status, errorText);
           throw new Error(`Upload failed: ${response.statusText}`);
         }
       } catch (error) {
@@ -242,7 +263,7 @@ export default function ImageUploaderCore() {
             <ImageIcon className="w-5 h-5" />
             Image Management
           </h3>
-          <p className="text-sm text-gray-400">Upload images with metadata and categories</p>
+          <p className="text-sm text-gray-400">Upload images with metadata and character assignment</p>
         </div>
       </div>
 
@@ -318,7 +339,21 @@ export default function ImageUploaderCore() {
                       </button>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-3 gap-3">
+                      {/* ✅ CHARACTER SELECTION */}
+                      <div>
+                        <label className="text-xs text-gray-400">Character</label>
+                        <select
+                          value={pending.metadata.characterId}
+                          onChange={(e) => updatePendingMetadata(idx, 'characterId', e.target.value)}
+                          className="w-full px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+                        >
+                          {availableCharacters.map(char => (
+                            <option key={char.id} value={char.id}>{char.name}</option>
+                          ))}
+                        </select>
+                      </div>
+
                       <div>
                         <label className="text-xs text-gray-400">Image Type</label>
                         <select
@@ -334,6 +369,7 @@ export default function ImageUploaderCore() {
                           <option value="Other">Other</option>
                         </select>
                       </div>
+                      
                       <div>
                         <label className="text-xs text-gray-400">Level Required</label>
                         <input
@@ -404,17 +440,21 @@ export default function ImageUploaderCore() {
                       </label>
                     </div>
 
-                    {/* Chat Percent */}
+                    {/* ✅ CHAT SEND PERCENT */}
                     {pending.metadata.enableForChat && (
                       <div>
-                        <label className="text-xs text-gray-400">Chat Send %</label>
+                        <label className="text-xs text-gray-400 flex items-center justify-between">
+                          <span>Chat Send %</span>
+                          <span className="text-purple-400 font-semibold">{pending.metadata.chatSendPercent}%</span>
+                        </label>
                         <input
-                          type="number"
+                          type="range"
                           value={pending.metadata.chatSendPercent}
                           onChange={(e) => updatePendingMetadata(idx, 'chatSendPercent', parseInt(e.target.value) || 0)}
-                          className="w-full px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+                          className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-purple-600"
                           min="0"
                           max="100"
+                          step="5"
                         />
                       </div>
                     )}
@@ -483,6 +523,10 @@ export default function ImageUploaderCore() {
                     src={image.path}
                     alt={image.filename}
                     className="max-w-full max-h-full object-contain group-hover:scale-105 transition-transform"
+                    onError={(e) => {
+                      console.error('🖼️ [GALLERY] Failed to load image:', image.path);
+                      (e.target as HTMLImageElement).src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100"%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" dy=".3em" fill="%23888"%3EError%3C/text%3E%3C/svg%3E';
+                    }}
                   />
                 </div>
                 <div className="p-3 space-y-2">
