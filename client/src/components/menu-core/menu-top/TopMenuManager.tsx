@@ -1,6 +1,6 @@
 import React from 'react';
 import { useGame } from '@/contexts/GameContext';
-import { User, Zap, Flame } from 'lucide-react';
+import { User, Crown, Zap, Flame } from 'lucide-react';
 import PlayerInfoMenu from './PlayerInfoMenu';
 import CharacterGalleryMenu from './CharacterGalleryMenu';
 import BoostStatusMenu from './BoostStatusMenu';
@@ -29,7 +29,7 @@ export default function TopMenuManager({ activeMenu, openMenu, closeMenu }: Prop
   
   return (
     <>
-      {/* ✅ Top Nav Bar - Crown removed, only in PlayerInfoMenu */}
+      {/* TOP NAV BAR - CROWN INCLUDED! */}
       <div className="fixed top-0 left-0 right-0 z-30 bg-black/90 backdrop-blur border-b border-gray-700">
         <div className="mx-auto max-w-5xl px-4 py-3">
           <div className="flex items-center justify-between">
@@ -57,14 +57,19 @@ export default function TopMenuManager({ activeMenu, openMenu, closeMenu }: Prop
                 </div>
               </div>
             </button>
-            
+            <button 
+              onClick={() => openMenu('character-gallery')} 
+              className="bg-purple-600/20 hover:bg-purple-600/40 px-2 py-2 rounded-full border border-purple-500/30 flex items-center justify-center transition-colors"
+              title="Character Gallery"
+            >
+              <Crown className="w-5 h-5 text-purple-400" />
+            </button>
             <div className="text-center">
               <div className="text-purple-300 text-xs font-medium uppercase">LP/HR</div>
               <div className="text-white font-bold text-lg">
                 {Math.round(state?.passiveIncomeRate || 0).toLocaleString()}
               </div>
             </div>
-            
             <div className="flex items-center gap-3">
               <div className="text-center">
                 <div className="text-purple-300 text-xs font-medium uppercase">Energy</div>
@@ -78,7 +83,6 @@ export default function TopMenuManager({ activeMenu, openMenu, closeMenu }: Prop
                   <Flame className="w-3 h-3" />Boosters
                 </button>
               </div>
-              
               {state?.boostActive && (
                 <div className="bg-orange-600/20 text-orange-300 px-3 py-1 rounded-full text-xs font-bold border border-orange-400/30 animate-pulse">
                   <Zap className="w-3 h-3 inline mr-1" />{state.boostMultiplier}x
@@ -88,7 +92,6 @@ export default function TopMenuManager({ activeMenu, openMenu, closeMenu }: Prop
           </div>
         </div>
       </div>
-      
       {/* Render Active Top Menu */}
       {activeMenu && (() => { 
         const cfg = TOP_MENUS.find(m => m.id === activeMenu); 
