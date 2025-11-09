@@ -8,5 +8,5 @@
   "baseValue": 1,
   "valueIncrement": 0.5,
   "icon": "Battery",
-  "type": "energyMax"
+  "type": "energyRegen"
 }
