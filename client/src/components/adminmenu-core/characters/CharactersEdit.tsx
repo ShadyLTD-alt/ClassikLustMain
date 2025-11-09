@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Save, X } from 'lucide-react';
+import { apiRequest } from '@/lib/queryClient';
 
 interface Character {
   id: string;
@@ -25,15 +26,16 @@ export default function CharactersEdit({ character, onSave, onCancel }: Characte
     setSaving(true);
 
     try {
-      const response = await fetch(`/api/admin/characters/${character.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      });
-
-      if (response.ok) onSave();
+      const response = await apiRequest('PUT', `/api/admin/characters/${character.id}`, formData);
+      if (response.ok) {
+        alert('Character updated successfully!');
+        onSave();
+      } else {
+        throw new Error('Failed to update character');
+      }
     } catch (error) {
       console.error('Failed to update character:', error);
+      alert('Failed to update character. Check console for details.');
     } finally {
       setSaving(false);
     }
@@ -49,11 +51,11 @@ export default function CharactersEdit({ character, onSave, onCancel }: Characte
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">Name</label>
+            <label className="block text-sm font-medium text-gray-300 mb-2">Name *</label>
             <input type="text" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white" required />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">Rarity</label>
+            <label className="block text-sm font-medium text-gray-300 mb-2">Rarity *</label>
             <select value={formData.rarity} onChange={(e) => setFormData({ ...formData, rarity: e.target.value })} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white">
               <option value="Common">Common</option>
               <option value="Rare">Rare</option>
@@ -64,12 +66,12 @@ export default function CharactersEdit({ character, onSave, onCancel }: Characte
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-300 mb-2">Description</label>
+          <label className="block text-sm font-medium text-gray-300 mb-2">Description *</label>
           <textarea value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white" rows={3} required />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-300 mb-2">Unlock Level</label>
+          <label className="block text-sm font-medium text-gray-300 mb-2">Unlock Level *</label>
           <input type="number" value={formData.unlockLevel} onChange={(e) => setFormData({ ...formData, unlockLevel: parseInt(e.target.value) })} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white" min="1" required />
         </div>
 
