@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Upload, Trash2, Image as ImageIcon, Copy, CheckCircle, X } from 'lucide-react';
+import { Upload, Trash2, Image as ImageIcon, Copy, CheckCircle, X, Plus } from 'lucide-react';
 import { apiRequest } from '@/lib/queryClient';
 
 interface ImageFile {
@@ -29,6 +29,22 @@ interface PendingUpload {
   metadata: ImageMetadata;
 }
 
+// 🏷️ PERSISTENT POSES MANAGER
+const POSES_STORAGE_KEY = 'classiklust_global_poses';
+
+const getPersistentPoses = (): string[] => {
+  try {
+    const stored = localStorage.getItem(POSES_STORAGE_KEY);
+    return stored ? JSON.parse(stored) : ['standing', 'sitting', 'laying', 'bikini', 'nude', 'clothed'];
+  } catch {
+    return ['standing', 'sitting', 'laying', 'bikini', 'nude', 'clothed'];
+  }
+};
+
+const savePersistentPoses = (poses: string[]) => {
+  localStorage.setItem(POSES_STORAGE_KEY, JSON.stringify(poses));
+};
+
 export default function ImageUploaderCore() {
   const [images, setImages] = useState<ImageFile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,9 +52,10 @@ export default function ImageUploaderCore() {
   const [dragActive, setDragActive] = useState(false);
   const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
+  const [globalPoses, setGlobalPoses] = useState<string[]>(getPersistentPoses());
+  const [newPoseName, setNewPoseName] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Available characters list
   const availableCharacters = [
     { id: 'aria', name: 'Aria' },
     { id: 'frost', name: 'Frost' },
@@ -59,19 +76,50 @@ export default function ImageUploaderCore() {
       setLoading(true);
       const response = await apiRequest('/api/media');
       const data = await response.json();
-      console.log('📷 [GALLERY] Loaded images:', data);
       setImages(data.media || []);
     } catch (error) {
       console.error('Failed to load images:', error);
-      alert('Failed to load images. Check console for details.');
+      alert('Failed to load images.');
     } finally {
       setLoading(false);
     }
   };
 
+  const addGlobalPose = () => {
+    if (!newPoseName.trim()) return;
+    const trimmed = newPoseName.trim().toLowerCase();
+    if (globalPoses.includes(trimmed)) {
+      alert('Pose already exists!');
+      return;
+    }
+    const updated = [...globalPoses, trimmed];
+    setGlobalPoses(updated);
+    savePersistentPoses(updated);
+    setNewPoseName('');
+    console.log('✅ [POSES] Added global pose:', trimmed);
+  };
+
+  const removeGlobalPose = (pose: string) => {
+    const updated = globalPoses.filter(p => p !== pose);
+    setGlobalPoses(updated);
+    savePersistentPoses(updated);
+    console.log('❌ [POSES] Removed global pose:', pose);
+  };
+
+  const togglePoseForUpload = (uploadIndex: number, pose: string) => {
+    const updated = [...pendingUploads];
+    const poses = updated[uploadIndex].metadata.poses;
+    if (poses.includes(pose)) {
+      updated[uploadIndex].metadata.poses = poses.filter(p => p !== pose);
+    } else {
+      updated[uploadIndex].metadata.poses = [...poses, pose];
+    }
+    setPendingUploads(updated);
+  };
+
   const validateFile = (file: File): string | null => {
     const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
-    const maxSize = 10 * 1024 * 1024; // 10MB
+    const maxSize = 10 * 1024 * 1024;
 
     if (!allowedTypes.includes(file.type)) {
       return `Invalid file type: ${file.type}`;
@@ -138,21 +186,6 @@ export default function ImageUploaderCore() {
     setPendingUploads(updated);
   };
 
-  const addPose = (index: number, pose: string) => {
-    if (!pose.trim()) return;
-    const updated = [...pendingUploads];
-    if (!updated[index].metadata.poses.includes(pose)) {
-      updated[index].metadata.poses.push(pose);
-      setPendingUploads(updated);
-    }
-  };
-
-  const removePose = (uploadIndex: number, poseIndex: number) => {
-    const updated = [...pendingUploads];
-    updated[uploadIndex].metadata.poses.splice(poseIndex, 1);
-    setPendingUploads(updated);
-  };
-
   const handleUploadAll = async () => {
     if (pendingUploads.length === 0) return;
 
@@ -167,8 +200,6 @@ export default function ImageUploaderCore() {
         formData.append('file', pending.file);
         formData.append('metadata', JSON.stringify(pending.metadata));
 
-        console.log('📤 [UPLOAD] Uploading:', pending.file.name, 'with metadata:', pending.metadata);
-
         const response = await fetch('/api/media', {
           method: 'POST',
           headers: {
@@ -178,13 +209,9 @@ export default function ImageUploaderCore() {
         });
 
         if (response.ok) {
-          const result = await response.json();
-          console.log('✅ [UPLOAD] Success:', result);
           successCount++;
           URL.revokeObjectURL(pending.preview);
         } else {
-          const errorText = await response.text();
-          console.error('❌ [UPLOAD] Failed:', response.status, errorText);
           throw new Error(`Upload failed: ${response.statusText}`);
         }
       } catch (error) {
@@ -205,10 +232,10 @@ export default function ImageUploaderCore() {
   };
 
   const handleDelete = async (filename: string) => {
-    if (!confirm(`Delete image "${filename}"? This cannot be undone.`)) return;
+    if (!confirm(`Delete image "${filename}"?`)) return;
     
     try {
-      const response = await apiRequest(`/api/admin/images/${encodeURIComponent(filename)}`, { method: 'DELETE' });
+      const response = await apiRequest(`/api/media/${encodeURIComponent(filename)}`, { method: 'DELETE' });
       if (response.ok) {
         await loadImages();
         alert('Image deleted successfully!');
@@ -261,9 +288,43 @@ export default function ImageUploaderCore() {
         <div>
           <h3 className="text-lg font-semibold text-white flex items-center gap-2">
             <ImageIcon className="w-5 h-5" />
-            Image Management
+            Image Upload Manager
           </h3>
-          <p className="text-sm text-gray-400">Upload images with metadata and character assignment</p>
+          <p className="text-sm text-gray-400">Upload images with metadata (auto-sorted by character/type)</p>
+        </div>
+      </div>
+
+      {/* 🏷️ PERSISTENT POSES MANAGER */}
+      <div className="bg-purple-900/20 border border-purple-500/30 rounded-lg p-4">
+        <h4 className="text-sm font-semibold text-purple-300 mb-3">🏷️ Global Poses Library</h4>
+        <div className="flex gap-2 mb-3">
+          <input
+            type="text"
+            value={newPoseName}
+            onChange={(e) => setNewPoseName(e.target.value)}
+            onKeyPress={(e) => e.key === 'Enter' && addGlobalPose()}
+            placeholder="Create new pose..."
+            className="flex-1 px-3 py-2 bg-gray-800 border border-gray-600 rounded text-white text-sm"
+          />
+          <button
+            onClick={addGlobalPose}
+            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded flex items-center gap-1"
+          >
+            <Plus className="w-4 h-4" /> Add Pose
+          </button>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {globalPoses.map((pose) => (
+            <span key={pose} className="px-3 py-1 bg-purple-900/50 text-purple-200 rounded-full text-sm flex items-center gap-2">
+              {pose}
+              <button
+                onClick={() => removeGlobalPose(pose)}
+                className="hover:text-red-400 transition-colors"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          ))}
         </div>
       </div>
 
@@ -291,7 +352,7 @@ export default function ImageUploaderCore() {
         
         <Upload className="w-10 h-10 mx-auto mb-3 text-gray-400" />
         <h4 className="text-md font-semibold text-white mb-2">Click to select images</h4>
-        <p className="text-sm text-gray-400 mb-4">Supports JPG, PNG, GIF, WEBP (Max 10MB)</p>
+        <p className="text-sm text-gray-400 mb-4">Auto-sorted by character → type (e.g. /aria/avatar/)</p>
         <label
           htmlFor="file-upload"
           className="inline-flex items-center gap-2 px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors cursor-pointer"
@@ -301,7 +362,7 @@ export default function ImageUploaderCore() {
         </label>
       </div>
 
-      {/* Pending Uploads with Metadata */}
+      {/* Pending Uploads */}
       {pendingUploads.length > 0 && (
         <div className="space-y-4 bg-gray-900/50 p-4 rounded-lg border border-purple-500/30">
           <div className="flex justify-between items-center">
@@ -322,25 +383,19 @@ export default function ImageUploaderCore() {
             {pendingUploads.map((pending, idx) => (
               <div key={idx} className="bg-gray-800 rounded-lg p-4 border border-gray-700">
                 <div className="flex gap-4">
-                  {/* Image Preview */}
                   <div className="w-32 h-32 bg-gray-900 rounded-lg overflow-hidden flex-shrink-0">
                     <img src={pending.preview} alt="Preview" className="w-full h-full object-cover" />
                   </div>
 
-                  {/* Metadata Form */}
                   <div className="flex-1 space-y-3">
                     <div className="flex justify-between items-start">
                       <p className="text-sm font-medium text-white truncate">{pending.file.name}</p>
-                      <button
-                        onClick={() => removePending(idx)}
-                        className="text-gray-400 hover:text-red-400"
-                      >
+                      <button onClick={() => removePending(idx)} className="text-gray-400 hover:text-red-400">
                         <X className="w-4 h-4" />
                       </button>
                     </div>
 
                     <div className="grid grid-cols-3 gap-3">
-                      {/* ✅ CHARACTER SELECTION */}
                       <div>
                         <label className="text-xs text-gray-400">Character</label>
                         <select
@@ -355,23 +410,22 @@ export default function ImageUploaderCore() {
                       </div>
 
                       <div>
-                        <label className="text-xs text-gray-400">Image Type</label>
+                        <label className="text-xs text-gray-400">Type</label>
                         <select
                           value={pending.metadata.type}
                           onChange={(e) => updatePendingMetadata(idx, 'type', e.target.value)}
                           className="w-full px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-sm"
                         >
+                          <option value="Avatar">Avatar</option>
                           <option value="Character">Character</option>
+                          <option value="NSFW">NSFW</option>
                           <option value="Background">Background</option>
-                          <option value="Item">Item</option>
-                          <option value="UI">UI Element</option>
-                          <option value="Icon">Icon</option>
                           <option value="Other">Other</option>
                         </select>
                       </div>
                       
                       <div>
-                        <label className="text-xs text-gray-400">Level Required</label>
+                        <label className="text-xs text-gray-400">Level</label>
                         <input
                           type="number"
                           value={pending.metadata.levelRequired}
@@ -389,7 +443,6 @@ export default function ImageUploaderCore() {
                           type="checkbox"
                           checked={pending.metadata.nsfw}
                           onChange={(e) => updatePendingMetadata(idx, 'nsfw', e.target.checked)}
-                          className="rounded"
                         />
                         NSFW
                       </label>
@@ -398,52 +451,23 @@ export default function ImageUploaderCore() {
                           type="checkbox"
                           checked={pending.metadata.vip}
                           onChange={(e) => updatePendingMetadata(idx, 'vip', e.target.checked)}
-                          className="rounded"
                         />
                         VIP
                       </label>
                       <label className="flex items-center gap-1 text-gray-300">
                         <input
                           type="checkbox"
-                          checked={pending.metadata.event}
-                          onChange={(e) => updatePendingMetadata(idx, 'event', e.target.checked)}
-                          className="rounded"
-                        />
-                        Event
-                      </label>
-                      <label className="flex items-center gap-1 text-gray-300">
-                        <input
-                          type="checkbox"
-                          checked={pending.metadata.random}
-                          onChange={(e) => updatePendingMetadata(idx, 'random', e.target.checked)}
-                          className="rounded"
-                        />
-                        Random
-                      </label>
-                      <label className="flex items-center gap-1 text-gray-300">
-                        <input
-                          type="checkbox"
-                          checked={pending.metadata.hideFromGallery}
-                          onChange={(e) => updatePendingMetadata(idx, 'hideFromGallery', e.target.checked)}
-                          className="rounded"
-                        />
-                        Hide
-                      </label>
-                      <label className="flex items-center gap-1 text-gray-300">
-                        <input
-                          type="checkbox"
                           checked={pending.metadata.enableForChat}
                           onChange={(e) => updatePendingMetadata(idx, 'enableForChat', e.target.checked)}
-                          className="rounded"
                         />
                         Chat
                       </label>
                     </div>
 
-                    {/* ✅ CHAT SEND PERCENT */}
+                    {/* Chat Send % */}
                     {pending.metadata.enableForChat && (
                       <div>
-                        <label className="text-xs text-gray-400 flex items-center justify-between">
+                        <label className="text-xs text-gray-400 flex justify-between">
                           <span>Chat Send %</span>
                           <span className="text-purple-400 font-semibold">{pending.metadata.chatSendPercent}%</span>
                         </label>
@@ -459,35 +483,26 @@ export default function ImageUploaderCore() {
                       </div>
                     )}
 
-                    {/* Poses */}
+                    {/* ✅ TOGGLE POSES */}
                     <div>
-                      <label className="text-xs text-gray-400">Poses (comma-separated)</label>
-                      <input
-                        type="text"
-                        placeholder="sitting, bikini, standing"
-                        onKeyPress={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            const value = (e.target as HTMLInputElement).value;
-                            const poses = value.split(',').map(p => p.trim()).filter(Boolean);
-                            poses.forEach(p => addPose(idx, p));
-                            (e.target as HTMLInputElement).value = '';
-                          }
-                        }}
-                        className="w-full px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-sm"
-                      />
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {pending.metadata.poses.map((pose, pIdx) => (
-                          <span key={pIdx} className="px-2 py-0.5 bg-purple-900/50 text-purple-300 rounded-full text-xs flex items-center gap-1">
-                            {pose}
+                      <label className="text-xs text-gray-400 mb-1 block">Poses (click to toggle)</label>
+                      <div className="flex flex-wrap gap-2">
+                        {globalPoses.map((pose) => {
+                          const isActive = pending.metadata.poses.includes(pose);
+                          return (
                             <button
-                              onClick={() => removePose(idx, pIdx)}
-                              className="hover:text-red-400"
+                              key={pose}
+                              onClick={() => togglePoseForUpload(idx, pose)}
+                              className={`px-3 py-1 rounded-full text-sm transition-all ${
+                                isActive
+                                  ? 'bg-purple-600 text-white border-2 border-purple-400'
+                                  : 'bg-gray-700 text-gray-400 border-2 border-gray-600 hover:border-gray-500'
+                              }`}
                             >
-                              <X className="w-2 h-2" />
+                              {isActive && '✓ '}{pose}
                             </button>
-                          </span>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   </div>
@@ -500,63 +515,38 @@ export default function ImageUploaderCore() {
 
       {/* Gallery */}
       <div>
-        <h4 className="text-md font-semibold text-white mb-3 flex items-center gap-2">
-          🖼️ Uploaded Images
-          {images.length > 0 && <span className="text-sm text-gray-500">({images.length})</span>}
+        <h4 className="text-md font-semibold text-white mb-3">
+          🖼️ Recent Uploads {images.length > 0 && `(${images.length})`}
         </h4>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           {loading ? (
             <div className="col-span-full text-center py-8">
               <div className="animate-spin w-8 h-8 border-4 border-purple-500 border-t-transparent rounded-full mx-auto mb-2"></div>
-              <p className="text-gray-400">Loading images...</p>
+              <p className="text-gray-400">Loading...</p>
             </div>
           ) : images.length === 0 ? (
             <div className="col-span-full text-center py-8 bg-gray-800/30 rounded-lg border border-gray-700/50">
-              <p className="text-gray-400 mb-2">No images uploaded yet.</p>
-              <p className="text-sm text-gray-500">Upload your first image to get started!</p>
+              <p className="text-gray-400">No images yet.</p>
             </div>
           ) : (
-            images.map((image) => (
-              <div key={image.filename} className="bg-gray-800 rounded-lg overflow-hidden group hover:bg-gray-750 transition-all">
+            images.slice(0, 8).map((image) => (
+              <div key={image.filename} className="bg-gray-800 rounded-lg overflow-hidden group">
                 <div className="aspect-square bg-gray-900 flex items-center justify-center overflow-hidden">
-                  <img
-                    src={image.path}
-                    alt={image.filename}
-                    className="max-w-full max-h-full object-contain group-hover:scale-105 transition-transform"
-                    onError={(e) => {
-                      console.error('🖼️ [GALLERY] Failed to load image:', image.path);
-                      (e.target as HTMLImageElement).src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100"%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" dy=".3em" fill="%23888"%3EError%3C/text%3E%3C/svg%3E';
-                    }}
-                  />
+                  <img src={image.path} alt={image.filename} className="max-w-full max-h-full object-contain" />
                 </div>
                 <div className="p-3 space-y-2">
-                  <p className="text-sm text-white truncate font-medium" title={image.filename}>
-                    {image.filename}
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    {formatFileSize(image.size)}
-                  </p>
+                  <p className="text-sm text-white truncate">{image.filename}</p>
+                  <p className="text-xs text-gray-500">{formatFileSize(image.size)}</p>
                   <div className="flex gap-2">
                     <button
                       onClick={() => copyToClipboard(image.path)}
-                      className={`flex-1 p-2 text-white rounded transition-colors flex items-center justify-center gap-1 text-xs ${
-                        copiedUrl === image.path 
-                          ? 'bg-green-600' 
-                          : 'bg-blue-600 hover:bg-blue-700'
+                      className={`flex-1 p-2 rounded text-xs ${
+                        copiedUrl === image.path ? 'bg-green-600' : 'bg-blue-600 hover:bg-blue-700'
                       }`}
-                      title="Copy URL"
                     >
-                      {copiedUrl === image.path ? (
-                        <><CheckCircle className="w-3 h-3" /> Copied!</>
-                      ) : (
-                        <><Copy className="w-3 h-3" /> Copy</>  
-                      )}
+                      {copiedUrl === image.path ? <><CheckCircle className="w-3 h-3 inline" /> Copied</> : <><Copy className="w-3 h-3 inline" /> Copy</>}
                     </button>
-                    <button
-                      onClick={() => handleDelete(image.filename)}
-                      className="p-2 bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
-                      title="Delete"
-                    >
+                    <button onClick={() => handleDelete(image.filename)} className="p-2 bg-red-600 hover:bg-red-700 rounded">
                       <Trash2 className="w-3 h-3" />
                     </button>
                   </div>
@@ -565,13 +555,12 @@ export default function ImageUploaderCore() {
             ))
           )}
         </div>
+        {images.length > 8 && (
+          <p className="text-sm text-gray-400 text-center mt-4">
+            Showing 8 of {images.length} images. View all in Gallery tab →
+          </p>
+        )}
       </div>
-      
-      {!loading && images.length > 0 && (
-        <div className="text-sm text-gray-400 text-center pt-2 border-t border-gray-800">
-          Total Images: {images.length} • Total Size: {formatFileSize(images.reduce((sum, img) => sum + img.size, 0))}
-        </div>
-      )}
     </div>
   );
 }
