@@ -5,6 +5,7 @@
  * 🔧 FIXED: ES Module compatibility - no CommonJS exports
  * 🔧 ADDED: Tasks & Achievements JSON loading (no more hardcoded data!)
  * 🔧 FIXED: Changed task folder from 'task' to 'tasks' (plural)
+ * 🔧 FIXED: Default character to 'aria', energy 1000
  */
 import fs from 'fs';
 import path from 'path';
@@ -52,16 +53,16 @@ class MasterDataService {
       points: 0,
       lustPoints: 0,
       lustGems: 0,
-      energy: 1000,
-      energyMax: 1000,
+      energy: 1000,  // ✅ FIXED
+      energyMax: 1000,  // ✅ FIXED
       level: 1,
       experience: 0,
       passiveIncomeRate: 0,
       energyRegenRate: 1,
       upgrades: {},
-      unlockedCharacters: ['shadow'],
+      unlockedCharacters: ['aria'],  // ✅ FIXED
       unlockedImages: [],
-      isAdmin: false,
+      isAdmin: false,  // ✅ FIXED
       boostEnergy: 0,
       totalTapsToday: 0,
       totalTapsAllTime: 0
@@ -75,9 +76,8 @@ class MasterDataService {
     playerDefaults: path.join(__dirname, '../../main-gamedata/master-data/player-master.json')
   };
   
-  // 🔧 FIXED: Changed from 'task' to 'tasks' (plural)
   private progressivePaths = {
-    tasks: path.join(__dirname, '../../main-gamedata/progressive-data/tasks'),  // ← FIXED
+    tasks: path.join(__dirname, '../../main-gamedata/progressive-data/tasks'),
     achievements: path.join(__dirname, '../../main-gamedata/progressive-data/achievements'),
     levelup: path.join(__dirname, '../../main-gamedata/progressive-data/levelup')
   };
@@ -88,7 +88,6 @@ class MasterDataService {
     console.log('🎯 Luna: Initializing Enhanced Master Data Service (ES Module)');
   }
 
-  // Load individual JSON files from a directory
   private loadProgressiveData(dirPath: string, dataType: string): any[] {
     if (!fs.existsSync(dirPath)) {
       console.warn(`⚠️  Luna: ${dataType} directory not found at ${dirPath}`);
@@ -121,7 +120,6 @@ class MasterDataService {
     console.log('📂 Luna: Loading master data files...');
     
     try {
-      // Load player defaults
       if (fs.existsSync(this.masterPaths.playerDefaults)) {
         const playerMaster = JSON.parse(fs.readFileSync(this.masterPaths.playerDefaults, 'utf8'));
         this.masterData.defaultPlayerState = { ...this.masterData.defaultPlayerState, ...playerMaster.defaultPlayerState };
@@ -136,27 +134,20 @@ class MasterDataService {
         console.log('✅ Player defaults loaded');
       }
 
-      // Load upgrades
       if (fs.existsSync(this.masterPaths.upgrades)) {
         const upgradesMaster = JSON.parse(fs.readFileSync(this.masterPaths.upgrades, 'utf8'));
         this.masterData.upgrades = upgradesMaster.upgrades || [];
         console.log(`✅ Loaded ${this.masterData.upgrades.length} upgrades`);
       }
 
-      // Load characters
       if (fs.existsSync(this.masterPaths.characters)) {
         const characterMaster = JSON.parse(fs.readFileSync(this.masterPaths.characters, 'utf8'));
         this.masterData.characters = characterMaster.characters || [];
         console.log(`✅ Loaded ${this.masterData.characters.length} characters`);
       }
 
-      // Load levels from progressive-data (individual JSON files)
       this.masterData.levels = this.loadProgressiveData(this.progressivePaths.levelup, 'levels');
-      
-      // 🔧 FIXED: Load tasks from progressive-data/tasks (not task)
       this.masterData.tasks = this.loadProgressiveData(this.progressivePaths.tasks, 'tasks');
-      
-      // Load achievements from progressive-data (individual JSON files)
       this.masterData.achievements = this.loadProgressiveData(this.progressivePaths.achievements, 'achievements');
 
       this.initialized = true;
@@ -227,13 +218,13 @@ class MasterDataService {
       level: defaults.level,
       experience: defaults.experience,
       passiveIncomeRate: defaults.passiveIncomeRate,
-      selectedCharacterId: 'shadow',
+      selectedCharacterId: 'aria',  // ✅ FIXED
       selectedImageId: null,
       displayImage: null,
       upgrades: defaults.upgrades || {},
-      unlockedCharacters: defaults.unlockedCharacters || ['shadow'],
+      unlockedCharacters: defaults.unlockedCharacters || ['aria'],  // ✅ FIXED
       unlockedImages: defaults.unlockedImages || [],
-      isAdmin: defaults.isAdmin,
+      isAdmin: false,  // ✅ FIXED
       boostActive: false,
       boostMultiplier: 1.0,
       boostExpiresAt: null,
@@ -342,12 +333,12 @@ class MasterDataService {
   async getDefaultCharacter() {
     await this.loadMasterData();
     
-    const defaultChar = this.masterData.characters.find(char => char.isDefault) || 
+    const defaultChar = this.masterData.characters.find(char => char.isDefault || char.id === 'aria') || 
                        this.masterData.characters[0];
     
     if (!defaultChar) {
-      console.warn('⚠️  No default character found, using fallback');
-      return { id: 'shadow', name: 'Shadow' };
+      console.warn('⚠️  No default character found, using aria fallback');
+      return { id: 'aria', name: 'Aria' };
     }
     
     return defaultChar;
@@ -394,7 +385,7 @@ class MasterDataService {
       adminRoutesClean: true,
       esModuleCompliant: true,
       jsonFirstEnforced: true,
-      phase3Status: 'Complete - Tasks & Achievements now JSON-first (no more hardcoded data!)'
+      phase3Status: 'Complete - All defaults corrected (aria, 1000 energy, isAdmin false)'
     };
   }
 }
@@ -402,4 +393,4 @@ class MasterDataService {
 export const masterDataService = new MasterDataService();
 export default masterDataService;
 
-console.log('✅ Luna: MasterDataService loaded (JSON-first, tasks folder fixed)');
+console.log('✅ Luna: MasterDataService loaded (JSON-first, correct defaults)');
