@@ -25,7 +25,7 @@ export default function LevelupCore() {
   const loadLevels = async () => {
     try {
       setLoading(true);
-      const response = await apiRequest('GET', '/api/admin/levels');
+      const response = await apiRequest('/api/admin/levels');
       const data = await response.json();
       const sortedLevels = (data.levels || []).sort((a: Level, b: Level) => a.level - b.level);
       setLevels(sortedLevels);
@@ -41,7 +41,7 @@ export default function LevelupCore() {
     if (!confirm(`Delete level ${level}? This cannot be undone.`)) return;
     
     try {
-      const response = await apiRequest('DELETE', `/api/admin/levels/${level}`);
+      const response = await apiRequest(`/api/admin/levels/${level}`, { method: 'DELETE' });
       if (response.ok) {
         await loadLevels();
         alert('Level deleted successfully!');
