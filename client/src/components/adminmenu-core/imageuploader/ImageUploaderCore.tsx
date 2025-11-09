@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Upload, Trash2, Image as ImageIcon, Copy, CheckCircle } from 'lucide-react';
+import { Upload, Trash2, Image as ImageIcon, Copy, CheckCircle, X, Edit } from 'lucide-react';
 import { apiRequest } from '@/lib/queryClient';
 
 interface ImageFile {
@@ -9,12 +9,31 @@ interface ImageFile {
   uploadedAt: string;
 }
 
+interface ImageMetadata {
+  type: string;
+  levelRequired: number;
+  nsfw: boolean;
+  vip: boolean;
+  event: boolean;
+  hideFromGallery: boolean;
+  random: boolean;
+  enableForChat: boolean;
+  chatSendPercent: number;
+  poses: string[];
+}
+
+interface PendingUpload {
+  file: File;
+  preview: string;
+  metadata: ImageMetadata;
+}
+
 export default function ImageUploaderCore() {
   const [images, setImages] = useState<ImageFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
+  const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -41,25 +60,20 @@ export default function ImageUploaderCore() {
     const maxSize = 10 * 1024 * 1024; // 10MB
 
     if (!allowedTypes.includes(file.type)) {
-      return `Invalid file type: ${file.type}. Allowed: JPG, PNG, GIF, WEBP`;
+      return `Invalid file type: ${file.type}`;
     }
 
     if (file.size > maxSize) {
-      return `File too large: ${(file.size / 1024 / 1024).toFixed(2)}MB. Max: 10MB`;
+      return `File too large: ${(file.size / 1024 / 1024).toFixed(2)}MB (Max: 10MB)`;
     }
 
     return null;
   };
 
-  const handleUpload = async (files: FileList | null) => {
+  const handleFileSelect = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
 
-    const token = localStorage.getItem('sessionToken');
-    let successCount = 0;
-    let failCount = 0;
-
-    setUploading(true);
-    setUploadProgress(0);
+    const newPending: PendingUpload[] = [];
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
@@ -67,13 +81,76 @@ export default function ImageUploaderCore() {
 
       if (error) {
         alert(`${file.name}: ${error}`);
-        failCount++;
         continue;
       }
 
+      const preview = URL.createObjectURL(file);
+      newPending.push({
+        file,
+        preview,
+        metadata: {
+          type: 'Character',
+          levelRequired: 1,
+          nsfw: false,
+          vip: false,
+          event: false,
+          hideFromGallery: false,
+          random: false,
+          enableForChat: false,
+          chatSendPercent: 0,
+          poses: []
+        }
+      });
+    }
+
+    setPendingUploads([...pendingUploads, ...newPending]);
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const removePending = (index: number) => {
+    const updated = [...pendingUploads];
+    URL.revokeObjectURL(updated[index].preview);
+    updated.splice(index, 1);
+    setPendingUploads(updated);
+  };
+
+  const updatePendingMetadata = (index: number, field: keyof ImageMetadata, value: any) => {
+    const updated = [...pendingUploads];
+    updated[index].metadata = { ...updated[index].metadata, [field]: value };
+    setPendingUploads(updated);
+  };
+
+  const addPose = (index: number, pose: string) => {
+    if (!pose.trim()) return;
+    const updated = [...pendingUploads];
+    if (!updated[index].metadata.poses.includes(pose)) {
+      updated[index].metadata.poses.push(pose);
+      setPendingUploads(updated);
+    }
+  };
+
+  const removePose = (uploadIndex: number, poseIndex: number) => {
+    const updated = [...pendingUploads];
+    updated[uploadIndex].metadata.poses.splice(poseIndex, 1);
+    setPendingUploads(updated);
+  };
+
+  const handleUploadAll = async () => {
+    if (pendingUploads.length === 0) return;
+
+    setUploading(true);
+    const token = localStorage.getItem('sessionToken');
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const pending of pendingUploads) {
       try {
         const formData = new FormData();
-        formData.append('file', file);
+        formData.append('file', pending.file);
+        formData.append('metadata', JSON.stringify(pending.metadata));
 
         const response = await fetch('/api/media', {
           method: 'POST',
@@ -85,29 +162,24 @@ export default function ImageUploaderCore() {
 
         if (response.ok) {
           successCount++;
+          URL.revokeObjectURL(pending.preview);
         } else {
           throw new Error(`Upload failed: ${response.statusText}`);
         }
       } catch (error) {
-        console.error(`Failed to upload ${file.name}:`, error);
+        console.error(`Failed to upload ${pending.file.name}:`, error);
         failCount++;
       }
-
-      setUploadProgress(Math.round(((i + 1) / files.length) * 100));
     }
 
     setUploading(false);
-    setUploadProgress(0);
+    setPendingUploads([]);
 
     if (successCount > 0) {
       await loadImages();
       alert(`Successfully uploaded ${successCount} image(s)${failCount > 0 ? `, ${failCount} failed` : ''}!`);
     } else if (failCount > 0) {
       alert(`Failed to upload ${failCount} image(s).`);
-    }
-
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
     }
   };
 
@@ -132,7 +204,6 @@ export default function ImageUploaderCore() {
       setCopiedUrl(url);
       setTimeout(() => setCopiedUrl(null), 2000);
     } catch (error) {
-      console.error('Failed to copy:', error);
       alert('Failed to copy URL');
     }
   };
@@ -159,7 +230,7 @@ export default function ImageUploaderCore() {
     setDragActive(false);
 
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      handleUpload(e.dataTransfer.files);
+      handleFileSelect(e.dataTransfer.files);
     }
   };
 
@@ -171,7 +242,7 @@ export default function ImageUploaderCore() {
             <ImageIcon className="w-5 h-5" />
             Image Management
           </h3>
-          <p className="text-sm text-gray-400">Upload and manage game images</p>
+          <p className="text-sm text-gray-400">Upload images with metadata and categories</p>
         </div>
       </div>
 
@@ -181,7 +252,7 @@ export default function ImageUploaderCore() {
         onDragLeave={handleDrag}
         onDragOver={handleDrag}
         onDrop={handleDrop}
-        className={`relative border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+        className={`relative border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
           dragActive 
             ? 'border-purple-500 bg-purple-900/20' 
             : 'border-gray-600 bg-gray-800/50 hover:border-gray-500'
@@ -192,96 +263,264 @@ export default function ImageUploaderCore() {
           type="file"
           accept="image/*"
           multiple
-          onChange={(e) => handleUpload(e.target.files)}
-          disabled={uploading}
+          onChange={(e) => handleFileSelect(e.target.files)}
           className="hidden"
           id="file-upload"
         />
         
-        {uploading ? (
-          <div className="space-y-3">
-            <div className="w-16 h-16 mx-auto border-4 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
-            <p className="text-purple-300 font-semibold">Uploading {uploadProgress}%</p>
-            <div className="w-full max-w-md mx-auto bg-gray-700 rounded-full h-2 overflow-hidden">
-              <div 
-                className="bg-purple-500 h-full transition-all duration-300"
-                style={{ width: `${uploadProgress}%` }}
-              ></div>
-            </div>
-          </div>
-        ) : (
-          <>
-            <Upload className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-            <h4 className="text-lg font-semibold text-white mb-2">Drop images here or click to browse</h4>
-            <p className="text-sm text-gray-400 mb-4">Supports JPG, PNG, GIF, WEBP (Max 10MB per file)</p>
-            <label
-              htmlFor="file-upload"
-              className="inline-flex items-center gap-2 px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors cursor-pointer"
-            >
-              <Upload className="w-4 h-4" />
-              Choose Files
-            </label>
-          </>
-        )}
+        <Upload className="w-10 h-10 mx-auto mb-3 text-gray-400" />
+        <h4 className="text-md font-semibold text-white mb-2">Click to select images</h4>
+        <p className="text-sm text-gray-400 mb-4">Supports JPG, PNG, GIF, WEBP (Max 10MB)</p>
+        <label
+          htmlFor="file-upload"
+          className="inline-flex items-center gap-2 px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors cursor-pointer"
+        >
+          <ImageIcon className="w-4 h-4" />
+          Choose Files
+        </label>
       </div>
 
-      {/* Gallery */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-        {loading ? (
-          <div className="col-span-full text-center py-8">
-            <div className="animate-spin w-8 h-8 border-4 border-purple-500 border-t-transparent rounded-full mx-auto mb-2"></div>
-            <p className="text-gray-400">Loading images...</p>
+      {/* Pending Uploads with Metadata */}
+      {pendingUploads.length > 0 && (
+        <div className="space-y-4 bg-gray-900/50 p-4 rounded-lg border border-purple-500/30">
+          <div className="flex justify-between items-center">
+            <h4 className="text-md font-semibold text-purple-300">
+              📤 Ready to Upload ({pendingUploads.length} file{pendingUploads.length > 1 ? 's' : ''})
+            </h4>
+            <button
+              onClick={handleUploadAll}
+              disabled={uploading}
+              className="px-6 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white rounded-lg transition-colors flex items-center gap-2 font-semibold"
+            >
+              <Upload className="w-4 h-4" />
+              {uploading ? 'Uploading...' : 'Upload All with Metadata'}
+            </button>
           </div>
-        ) : images.length === 0 ? (
-          <div className="col-span-full text-center py-8 bg-gray-800/30 rounded-lg border border-gray-700/50">
-            <p className="text-gray-400 mb-2">No images uploaded yet.</p>
-            <p className="text-sm text-gray-500">Upload your first image to get started!</p>
-          </div>
-        ) : (
-          images.map((image) => (
-            <div key={image.filename} className="bg-gray-800 rounded-lg overflow-hidden group hover:bg-gray-750 transition-all hover:scale-105">
-              <div className="aspect-square bg-gray-900 flex items-center justify-center overflow-hidden">
-                <img
-                  src={image.path}
-                  alt={image.filename}
-                  className="max-w-full max-h-full object-contain"
-                />
-              </div>
-              <div className="p-3 space-y-2">
-                <p className="text-sm text-white truncate font-medium" title={image.filename}>
-                  {image.filename}
-                </p>
-                <p className="text-xs text-gray-500">
-                  {formatFileSize(image.size)}
-                </p>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => copyToClipboard(image.path)}
-                    className={`flex-1 p-2 text-white rounded transition-colors flex items-center justify-center gap-1 text-xs ${
-                      copiedUrl === image.path 
-                        ? 'bg-green-600' 
-                        : 'bg-blue-600 hover:bg-blue-700'
-                    }`}
-                    title="Copy URL"
-                  >
-                    {copiedUrl === image.path ? (
-                      <><CheckCircle className="w-3 h-3" /> Copied!</>
-                    ) : (
-                      <><Copy className="w-3 h-3" /> Copy</>  
+
+          <div className="space-y-4 max-h-96 overflow-y-auto">
+            {pendingUploads.map((pending, idx) => (
+              <div key={idx} className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                <div className="flex gap-4">
+                  {/* Image Preview */}
+                  <div className="w-32 h-32 bg-gray-900 rounded-lg overflow-hidden flex-shrink-0">
+                    <img src={pending.preview} alt="Preview" className="w-full h-full object-cover" />
+                  </div>
+
+                  {/* Metadata Form */}
+                  <div className="flex-1 space-y-3">
+                    <div className="flex justify-between items-start">
+                      <p className="text-sm font-medium text-white truncate">{pending.file.name}</p>
+                      <button
+                        onClick={() => removePending(idx)}
+                        className="text-gray-400 hover:text-red-400"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs text-gray-400">Image Type</label>
+                        <select
+                          value={pending.metadata.type}
+                          onChange={(e) => updatePendingMetadata(idx, 'type', e.target.value)}
+                          className="w-full px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+                        >
+                          <option value="Character">Character</option>
+                          <option value="Background">Background</option>
+                          <option value="Item">Item</option>
+                          <option value="UI">UI Element</option>
+                          <option value="Icon">Icon</option>
+                          <option value="Other">Other</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-400">Level Required</label>
+                        <input
+                          type="number"
+                          value={pending.metadata.levelRequired}
+                          onChange={(e) => updatePendingMetadata(idx, 'levelRequired', parseInt(e.target.value) || 1)}
+                          className="w-full px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+                          min="1"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Checkboxes */}
+                    <div className="grid grid-cols-3 gap-2 text-xs">
+                      <label className="flex items-center gap-1 text-gray-300">
+                        <input
+                          type="checkbox"
+                          checked={pending.metadata.nsfw}
+                          onChange={(e) => updatePendingMetadata(idx, 'nsfw', e.target.checked)}
+                          className="rounded"
+                        />
+                        NSFW
+                      </label>
+                      <label className="flex items-center gap-1 text-gray-300">
+                        <input
+                          type="checkbox"
+                          checked={pending.metadata.vip}
+                          onChange={(e) => updatePendingMetadata(idx, 'vip', e.target.checked)}
+                          className="rounded"
+                        />
+                        VIP
+                      </label>
+                      <label className="flex items-center gap-1 text-gray-300">
+                        <input
+                          type="checkbox"
+                          checked={pending.metadata.event}
+                          onChange={(e) => updatePendingMetadata(idx, 'event', e.target.checked)}
+                          className="rounded"
+                        />
+                        Event
+                      </label>
+                      <label className="flex items-center gap-1 text-gray-300">
+                        <input
+                          type="checkbox"
+                          checked={pending.metadata.random}
+                          onChange={(e) => updatePendingMetadata(idx, 'random', e.target.checked)}
+                          className="rounded"
+                        />
+                        Random
+                      </label>
+                      <label className="flex items-center gap-1 text-gray-300">
+                        <input
+                          type="checkbox"
+                          checked={pending.metadata.hideFromGallery}
+                          onChange={(e) => updatePendingMetadata(idx, 'hideFromGallery', e.target.checked)}
+                          className="rounded"
+                        />
+                        Hide
+                      </label>
+                      <label className="flex items-center gap-1 text-gray-300">
+                        <input
+                          type="checkbox"
+                          checked={pending.metadata.enableForChat}
+                          onChange={(e) => updatePendingMetadata(idx, 'enableForChat', e.target.checked)}
+                          className="rounded"
+                        />
+                        Chat
+                      </label>
+                    </div>
+
+                    {/* Chat Percent */}
+                    {pending.metadata.enableForChat && (
+                      <div>
+                        <label className="text-xs text-gray-400">Chat Send %</label>
+                        <input
+                          type="number"
+                          value={pending.metadata.chatSendPercent}
+                          onChange={(e) => updatePendingMetadata(idx, 'chatSendPercent', parseInt(e.target.value) || 0)}
+                          className="w-full px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+                          min="0"
+                          max="100"
+                        />
+                      </div>
                     )}
-                  </button>
-                  <button
-                    onClick={() => handleDelete(image.filename)}
-                    className="p-2 bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
-                    title="Delete"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
+
+                    {/* Poses */}
+                    <div>
+                      <label className="text-xs text-gray-400">Poses (comma-separated)</label>
+                      <input
+                        type="text"
+                        placeholder="sitting, bikini, standing"
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            const value = (e.target as HTMLInputElement).value;
+                            const poses = value.split(',').map(p => p.trim()).filter(Boolean);
+                            poses.forEach(p => addPose(idx, p));
+                            (e.target as HTMLInputElement).value = '';
+                          }
+                        }}
+                        className="w-full px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+                      />
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {pending.metadata.poses.map((pose, pIdx) => (
+                          <span key={pIdx} className="px-2 py-0.5 bg-purple-900/50 text-purple-300 rounded-full text-xs flex items-center gap-1">
+                            {pose}
+                            <button
+                              onClick={() => removePose(idx, pIdx)}
+                              className="hover:text-red-400"
+                            >
+                              <X className="w-2 h-2" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Gallery */}
+      <div>
+        <h4 className="text-md font-semibold text-white mb-3 flex items-center gap-2">
+          🖼️ Uploaded Images
+          {images.length > 0 && <span className="text-sm text-gray-500">({images.length})</span>}
+        </h4>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          {loading ? (
+            <div className="col-span-full text-center py-8">
+              <div className="animate-spin w-8 h-8 border-4 border-purple-500 border-t-transparent rounded-full mx-auto mb-2"></div>
+              <p className="text-gray-400">Loading images...</p>
             </div>
-          ))
-        )}
+          ) : images.length === 0 ? (
+            <div className="col-span-full text-center py-8 bg-gray-800/30 rounded-lg border border-gray-700/50">
+              <p className="text-gray-400 mb-2">No images uploaded yet.</p>
+              <p className="text-sm text-gray-500">Upload your first image to get started!</p>
+            </div>
+          ) : (
+            images.map((image) => (
+              <div key={image.filename} className="bg-gray-800 rounded-lg overflow-hidden group hover:bg-gray-750 transition-all">
+                <div className="aspect-square bg-gray-900 flex items-center justify-center overflow-hidden">
+                  <img
+                    src={image.path}
+                    alt={image.filename}
+                    className="max-w-full max-h-full object-contain group-hover:scale-105 transition-transform"
+                  />
+                </div>
+                <div className="p-3 space-y-2">
+                  <p className="text-sm text-white truncate font-medium" title={image.filename}>
+                    {image.filename}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {formatFileSize(image.size)}
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => copyToClipboard(image.path)}
+                      className={`flex-1 p-2 text-white rounded transition-colors flex items-center justify-center gap-1 text-xs ${
+                        copiedUrl === image.path 
+                          ? 'bg-green-600' 
+                          : 'bg-blue-600 hover:bg-blue-700'
+                      }`}
+                      title="Copy URL"
+                    >
+                      {copiedUrl === image.path ? (
+                        <><CheckCircle className="w-3 h-3" /> Copied!</>
+                      ) : (
+                        <><Copy className="w-3 h-3" /> Copy</>  
+                      )}
+                    </button>
+                    <button
+                      onClick={() => handleDelete(image.filename)}
+                      className="p-2 bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
+                      title="Delete"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
       </div>
       
       {!loading && images.length > 0 && (
