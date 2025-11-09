@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Wrench, Star, Users, Image, TrendingUp, Trophy, Terminal } from 'lucide-react';
+import { X, Wrench, Star, Users, Image, TrendingUp, Trophy, Terminal, Moon } from 'lucide-react';
 
 // Import module managers
 import UpgradesManager from './upgrades/UpgradesCore';
@@ -19,8 +19,7 @@ type TabType = 'upgrades' | 'characters' | 'levels' | 'images' | 'tasks' | 'achi
 
 /**
  * AdminMenuCore - Central admin panel management system
- * Coordinates all admin modules: upgrades, characters, levels, images, tasks, achievements, devtools
- * Each module is a self-contained plugin that manages its own data
+ * Coordinates all admin modules + Luna DevTools
  */
 export default function AdminMenuCore({ isOpen, onClose }: AdminMenuCoreProps) {
   const [activeTab, setActiveTab] = useState<TabType>('upgrades');
@@ -28,25 +27,25 @@ export default function AdminMenuCore({ isOpen, onClose }: AdminMenuCoreProps) {
   if (!isOpen) return null;
 
   const tabs = [
-    { id: 'upgrades' as TabType, label: 'Upgrades', icon: Wrench },
-    { id: 'characters' as TabType, label: 'Characters', icon: Users },
-    { id: 'levels' as TabType, label: 'Levels', icon: Star },
-    { id: 'images' as TabType, label: 'Images', icon: Image },
-    { id: 'tasks' as TabType, label: 'Tasks', icon: TrendingUp },
-    { id: 'achievements' as TabType, label: 'Achievements', icon: Trophy },
-    { id: 'devtools' as TabType, label: 'DevTools', icon: Terminal },
+    { id: 'upgrades' as TabType, label: 'Upgrades', icon: Wrench, color: 'purple' },
+    { id: 'characters' as TabType, label: 'Characters', icon: Users, color: 'blue' },
+    { id: 'levels' as TabType, label: 'Levels', icon: Star, color: 'yellow' },
+    { id: 'images' as TabType, label: 'Images', icon: Image, color: 'green' },
+    { id: 'tasks' as TabType, label: 'Tasks', icon: TrendingUp, color: 'orange' },
+    { id: 'achievements' as TabType, label: 'Achievements', icon: Trophy, color: 'pink' },
+    { id: 'devtools' as TabType, label: '🌙 Luna DevTools', icon: Moon, color: 'indigo' },
   ];
 
   return (
     <div 
       className="fixed inset-0 bg-black/80 flex items-center justify-center p-4"
-      style={{ zIndex: 40 }}
+      style={{ zIndex: 40, pointerEvents: 'auto' }}
     >
-      <div className="bg-gray-900 rounded-lg w-full max-w-6xl max-h-[90vh] flex flex-col shadow-2xl">
+      <div className="bg-gray-900 rounded-xl w-full max-w-6xl max-h-[90vh] flex flex-col shadow-2xl border border-purple-500/20">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-800">
+        <div className="flex items-center justify-between p-4 border-b border-gray-800 bg-gradient-to-r from-purple-900/30 to-blue-900/30">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-purple-600 rounded-lg flex items-center justify-center">
+            <div className="w-10 h-10 bg-purple-600 rounded-lg flex items-center justify-center shadow-lg">
               <Wrench className="w-6 h-6 text-white" />
             </div>
             <div>
@@ -57,25 +56,29 @@ export default function AdminMenuCore({ isOpen, onClose }: AdminMenuCoreProps) {
           <button
             onClick={onClose}
             className="p-2 hover:bg-gray-800 rounded-lg transition-colors"
+            style={{ pointerEvents: 'auto' }}
           >
             <X className="w-5 h-5 text-gray-400 hover:text-white" />
           </button>
         </div>
 
-        {/* Tab Navigation */}
+        {/* Tab Navigation - FIXED Z-INDEX AND POINTER EVENTS */}
         <div 
-          className="flex gap-2 p-4 border-b border-gray-800 overflow-x-auto"
-          style={{ pointerEvents: 'auto' }}
+          className="flex gap-2 p-4 border-b border-gray-800 overflow-x-auto bg-gray-900/50"
+          style={{ pointerEvents: 'auto', position: 'relative', zIndex: 1 }}
         >
           {tabs.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
-              onClick={() => setActiveTab(id)}
-              style={{ pointerEvents: 'auto' }}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap ${
+              onClick={() => {
+                console.log(`[ADMIN] Switching to tab: ${id}`);
+                setActiveTab(id);
+              }}
+              style={{ pointerEvents: 'auto', cursor: 'pointer' }}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all whitespace-nowrap relative ${
                 activeTab === id
-                  ? 'bg-purple-600 text-white shadow-lg'
-                  : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'
+                  ? 'bg-purple-600 text-white shadow-lg scale-105'
+                  : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white hover:scale-102'
               }`}
             >
               <Icon className="w-4 h-4" />
@@ -103,11 +106,12 @@ export default function AdminMenuCore({ isOpen, onClose }: AdminMenuCoreProps) {
               <span className="text-xs text-gray-400">System Active</span>
             </div>
             <span className="text-xs text-gray-500">
-              {tabs.find(t => t.id === activeTab)?.label}
+              Current: {tabs.find(t => t.id === activeTab)?.label}
             </span>
           </div>
           <button
             onClick={onClose}
+            style={{ pointerEvents: 'auto' }}
             className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg transition-colors text-sm"
           >
             Close Panel

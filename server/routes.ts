@@ -31,6 +31,17 @@ const __dirname = path.dirname(__filename);
 const withTracking = async <T,>(name: string, op: () => Promise<T>): Promise<T> => { try { return await op(); } catch (e: any) { console.error(`[${name}] Error:`, e.message); throw e; } };
 
 const uploadsDir = path.join(__dirname, '../uploads');
+const metadataDir = path.join(__dirname, '../main-gamedata/progressive-data/images');
+
+// Create directories if they don't exist
+try {
+  await fs.mkdir(uploadsDir, { recursive: true });
+  await fs.mkdir(metadataDir, { recursive: true });
+  console.log('✅ Upload directories ready');
+} catch (e) {
+  console.error('Failed to create upload directories:', e);
+}
+
 const upload = multer({
   storage: multer.diskStorage({
     destination: (req, file, cb) => { cb(null, uploadsDir); },
@@ -39,12 +50,12 @@ const upload = multer({
       cb(null, uniqueName);
     }
   }),
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
   fileFilter: (req, file, cb) => {
     const allowedTypes = /jpeg|jpg|png|gif|webp/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
     const mimetype = allowedTypes.test(file.mimetype);
-    if (extname && mimetype) { cb(null, true); } else { cb(new Error('Only image files are allowed')); }
+    if (extname && mimetype) { cb(null, true); } else { cb(new Error('Only image files allowed')); }
   }
 });
 
@@ -153,7 +164,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.log(`✅ [DEV AUTH] Found existing DB record: ${savedData.id}`);
         }
       } else {
-        // ✅ FIXED: New player creation uses master data template
         const playerId = `dev_${sanitizedUsername}`;
         console.log(`🆕 [DEV AUTH] Creating new player: ${playerId}`);
         
@@ -167,20 +177,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
             points: 0, 
             lustPoints: 0, 
             lustGems: 0, 
-            energy: 1000,  // ✅ FIXED: Proper default
-            energyMax: 1000,  // ✅ FIXED: Proper default
+            energy: 1000,
+            energyMax: 1000,
             level: 1, 
             experience: 0, 
             passiveIncomeRate: 0, 
             lastTapValue: 1,
-            selectedCharacterId: 'aria',  // ✅ FIXED: Default starter
+            selectedCharacterId: 'aria',
             displayImage: null, 
-            isAdmin: false,  // ✅ FIXED: Default to false!
+            isAdmin: false,
             consecutiveDays: 0, 
             createdAt: now, 
             updatedAt: now
           });
-          console.log(`✅ [DEV AUTH] Created new player: ${playerId} (isAdmin: false)`);
+          console.log(`✅ [DEV AUTH] Created new player: ${playerId}`);
         }
       }
 
@@ -190,7 +200,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storage.createSession({ token: sessionToken, playerId: player.id, expiresAt });
       
       const playerState = await getPlayerState(player);
-      console.log(`🎮 [DEV AUTH] Loaded player state - isAdmin: ${playerState.isAdmin}, LP: ${playerState.lustPoints}, energyMax: ${playerState.energyMax}`);
+      console.log(`🎮 [DEV AUTH] Loaded player state - isAdmin: ${playerState.isAdmin}`);
       
       res.json({ success: true, sessionToken, player: playerState });
     } catch (error: any) {
@@ -257,32 +267,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } 
   });
   
-  // ✅ LEVEL-UP: Uses lustPoints (LP) as currency
   app.post('/api/player/level-up', requireAuth, async (req, res) => {
     try {
       const player = await getPlayerState(req.player!);
       const currentLevel = player.level || 1;
       const nextLevel = currentLevel + 1;
       
-      console.log(`🎮 [LEVEL-UP] Player ${player.id} attempting level-up from ${currentLevel} to ${nextLevel}`);
-      
-      // Get next level data
       const nextLevelData = getLevelsFromMemory().find(l => l.level === nextLevel);
       if (!nextLevelData) {
-        console.log(`❌ [LEVEL-UP] No level ${nextLevel} data found`);
         return res.status(400).json({ error: 'Maximum level reached' });
       }
       
       const cost = nextLevelData.cost || 100;
-      const currentLP = player.lustPoints || 0;  // ✅ FIXED: Use lustPoints!
+      const currentLP = player.lustPoints || 0;
       
-      // Check if player has enough LP
       if (currentLP < cost) {
-        console.log(`❌ [LEVEL-UP] Insufficient LP: ${currentLP} < ${cost}`);
         return res.status(400).json({ error: 'Insufficient points' });
       }
       
-      // Check requirements
       const requirements = nextLevelData.requirements || [];
       const requirementsMet = requirements.every((req: any) => {
         const playerUpgradeLevel = player.upgrades?.[req.upgradeId] || 0;
@@ -290,19 +292,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       if (!requirementsMet) {
-        console.log(`❌ [LEVEL-UP] Requirements not met`);
         return res.status(400).json({ error: 'Requirements not met' });
       }
       
-      // Deduct LP and upgrade level
       const newLP = Math.round(currentLP - cost);
       const updatedPlayer = await updatePlayerState(req.player!, {
         level: nextLevel,
         lustPoints: newLP,
-        points: newLP  // ✅ Keep points in sync with lustPoints
+        points: newLP
       });
-      
-      console.log(`✅ [LEVEL-UP] Player ${player.id} leveled up! Level ${currentLevel} → ${nextLevel}, LP: ${currentLP} → ${newLP}`);
       
       res.json({ 
         success: true, 
@@ -312,7 +310,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         pointsSpent: cost
       });
     } catch (e: any) {
-      console.error('[LEVEL-UP] Error:', e);
       res.status(500).json({ error: e.message });
     }
   });
@@ -337,62 +334,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get('/api/media', requireAuth, async (_req, res) => {
     try {
-      const media = await storage.getMediaUploads();
+      const files = await fs.readdir(uploadsDir);
+      const imageFiles = files.filter(f => /\.(jpg|jpeg|png|gif|webp)$/i.test(f));
+      
+      const media = await Promise.all(
+        imageFiles.map(async (filename) => {
+          const filePath = path.join(uploadsDir, filename);
+          const stats = await fs.stat(filePath);
+          
+          // Try to load metadata
+          let metadata = null;
+          try {
+            const metaPath = path.join(metadataDir, `${filename}.meta.json`);
+            const metaContent = await fs.readFile(metaPath, 'utf-8');
+            metadata = JSON.parse(metaContent);
+          } catch {}
+          
+          return {
+            filename,
+            path: `/uploads/${filename}`,
+            size: stats.size,
+            uploadedAt: stats.birthtime.toISOString(),
+            metadata
+          };
+        })
+      );
+      
       res.json({ media });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
   });
 
+  // ✅ ENHANCED: Media upload with metadata support
   app.post('/api/media', requireAuth, upload.single('file'), async (req, res) => {
     try {
       if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+      
       const fileUrl = `/uploads/${req.file.filename}`;
-      const mediaUpload = await storage.createMediaUpload({
-        fileName: req.file.filename, originalName: req.file.originalname,
-        mimeType: req.file.mimetype, size: req.file.size, url: fileUrl,
-        uploadedBy: req.player!.id, category: req.body.category || 'general',
-        isNsfw: req.body.isNsfw === 'true' || req.body.isNsfw === true,
-        isHidden: req.body.hideFromGallery === 'true' || req.body.hideFromGallery === true
-      });
+      
+      // Parse metadata from request body
+      let metadata = null;
+      if (req.body.metadata) {
+        try {
+          metadata = JSON.parse(req.body.metadata);
+          
+          // Save metadata to file
+          const metaPath = path.join(metadataDir, `${req.file.filename}.meta.json`);
+          await fs.writeFile(metaPath, JSON.stringify(metadata, null, 2));
+          console.log(`✅ [UPLOAD] Metadata saved: ${req.file.filename}.meta.json`);
+        } catch (e) {
+          console.warn(`⚠️  [UPLOAD] Failed to save metadata:`, e);
+        }
+      }
+      
       console.log(`✅ [UPLOAD] Image uploaded: ${req.file.filename}`);
-      res.json({ success: true, media: mediaUpload, url: fileUrl });
+      res.json({ 
+        success: true, 
+        url: fileUrl,
+        filename: req.file.filename,
+        size: req.file.size,
+        metadata
+      });
     } catch (e: any) {
       console.error('[UPLOAD] Failed:', e);
       res.status(500).json({ error: e.message });
     }
   });
-
-  app.post('/api/upload', requireAuth, upload.single('image'), async (req, res) => {
-  try {
-    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-    
-    const fileUrl = `/uploads/${req.file.filename}`;
-    const { characterId, imageType, unlockLevel, categories, poses, isHidden, chatEnable, chatSendPercent } = req.body;
-    
-    const parsedCategories = categories ? JSON.parse(categories) : {};
-    const parsedPoses = poses ? JSON.parse(poses) : [];
-    const categoryArray: string[] = Object.keys(parsedCategories).filter(key => parsedCategories[key] === true);
-    
-    const mediaUpload = await storage.createMediaUpload({
-      characterId,
-      url: fileUrl,
-      type: imageType || 'character',
-      unlockLevel: unlockLevel ? parseInt(unlockLevel) : 1,
-      categories: categoryArray,
-      poses: parsedPoses,
-      isHidden: isHidden === 'true' || isHidden === true,
-      chatEnable: chatEnable === 'true' || chatEnable === true,
-      chatSendPercent: chatSendPercent ? parseInt(chatSendPercent) : 0
-    });
-    
-    console.log(`✅ [UPLOAD] Image uploaded: ${req.file.filename} for character ${characterId}`);
-    res.json({ success: true, media: mediaUpload, url: fileUrl });
-  } catch (e: any) {
-    console.error('[UPLOAD] Failed:', e);
-    res.status(500).json({ error: e.message });
-  }
-});
 
   app.get('/api/levels', requireAuth, (_req, res) => { 
     try { 
@@ -513,7 +521,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/admin/levels', requireAuth, requireAdmin, async (req, res) => { 
     try {
-      console.log(`🔧 [ADMIN LEVEL] Saving level ${req.body.level}...`);
       const levelData = {
         ...req.body,
         requirements: Array.isArray(req.body.requirements) ? req.body.requirements : [],
@@ -521,72 +528,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
         rewards: req.body.rewards || {}
       };
       
-      console.log(`📝 [ADMIN LEVEL] Writing to JSON: level-${levelData.level}.json`);
       await saveGameData('levels', levelData);
-      
-      console.log(`🔄 [ADMIN LEVEL] Reloading levels cache...`);
       await syncLevels();
       
-      console.log(`✅ [ADMIN LEVEL] Level ${levelData.level} saved successfully!`);
       res.json({ success: true, level: levelData, levels: getLevelsFromMemory() }); 
     } catch (e: any) {
-      console.error(`❌ [ADMIN LEVEL] Save failed:`, e);
       res.status(500).json({ error: e.message }); 
     } 
   });
 
   app.post('/api/admin/characters', requireAuth, requireAdmin, async (req, res) => {
     try {
-      console.log(`🔧 [ADMIN CHAR] Saving character ${req.body.id}...`);
-      const characterData = req.body;
-      await saveGameData('characters', characterData);
+      await saveGameData('characters', req.body);
       await syncCharacters();
-      console.log(`✅ [ADMIN CHAR] Character ${characterData.id} saved!`);
-      res.json({ success: true, character: characterData, characters: getCharactersFromMemory() });
+      res.json({ success: true, character: req.body, characters: getCharactersFromMemory() });
     } catch (e: any) {
-      console.error(`❌ [ADMIN CHAR] Save failed:`, e);
       res.status(500).json({ error: e.message });
     }
   });
 
   app.post('/api/admin/upgrades', requireAuth, requireAdmin, async (req, res) => {
     try {
-      console.log(`🔧 [ADMIN UPG] Saving upgrade ${req.body.id}...`);
-      const upgradeData = req.body;
-      await saveGameData('upgrades', upgradeData);
+      await saveGameData('upgrades', req.body);
       await syncUpgrades();
-      console.log(`✅ [ADMIN UPG] Upgrade ${upgradeData.id} saved!`);
-      res.json({ success: true, upgrade: upgradeData, upgrades: getUpgradesFromMemory() });
+      res.json({ success: true, upgrade: req.body, upgrades: getUpgradesFromMemory() });
     } catch (e: any) {
-      console.error(`❌ [ADMIN UPG] Save failed:`, e);
       res.status(500).json({ error: e.message });
     }
   });
 
   app.post('/api/admin/tasks', requireAuth, requireAdmin, async (req, res) => {
     try {
-      console.log(`🔧 [ADMIN TASK] Saving task ${req.body.id}...`);
-      const taskData = req.body;
-      await saveGameData('tasks', taskData);
+      await saveGameData('tasks', req.body);
       await syncTasks();
-      console.log(`✅ [ADMIN TASK] Task ${taskData.id} saved!`);
-      res.json({ success: true, task: taskData, tasks: getTasksFromMemory() });
+      res.json({ success: true, task: req.body, tasks: getTasksFromMemory() });
     } catch (e: any) {
-      console.error(`❌ [ADMIN TASK] Save failed:`, e);
       res.status(500).json({ error: e.message });
     }
   });
 
   app.post('/api/admin/achievements', requireAuth, requireAdmin, async (req, res) => {
     try {
-      console.log(`🔧 [ADMIN ACH] Saving achievement ${req.body.id}...`);
-      const achData = req.body;
-      await saveGameData('achievements', achData);
+      await saveGameData('achievements', req.body);
       await syncAchievements();
-      console.log(`✅ [ADMIN ACH] Achievement ${achData.id} saved!`);
-      res.json({ success: true, achievement: achData, achievements: getAchievementsFromMemory() });
+      res.json({ success: true, achievement: req.body, achievements: getAchievementsFromMemory() });
     } catch (e: any) {
-      console.error(`❌ [ADMIN ACH] Save failed:`, e);
       res.status(500).json({ error: e.message });
     }
   });
@@ -594,4 +580,4 @@ export async function registerRoutes(app: Express): Promise<Server> {
   return server;
 }
 
-console.log('✅ [ROUTES] All routes registered - using unified data loader (progressive-data only)');
+console.log('✅ [ROUTES] All routes registered with enhanced media upload');
