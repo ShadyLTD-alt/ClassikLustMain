@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -16,6 +16,7 @@ interface LevelUpProps {
 export default function LevelUp({ isOpen, onClose }: LevelUpProps) {
   const [isLevelingUp, setIsLevelingUp] = useState(false);
   const { toast } = useToast();
+  const queryClient = useQueryClient();  // ✅ ADD: Query client for cache invalidation
   
   // Fetch player data
   const { data: playerData, isLoading: playerLoading } = useQuery({
@@ -122,18 +123,29 @@ export default function LevelUp({ isOpen, onClose }: LevelUpProps) {
       const response = await apiRequest('/api/player/level-up', { method: 'POST' });
       
       if (response.ok) {
+        const data = await response.json();
+        
+        // ✅ FIX: Invalidate ALL player-related queries to refresh UI instantly
+        await queryClient.invalidateQueries({ queryKey: ['/api/player/me'] });
+        await queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
+        await queryClient.invalidateQueries({ queryKey: ['/api/levels'] });
+        
+        console.log(`✅ [LEVEL-UP UI] Cache invalidated, new level: ${data.newLevel}`);
+        
         toast({
           title: "Level Up!",
-          description: `Congratulations! You've reached level ${nextLevelData.level}`,
+          description: `Congratulations! You've reached level ${data.newLevel}`,
         });
+        
         onClose();
       } else {
-        throw new Error('Failed to level up');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to level up');
       }
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: "Error",
-        description: "Failed to level up. Please try again.",
+        description: error.message || "Failed to level up. Please try again.",
         variant: "destructive",
       });
     } finally {
