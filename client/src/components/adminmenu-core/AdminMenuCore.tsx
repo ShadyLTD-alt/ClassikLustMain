@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Wrench, Star, Users, Image, TrendingUp, Trophy, Terminal, Moon } from 'lucide-react';
+import { X, Wrench, Star, Users, Image, TrendingUp, Trophy, Terminal, Moon, Gallery } from 'lucide-react';
 
 // Import module managers
 import UpgradesManager from './upgrades/UpgradesCore';
@@ -8,6 +8,7 @@ import CharactersManager from './characters/CharactersCore';
 import AchievementsManager from './achievements/AchievementsCore';
 import TasksManager from './tasks/TasksCore';
 import ImageManager from './imageuploader/ImageUploaderCore';
+import CharacterGallery from './character-gallery/CharacterGalleryCore';
 import DevToolsManager from './devtools/DevToolsCore';
 
 interface AdminMenuCoreProps {
@@ -15,11 +16,11 @@ interface AdminMenuCoreProps {
   onClose: () => void;
 }
 
-type TabType = 'upgrades' | 'characters' | 'levels' | 'images' | 'tasks' | 'achievements' | 'devtools';
+type TabType = 'upgrades' | 'characters' | 'levels' | 'images' | 'gallery' | 'tasks' | 'achievements' | 'devtools';
 
 /**
  * AdminMenuCore - Central admin panel management system
- * Coordinates all admin modules + Luna DevTools
+ * Coordinates all admin modules + Character Gallery + Luna DevTools
  */
 export default function AdminMenuCore({ isOpen, onClose }: AdminMenuCoreProps) {
   const [activeTab, setActiveTab] = useState<TabType>('upgrades');
@@ -30,10 +31,11 @@ export default function AdminMenuCore({ isOpen, onClose }: AdminMenuCoreProps) {
     { id: 'upgrades' as TabType, label: 'Upgrades', icon: Wrench, color: 'purple' },
     { id: 'characters' as TabType, label: 'Characters', icon: Users, color: 'blue' },
     { id: 'levels' as TabType, label: 'Levels', icon: Star, color: 'yellow' },
-    { id: 'images' as TabType, label: 'Images', icon: Image, color: 'green' },
+    { id: 'images' as TabType, label: 'Upload', icon: Image, color: 'green' },
+    { id: 'gallery' as TabType, label: '🖼️ Gallery', icon: Gallery, color: 'pink' },
     { id: 'tasks' as TabType, label: 'Tasks', icon: TrendingUp, color: 'orange' },
     { id: 'achievements' as TabType, label: 'Achievements', icon: Trophy, color: 'pink' },
-    { id: 'devtools' as TabType, label: '🌙 Luna DevTools', icon: Moon, color: 'indigo' },
+    { id: 'devtools' as TabType, label: '🌙 Luna', icon: Moon, color: 'indigo' },
   ];
 
   return (
@@ -62,7 +64,7 @@ export default function AdminMenuCore({ isOpen, onClose }: AdminMenuCoreProps) {
           </button>
         </div>
 
-        {/* Tab Navigation - FIXED Z-INDEX AND POINTER EVENTS */}
+        {/* Tab Navigation */}
         <div 
           className="flex gap-2 p-4 border-b border-gray-800 overflow-x-auto bg-gray-900/50"
           style={{ pointerEvents: 'auto', position: 'relative', zIndex: 1 }}
@@ -93,6 +95,7 @@ export default function AdminMenuCore({ isOpen, onClose }: AdminMenuCoreProps) {
           {activeTab === 'characters' && <CharactersManager />}
           {activeTab === 'levels' && <LevelupManager />}
           {activeTab === 'images' && <ImageManager />}
+          {activeTab === 'gallery' && <CharacterGallery />}
           {activeTab === 'tasks' && <TasksManager />}
           {activeTab === 'achievements' && <AchievementsManager />}
           {activeTab === 'devtools' && <DevToolsManager />}
