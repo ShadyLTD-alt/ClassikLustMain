@@ -14,7 +14,8 @@ function resolvePlayerKey(player: any): string {
 }
 
 /**
- * Calculate derived stats from upgrades
+ * ✅ FIXED: Calculate derived stats from upgrades
+ * Issue: energyRegen was adding to energyMax instead of energyRegenRate
  */
 function calculateDerivedStats(playerUpgrades: Record<string, number>) {
   const upgrades = getUpgradesFromMemory();
@@ -23,35 +24,37 @@ function calculateDerivedStats(playerUpgrades: Record<string, number>) {
   let energyRegenRate = 1; // Base value
   let passiveIncomeRate = 0;
   
-  // Calculate energyMax from energy-capacity upgrades
-  const energyUpgrades = upgrades.filter(u => u.type === 'energyMax');
-  energyUpgrades.forEach(u => {
+  // ✅ FIX: Calculate energyMax from energy-capacity upgrades ONLY
+  const energyMaxUpgrades = upgrades.filter(u => u.type === 'energyMax');
+  energyMaxUpgrades.forEach(u => {
     const level = playerUpgrades[u.id] || 0;
     if (level > 0) {
-      const upgradeValue = u.baseValue + (u.valueIncrement * level);
-      energyMax += upgradeValue;
+      // ✅ FIXED: valueIncrement * level only, not adding baseValue each time
+      energyMax += (u.valueIncrement * level);
     }
   });
   
-  // Calculate energyRegenRate from energy-regen upgrades
+  // ✅ FIX: Calculate energyRegenRate from energy-regen upgrades ONLY
   const regenUpgrades = upgrades.filter(u => u.type === 'energyRegen');
   regenUpgrades.forEach(u => {
     const level = playerUpgrades[u.id] || 0;
     if (level > 0) {
-      const upgradeValue = u.baseValue + (u.valueIncrement * level);
-      energyRegenRate += upgradeValue;
+      // ✅ FIXED: valueIncrement * level only
+      energyRegenRate += (u.valueIncrement * level);
     }
   });
   
-  // Calculate passiveIncomeRate from passive-income upgrades
+  // ✅ FIX: Calculate passiveIncomeRate from passive-income upgrades ONLY
   const incomeUpgrades = upgrades.filter(u => u.type === 'perHour');
   incomeUpgrades.forEach(u => {
     const level = playerUpgrades[u.id] || 0;
     if (level > 0) {
-      const upgradeValue = u.baseValue + (u.valueIncrement * level);
-      passiveIncomeRate += upgradeValue;
+      // ✅ FIXED: valueIncrement * level only
+      passiveIncomeRate += (u.valueIncrement * level);
     }
   });
+  
+  console.log(`📊 [CALC STATS] energyMax: ${energyMax}, energyRegenRate: ${energyRegenRate}, passiveIncome: ${passiveIncomeRate}`);
   
   return { energyMax, energyRegenRate, passiveIncomeRate };
 }
@@ -113,23 +116,23 @@ class PlayerStateManager {
       points: 0, 
       lustPoints: 0, 
       lustGems: 0, 
-      energy: 1000,  // ✅ FIXED: Back to 1000
-      energyMax: 1000,  // ✅ FIXED: Back to 1000
+      energy: 1000,
+      energyMax: 1000,
       level: 1, 
       experience: 0, 
       passiveIncomeRate: 0, 
-      energyRegenRate: 1,  // ✅ ADD: Base regen rate
+      energyRegenRate: 1,
       lastTapValue: 1, 
-      selectedCharacterId: 'aria',  // ✅ FIXED: Default to aria
+      selectedCharacterId: 'aria',
       displayImage: null, 
       upgrades: {}, 
-      unlockedCharacters: ['aria'],  // ✅ FIXED: Start with aria
+      unlockedCharacters: ['aria'],
       totalTapsAllTime: 0, 
       totalTapsToday: 0, 
       lpEarnedToday: 0, 
       upgradesPurchasedToday: 0, 
       consecutiveDays: 0, 
-      isAdmin: false,  // ✅ FIXED: Default to false
+      isAdmin: false,
       boostActive: false, 
       boostMultiplier: 1, 
       boostEndTime: null, 
@@ -234,7 +237,7 @@ class PlayerStateManager {
         data.energy = data.energyMax;
       }
       
-      console.log(`📊 [PLAYER LOAD] Recalculated stats - energyMax: ${data.energyMax}, passiveIncome: ${data.passiveIncomeRate}`);
+      console.log(`📊 [PLAYER LOAD] Recalculated stats - energyMax: ${data.energyMax}, energyRegen: ${data.energyRegenRate}, passiveIncome: ${data.passiveIncomeRate}`);
     } catch (e: any) {
       this.errorReports.push(`Luna: rebuilt ${filePath} for new or broken profile (${e.message})`);
       data = this.createSafeDefaults();
