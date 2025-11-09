@@ -32,7 +32,10 @@ export default function CharactersCreate({ onSave, onCancel }: CharactersCreateP
     setSaving(true);
 
     try {
-      const response = await apiRequest('POST', '/api/admin/characters', formData);
+      const response = await apiRequest('/api/admin/characters', {
+        method: 'POST',
+        body: JSON.stringify(formData)
+      });
       if (response.ok) {
         alert('Character created successfully!');
         onSave();

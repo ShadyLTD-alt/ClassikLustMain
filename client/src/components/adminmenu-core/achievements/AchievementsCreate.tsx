@@ -36,7 +36,10 @@ export default function AchievementsCreate({ onSave, onCancel }: AchievementsCre
     setSaving(true);
 
     try {
-      const response = await apiRequest('POST', '/api/admin/achievements', formData);
+      const response = await apiRequest('/api/admin/achievements', {
+        method: 'POST',
+        body: JSON.stringify(formData)
+      });
       if (response.ok) {
         alert('Achievement created successfully!');
         onSave();
@@ -111,10 +114,19 @@ export default function AchievementsCreate({ onSave, onCancel }: AchievementsCre
           </div>
         </div>
 
+        <div>
+          <label className="block text-sm font-medium text-gray-300 mb-2">Reset Interval *</label>
+          <select value={formData.resetInterval} onChange={(e) => setFormData({ ...formData, resetInterval: e.target.value })} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white">
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="never">Never (One-Time)</option>
+          </select>
+        </div>
+
         <div className="flex gap-3 pt-4">
           <button type="submit" disabled={saving} className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white rounded-lg transition-colors">
             <Plus className="w-4 h-4" />
-            {saving ? 'Creating...' : 'Create Achievement'}
+            {saving ? 'Creating...' : 'Create Task'}
           </button>
           <button type="button" onClick={onCancel} className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors">Cancel</button>
         </div>

@@ -30,7 +30,10 @@ export default function LevelupCreate({ onSave, onCancel }: LevelupCreateProps) 
     setSaving(true);
 
     try {
-      const response = await apiRequest('POST', '/api/admin/levels', formData);
+      const response = await apiRequest('/api/admin/levels', {
+        method: 'POST',
+        body: JSON.stringify(formData)
+      });
       if (response.ok) {
         alert('Level created successfully!');
         onSave();

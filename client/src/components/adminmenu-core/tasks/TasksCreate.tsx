@@ -36,7 +36,10 @@ export default function TasksCreate({ onSave, onCancel }: TasksCreateProps) {
     setSaving(true);
 
     try {
-      const response = await apiRequest('POST', '/api/admin/tasks', formData);
+      const response = await apiRequest('/api/admin/tasks', {
+        method: 'POST',
+        body: JSON.stringify(formData)
+      });
       if (response.ok) {
         alert('Task created successfully!');
         onSave();
