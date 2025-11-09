@@ -26,7 +26,7 @@ export default function CharactersCore() {
   const loadCharacters = async () => {
     try {
       setLoading(true);
-      const response = await apiRequest('GET', '/api/admin/characters');
+      const response = await apiRequest('/api/admin/characters');
       const data = await response.json();
       setCharacters(data.characters || []);
     } catch (error) {
@@ -41,7 +41,7 @@ export default function CharactersCore() {
     if (!confirm(`Delete character "${characterId}"? This cannot be undone.`)) return;
     
     try {
-      const response = await apiRequest('DELETE', `/api/admin/characters/${characterId}`);
+      const response = await apiRequest(`/api/admin/characters/${characterId}`, { method: 'DELETE' });
       if (response.ok) {
         await loadCharacters();
         alert('Character deleted successfully!');
