@@ -24,19 +24,12 @@ export default function GameInterfaceV2() {
     enabled: !!state?.selectedCharacterId,
   });
 
-  // Monitor showAdminPanel state changes
   useEffect(() => {
-    console.log('🔄 STATE CHANGED: showAdminPanel =', showAdminPanel);
-    if (showAdminPanel) {
-      console.log('✅ Admin panel should now be visible!');
-    } else {
-      console.log('❌ Admin panel should now be hidden!');
-    }
+    // Monitor showAdminPanel state changes (for devs only)
   }, [showAdminPanel]);
 
-  // Monitor isAdmin changes
   useEffect(() => {
-    console.log('👤 STATE CHANGED: isAdmin =', state?.isAdmin);
+    // Monitor isAdmin changes (for devs only)
   }, [state?.isAdmin]);
 
   const handleTap = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -60,46 +53,6 @@ export default function GameInterfaceV2() {
 
   return (
     <GameLayout>
-      {/* ========== DEBUG UI - REMOVE AFTER FIXING ========== */}
-      
-      {/* Debug Info Bar - Shows current state values */}
-      <div className="fixed top-0 left-0 right-0 bg-black/95 text-white p-3 z-[100] text-xs font-mono border-b-2 border-green-400">
-        <div className="max-w-screen-xl mx-auto space-y-1">
-          <div>🔍 <strong>showAdminPanel:</strong> {showAdminPanel ? '✅ TRUE' : '❌ FALSE'}</div>
-          <div>👤 <strong>isAdmin:</strong> {state?.isAdmin ? '✅ TRUE' : '❌ FALSE'}</div>
-          <div>📍 <strong>User:</strong> {state?.username || 'Not logged in'}</div>
-        </div>
-      </div>
-
-      {/* Test Button - Bypasses isAdmin check */}
-      <button
-        onClick={() => {
-          alert('🧪 TEST BUTTON CLICKED!\nOpening Admin Panel...\nWatch for green banner!');
-          console.log('🧪 TEST: Before setShowAdminPanel(true)');
-          setShowAdminPanel(true);
-          console.log('🧪 TEST: After setShowAdminPanel(true)');
-          setTimeout(() => {
-            console.log('🧪 TEST: showAdminPanel after 100ms:', showAdminPanel);
-          }, 100);
-        }}
-        className="fixed top-16 left-4 z-[110] bg-red-600 hover:bg-red-500 text-white px-4 py-3 rounded-lg font-bold text-sm shadow-2xl border-2 border-white active:scale-95 transform transition"
-      >
-        🧪 TEST
-      </button>
-
-      {/* Force Close Button */}
-      <button
-        onClick={() => {
-          alert('❌ FORCE CLOSE!\nSetting showAdminPanel to FALSE');
-          setShowAdminPanel(false);
-        }}
-        className="fixed top-16 right-4 z-[110] bg-orange-600 hover:bg-orange-500 text-white px-4 py-3 rounded-lg font-bold text-sm shadow-2xl border-2 border-white active:scale-95 transform transition"
-      >
-        ❌ CLOSE
-      </button>
-
-      {/* ========== END DEBUG UI ========== */}
-
       <div className="flex items-center justify-center min-h-[60vh] mt-16">
         <div className="text-center relative">
           <div className="text-sm text-gray-400 mb-4">Tap to earn points!</div>
@@ -168,18 +121,10 @@ export default function GameInterfaceV2() {
         </div>
       </div>
 
-      {/* Settings Button - Enhanced with Debug */}
+      {/* Settings Button */}
       {state?.isAdmin && (
         <button
-          onClick={() => {
-            alert('⚙️ SETTINGS CLICKED!\n\nCurrent: ' + showAdminPanel + '\nSetting to TRUE...');
-            console.log('⚙️ Settings: Before setState, showAdminPanel =', showAdminPanel);
-            setShowAdminPanel(true);
-            console.log('⚙️ Settings: After setState call');
-            setTimeout(() => {
-              console.log('⚙️ Settings: showAdminPanel after 100ms =', showAdminPanel);
-            }, 100);
-          }}
+          onClick={() => setShowAdminPanel(true)}
           className="fixed bottom-24 right-6 z-40 w-14 h-14 bg-gradient-to-br from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-110 active:scale-95"
           title="Open Admin Panel"
         >
@@ -187,63 +132,14 @@ export default function GameInterfaceV2() {
         </button>
       )}
 
-      {/* Warning if Settings button hidden */}
-      {!state?.isAdmin && (
-        <div className="fixed bottom-24 right-6 z-40 bg-yellow-500 text-black px-3 py-2 rounded-lg text-xs font-bold shadow-lg max-w-[200px]">
-          ⚠️ Settings hidden<br/>
-          (isAdmin = false)
-        </div>
+      {/* Admin Panel Modal */}
+      {state?.isAdmin && (
+        <AdminMenuCore 
+          isOpen={showAdminPanel} 
+          onClose={() => setShowAdminPanel(false)} 
+        />
       )}
 
-      {/* AdminMenuCore Modal - Enhanced Debug Version */}
-      {showAdminPanel && (
-        <div className="fixed inset-0 z-[999] bg-black/50 backdrop-blur-sm">
-          
-          {/* Visual Confirmation Banner */}
-          <div className="absolute top-20 left-1/2 -translate-x-1/2 bg-green-500 text-white px-6 py-3 rounded-lg z-[1001] font-bold text-lg shadow-2xl border-2 border-white animate-pulse">
-            ✅ ADMIN MENU SHOULD BE OPEN!
-          </div>
-
-          {/* State Display */}
-          <div className="absolute top-36 left-1/2 -translate-x-1/2 bg-blue-600 text-white px-4 py-2 rounded z-[1001] text-xs font-mono">
-            showAdminPanel = {String(showAdminPanel)}
-          </div>
-
-          {/* Close Button Overlay */}
-          <button
-            onClick={() => {
-              alert('❌ CLOSING ADMIN MENU\nSetting showAdminPanel to FALSE');
-              console.log('❌ Close: Before setState');
-              setShowAdminPanel(false);
-              console.log('❌ Close: After setState');
-            }}
-            className="absolute top-52 left-1/2 -translate-x-1/2 z-[1001] bg-red-600 hover:bg-red-500 text-white px-6 py-3 rounded-lg font-bold shadow-xl"
-          >
-            ❌ CLOSE ADMIN MENU
-          </button>
-
-          {/* Actual AdminMenuCore Component */}
-          <div className="relative z-[1000]">
-            <AdminMenuCore
-              isOpen={true}
-              onClose={() => {
-                alert('❌ AdminMenuCore onClose triggered');
-                console.log('AdminMenuCore: onClose callback fired');
-                setShowAdminPanel(false);
-              }}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Modal Closed Indicator */}
-      {!showAdminPanel && (
-        <div className="fixed top-36 left-4 z-50 bg-gray-800 text-white px-3 py-2 rounded text-xs font-mono">
-          Modal: CLOSED
-        </div>
-      )}
-
-      {/* Debug Panel */}
       {showDebugger && (
         <div className="fixed inset-0 z-50 bg-black/80 text-white p-4 overflow-y-auto">
           <div className="max-w-4xl mx-auto">
