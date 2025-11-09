@@ -74,11 +74,11 @@ const createInitialState = (): GameState => ({
   energy: 1000,
   energyMax: 1000,
   level: 1,
-  selectedCharacterId: 'shadow',
+  selectedCharacterId: 'aria',  // ✅ FIXED
   selectedImageId: null,
   selectedAvatarId: null,
   upgrades: {},
-  unlockedCharacters: ['shadow'],
+  unlockedCharacters: ['aria'],  // ✅ FIXED
   unlockedImages: [],
   passiveIncomeRate: 0,
   passiveIncomeCap: 10000,
@@ -97,31 +97,6 @@ const createInitialState = (): GameState => ({
   username: '',
   telegramId: ''
 });
-
-const calculateBaseEnergyValues = (upgrades: UpgradeConfig[], playerUpgrades: Record<string, number>) => {
-  let baseMaxEnergy = 1000;
-  let baseEnergyRegen = 1;
-  
-  const energyUpgrades = upgrades.filter(u => u.type === 'energyMax');
-  energyUpgrades.forEach(u => {
-    const level = playerUpgrades[u.id] || 0;
-    if (level > 0) {
-      const upgradeValue = calculateUpgradeValue(u, level);
-      baseMaxEnergy += upgradeValue;
-    }
-  });
-  
-  const regenUpgrades = upgrades.filter(u => u.type === 'energyRegen');
-  regenUpgrades.forEach(u => {
-    const level = playerUpgrades[u.id] || 0;
-    if (level > 0) {
-      const upgradeValue = calculateUpgradeValue(u, level);
-      baseEnergyRegen += upgradeValue;
-    }
-  });
-  
-  return { baseMaxEnergy, baseEnergyRegen };
-};
 
 const normalizeImageUrl = (url: string | null): string | null => {
   if (!url) return null;
@@ -244,9 +219,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
         lustPoints: player.lustPoints,
         energy: player.energy,
         energyMax: player.energyMax,
+        passiveIncomeRate: player.passiveIncomeRate,
         level: player.level,
         isAdmin: player.isAdmin,
-        upgrades: Object.keys(player.upgrades || {}).length
+        upgrades: Object.keys(player.upgrades || {}).length,
+        selectedChar: player.selectedCharacterId
       });
 
       console.log('📦 [GAMECONTEXT] Loading game configuration...');
@@ -289,27 +266,24 @@ export function GameProvider({ children }: { children: ReactNode }) {
         media: imageConfigs.length
       });
 
-      const playerUpgrades = player.upgrades || {};
-      
-      // 🔧 FIX: Use backend energy/energyMax directly, don't recalculate!
       const newState = {
         username: player.username,
         telegramId: player.telegramId,
         points: typeof player.points === 'string' ? parseFloat(player.points) : (player.points || 0),
         lustPoints: typeof player.lustPoints === 'string' ? parseFloat(player.lustPoints) : (player.lustPoints || player.points || 0),
         lustGems: player.lustGems || 0,
-        energy: player.energy || 1000,  // 🔧 Use backend value directly
-        energyMax: player.energyMax || 1000,  // 🔧 Use backend value directly
+        energy: player.energy || 1000,
+        energyMax: player.energyMax || 1000,
         level: player.level || 1,
-        selectedCharacterId: player.selectedCharacterId || (loadedCharacters[0]?.id || 'shadow'),
+        selectedCharacterId: player.selectedCharacterId || (loadedCharacters[0]?.id || 'aria'),
         selectedImageId: player.selectedImageId || null,
         displayImage: normalizeImageUrl(player.displayImage),
-        upgrades: playerUpgrades,  // 🔧 Use backend upgrades directly
-        unlockedCharacters: Array.isArray(player.unlockedCharacters) ? player.unlockedCharacters : ['shadow'],
+        upgrades: player.upgrades || {},
+        unlockedCharacters: Array.isArray(player.unlockedCharacters) ? player.unlockedCharacters : ['aria'],
         unlockedImages: Array.isArray(player.unlockedImages) ? player.unlockedImages : [],
         passiveIncomeRate: player.passiveIncomeRate || 0,
         passiveIncomeCap: 10000,
-        energyRegenRate: player.energyRegenRate || 1,  // 🔧 Use backend value
+        energyRegenRate: player.energyRegenRate || 1,
         isAdmin: player.isAdmin || false,
         boostActive: player.boostActive || false,
         boostMultiplier: player.boostMultiplier || 1.0,
@@ -327,8 +301,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
         lustPoints: newState.lustPoints,
         energy: newState.energy,
         energyMax: newState.energyMax,
+        passiveIncome: newState.passiveIncomeRate,
         level: newState.level,
         isAdmin: newState.isAdmin,
+        character: newState.selectedCharacterId,
         upgradeCount: Object.keys(newState.upgrades).length
       });
       
@@ -497,22 +473,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
       const result = await response.json();
       const updatedPlayer = result.player;
       
-      console.log('✅ [GAMECONTEXT] Upgrade purchased, updating state');
+      console.log('✅ [GAMECONTEXT] Upgrade purchased, reloading from server');
       
-      setState(prev => {
-        const newUpgrades = { ...prev.upgrades, [upgradeId]: newLevel };
-        const { baseMaxEnergy, baseEnergyRegen } = calculateBaseEnergyValues(upgrades, newUpgrades);
-        
-        return {
-          ...prev,
-          points: updatedPlayer.points,
-          lustPoints: updatedPlayer.lustPoints || updatedPlayer.points,
-          upgrades: newUpgrades,
-          energyMax: baseMaxEnergy,
-          energyRegenRate: baseEnergyRegen,
-          energy: Math.min(prev.energy, baseMaxEnergy)
-        };
-      });
+      // ✅ CRITICAL FIX: Reload full state from server after purchase
+      await loadAllData();
       
       return true;
     } catch (err) {
@@ -526,7 +490,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         return next;
       });
     }
-  }, [state.upgrades, state.points, upgrades, pendingPurchases, connectionStatus]);
+  }, [state.upgrades, state.points, upgrades, pendingPurchases, connectionStatus, loadAllData]);
 
   const selectCharacter = useCallback(async (characterId: string): Promise<boolean> => {
     if (!state.unlockedCharacters.includes(characterId) || connectionStatus !== 'connected') return false;
@@ -575,10 +539,16 @@ export function GameProvider({ children }: { children: ReactNode }) {
     setState(prev => ({ ...prev, selectedAvatarId: imageId }));
   }, []);
 
+  // ✅ FIXED: Use cost instead of experienceRequired
   const canLevelUp = useCallback(() => {
     const nextLevel = state.level + 1;
     const nextLevelConfig = levelConfigs.find(lc => lc.level === nextLevel);
-    return nextLevelConfig ? checkLevelRequirements(nextLevelConfig, state.upgrades) && state.points >= nextLevelConfig.experienceRequired : false;
+    if (!nextLevelConfig) return false;
+    
+    const meetsRequirements = checkLevelRequirements(nextLevelConfig, state.upgrades);
+    const hasEnoughPoints = state.points >= (nextLevelConfig.cost || 0);  // ✅ Use cost
+    
+    return meetsRequirements && hasEnoughPoints;
   }, [state.level, state.points, state.upgrades, levelConfigs]);
 
   const levelUp = useCallback(async (): Promise<boolean> => {
@@ -659,23 +629,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
     setLastError(null);
     setConnectionStatus('connecting');
   }, []);
-
-  // 🔍 DEBUG: Log current state periodically
-  useEffect(() => {
-    const debugInterval = setInterval(() => {
-      console.log('🔍 [GAMECONTEXT STATE]', {
-        lustPoints: state.lustPoints,
-        energy: state.energy,
-        energyMax: state.energyMax,
-        level: state.level,
-        isAdmin: state.isAdmin,
-        upgradeCount: Object.keys(state.upgrades).length,
-        connectionStatus
-      });
-    }, 10000); // Every 10 seconds
-
-    return () => clearInterval(debugInterval);
-  }, [state.lustPoints, state.energy, state.energyMax, state.level, state.isAdmin, state.upgrades, connectionStatus]);
 
   return (
     <GameContext.Provider value={{
@@ -765,3 +718,5 @@ export function useGame() {
   if (!context) throw new Error('useGame must be used within GameProvider');
   return context;
 }
+
+console.log('✅ [GAMECONTEXT] Module loaded - uses backend stats directly, no embedded data');
