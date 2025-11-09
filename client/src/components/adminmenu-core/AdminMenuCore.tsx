@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Wrench, Star, Users, Image, TrendingUp, Trophy, Terminal, Moon, Gallery } from 'lucide-react';
+import { X, Wrench, Star, Users, Image, TrendingUp, Trophy, Terminal, Moon } from 'lucide-react';
 
 // Import module managers
 import UpgradesManager from './upgrades/UpgradesCore';
@@ -32,7 +32,7 @@ export default function AdminMenuCore({ isOpen, onClose }: AdminMenuCoreProps) {
     { id: 'characters' as TabType, label: 'Characters', icon: Users, color: 'blue' },
     { id: 'levels' as TabType, label: 'Levels', icon: Star, color: 'yellow' },
     { id: 'images' as TabType, label: 'Upload', icon: Image, color: 'green' },
-    { id: 'gallery' as TabType, label: '🖼️ Gallery', icon: Gallery, color: 'pink' },
+    { id: 'gallery' as TabType, label: '🖼️ Gallery', icon: Image, color: 'pink' },
     { id: 'tasks' as TabType, label: 'Tasks', icon: TrendingUp, color: 'orange' },
     { id: 'achievements' as TabType, label: 'Achievements', icon: Trophy, color: 'pink' },
     { id: 'devtools' as TabType, label: '🌙 Luna', icon: Moon, color: 'indigo' },
