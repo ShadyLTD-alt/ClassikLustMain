@@ -16,10 +16,10 @@ interface LevelUpProps {
 export default function LevelUp({ isOpen, onClose }: LevelUpProps) {
   const [isLevelingUp, setIsLevelingUp] = useState(false);
   const { toast } = useToast();
-  const queryClient = useQueryClient();  // ✅ ADD: Query client for cache invalidation
+  const queryClient = useQueryClient();  // ✅ Query client for cache management
   
   // Fetch player data
-  const { data: playerData, isLoading: playerLoading } = useQuery({
+  const { data: playerData, isLoading: playerLoading, refetch: refetchPlayer } = useQuery({
     queryKey: ['/api/player/me'],
     queryFn: async () => {
       const response = await apiRequest('/api/player/me', { method: 'GET' });
@@ -53,7 +53,6 @@ export default function LevelUp({ isOpen, onClose }: LevelUpProps) {
     enabled: isOpen
   });
 
-  // ✅ FIXED: Show loading state instead of "Maximum level reached!"
   if (playerLoading || levelLoading) {
     return (
       <Dialog open={isOpen} onOpenChange={onClose}>
@@ -77,7 +76,6 @@ export default function LevelUp({ isOpen, onClose }: LevelUpProps) {
     );
   }
 
-  // ✅ FIXED: Show proper message if no next level exists (from JSON data)
   if (!playerData || !nextLevelData) {
     return (
       <Dialog open={isOpen} onOpenChange={onClose}>
@@ -125,24 +123,33 @@ export default function LevelUp({ isOpen, onClose }: LevelUpProps) {
       if (response.ok) {
         const data = await response.json();
         
-        // ✅ FIX: Invalidate ALL player-related queries to refresh UI instantly
+        console.log(`✅ [LEVEL-UP UI] Success! New level: ${data.newLevel}, spent ${data.pointsSpent} LP`);
+        
+        // ✅ FIX 1: Invalidate ALL player-related cache
         await queryClient.invalidateQueries({ queryKey: ['/api/player/me'] });
         await queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
         await queryClient.invalidateQueries({ queryKey: ['/api/levels'] });
         
-        console.log(`✅ [LEVEL-UP UI] Cache invalidated, new level: ${data.newLevel}`);
+        // ✅ FIX 2: Force immediate refetch to update the dialog
+        await refetchPlayer();
+        
+        console.log(`🔄 [LEVEL-UP UI] All queries invalidated and refetched`);
         
         toast({
           title: "Level Up!",
           description: `Congratulations! You've reached level ${data.newLevel}`,
         });
         
-        onClose();
+        // ✅ FIX 3: Close dialog after a short delay so user sees the success state
+        setTimeout(() => {
+          onClose();
+        }, 500);
       } else {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Failed to level up');
       }
     } catch (error: any) {
+      console.error('[LEVEL-UP UI] Error:', error);
       toast({
         title: "Error",
         description: error.message || "Failed to level up. Please try again.",
