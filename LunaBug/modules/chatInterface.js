@@ -192,4 +192,4 @@ class ChatInterface {
   }
 }
 
-module.exports = ChatInterface;
+export default ChatInterface;

@@ -1,27 +1,31 @@
 // 🌙 Luna Bug - Intelligent Debug & Fix Assistant
 // Purpose: Automatically detect and fix common game issues for Steven
 
-const ChatInterface = require('./modules/chatInterface.js');
-const SchemaAuditor = require('./plugins/schemaAuditor.js');
+  // 🌙 Luna Bug - Intelligent Debug & Fix Assistant
+  // Purpose: Automatically detect and fix common game issues for Steven
 
-class LunaBug {
-  constructor() {
-    this.name = 'Luna';
-    this.version = '2.0.0';
-    this.isActive = true;
-    
-    // Plugin system
-    this.plugins = new Map();
-    
-    // Initialize core modules
-    this.chat = new ChatInterface(this);
-    
-    // Initialize plugins
-    this.loadPlugin('SchemaAuditor', SchemaAuditor);
-    
-    console.log('🌙 Luna Bug v2.0.0 initialized successfully');
-    console.log('🎮 Active plugins:', Array.from(this.plugins.keys()));
-  }
+  // CHANGE THESE TWO LINES - use import instead of require:
+  import ChatInterface from './modules/chatInterface.js';
+  import SchemaAuditor from './plugins/schemaAuditor.js';
+
+  class LunaBug {
+    constructor() {
+      this.name = 'Luna';
+      this.version = '2.0.0';
+      this.isActive = true;
+
+      // Plugin system
+      this.plugins = new Map();
+
+      // Initialize core modules
+      this.chat = new ChatInterface(this);
+
+      // Initialize plugins
+      this.loadPlugin('SchemaAuditor', SchemaAuditor);
+
+      console.log('🌙 Luna Bug v2.0.0 initialized successfully');
+      console.log('🎮 Active plugins:', Array.from(this.plugins.keys()));
+    }
 
   loadPlugin(name, PluginClass) {
     try {
@@ -129,17 +133,19 @@ class LunaBug {
   }
 }
 
-// FIXED: Proper CommonJS export
+// Initialize Luna instance
+const lunaBug = new LunaBug();
+
+// Create a simple router object for compatibility
 const router = {};
+
+// Function to set luna instance
 const setLunaInstance = (instance) => {
   if (instance && typeof instance === 'object') {
     Object.assign(lunaBug, instance);
   }
 };
 
-// Initialize Luna instance
-const lunaBug = new LunaBug();
-
-// Proper module exports
-module.exports = { router, setLunaInstance };
-module.exports.default = lunaBug;
+// CLEAN ESM EXPORTS - keep these as is:
+export { router, setLunaInstance };
+export default lunaBug;

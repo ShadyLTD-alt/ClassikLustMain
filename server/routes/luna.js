@@ -1,13 +1,15 @@
 // 🌙 Luna Bug - Server API Routes
-const express = require('express');
-const { requireAuth } = require('../middleware/auth');
-const router = express.Router();
+import { requireAuth } from '../middleware/auth.js';
+import { router as lunaRouter, setLunaInstance as setLunaInstanceImport } from './luna.js';
+
+// Use the imported router
+const router = lunaRouter;
 
 // Luna instance (will be injected by main server)
 let lunaInstance = null;
 
-// Initialize Luna instance
-function setLunaInstance(luna) {
+// Initialize Luna instance - rename this to avoid conflict
+function initializeLuna(luna) {
   lunaInstance = luna;
   console.log('🌙 Luna API routes connected to Luna instance');
 }
@@ -182,12 +184,5 @@ router.post('/force-audit', async (req, res) => {
 });
 
 // Export for both CommonJS and ESM
-module.exports = { router, setLunaInstance };
-module.exports.default = { router, setLunaInstance };
+export { router, initializeLuna as setLunaInstance };
 
-// ESM exports
-if (typeof exports !== 'undefined') {
-  exports.router = router;
-  exports.setLunaInstance = setLunaInstance;
-  exports.default = { router, setLunaInstance };
-}
