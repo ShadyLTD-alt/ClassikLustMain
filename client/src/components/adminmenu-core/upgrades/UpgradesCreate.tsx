@@ -43,7 +43,10 @@ export default function UpgradesCreate({ onSave, onCancel }: UpgradesCreateProps
     e.preventDefault();
     setSaving(true);
     try {
-      const response = await apiRequest('POST', '/api/admin/upgrades', formData);
+      const response = await apiRequest('/api/admin/upgrades', {
+        method: 'POST',
+        body: JSON.stringify(formData)
+      });
       if (response.ok) {
         alert('Upgrade created successfully!');
         onSave();
