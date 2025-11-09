@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { User, Clock, Crown } from 'lucide-react';
+import { User, Clock, TrendingUp, Crown, Trophy } from 'lucide-react';
 import { apiRequest } from '@/lib/queryClient';
 
 interface Props { 
@@ -14,24 +14,26 @@ interface Props {
 
 export default function PlayerInfoMenu({ isOpen, onClose, openMenu }: Props) {
   // ✅ FIX: Use React Query for real-time player data sync
-  const { data: playerData } = useQuery({
+  const { data: playerData, refetch } = useQuery({
     queryKey: ['/api/player/me'],
     queryFn: async () => {
       const r = await apiRequest('GET', '/api/player/me');
       return await r.json();
     },
-    enabled: isOpen,
-    refetchOnMount: 'always',
+    enabled: isOpen, // Only fetch when modal is open
+    refetchOnMount: 'always', // Always refetch when modal opens
   });
 
   const state = playerData?.player;
   
   if (!state) return null;
 
-  // ✅ FIX: Crown button opens character gallery without closing profile first
+  // ✅ FIX: Removed experience calculation (no longer using XP system)
+  
   const handleCharacterGalleryClick = () => {
+    onClose(); // Close profile
     if (openMenu) {
-      openMenu('character-gallery');
+      openMenu('character-gallery'); // Open character gallery
     }
   };
   

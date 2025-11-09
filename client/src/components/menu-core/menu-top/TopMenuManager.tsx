@@ -36,10 +36,10 @@ export default function TopMenuManager({ activeMenu, openMenu, closeMenu }: Prop
             <button 
               onClick={() => openMenu('player-info')} 
               className="flex items-center gap-3 hover:bg-purple-600/10 px-3 py-2 rounded-lg transition-colors"
-            >
-              <div className="w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center">
+              title="Player Info Menu"
+                >
                 <User className="w-4 h-4 text-white" />
-              </div>
+                                </button>
               <div className="text-left">
                 <div className="text-purple-300 text-xs font-medium uppercase tracking-wide">LustPoints</div>
                 <div 
@@ -56,7 +56,6 @@ export default function TopMenuManager({ activeMenu, openMenu, closeMenu }: Prop
                   💎 {Math.round(state?.lustGems || 0).toLocaleString()}
                 </div>
               </div>
-            </button>
             <button 
               onClick={() => openMenu('character-gallery')} 
               className="bg-purple-600/20 hover:bg-purple-600/40 px-2 py-2 rounded-full border border-purple-500/30 flex items-center justify-center transition-colors"
