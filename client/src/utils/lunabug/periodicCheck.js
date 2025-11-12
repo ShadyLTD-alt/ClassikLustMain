@@ -1,7 +1,7 @@
 // LunaBug Plugin: Periodic Self-Checker & Reporter
 // Periodically runs overlay scan, data call tracker, component monitor, and prints alerts if issues found
 
-function periodicLunaSelfCheck(intervalMs = 10000) {
+function periodicLunaSelfCheck() {
   if (window.__LUNACHECK_RUNNING) return;
   window.__LUNACHECK_RUNNING = true;
   let count = 0;
@@ -29,12 +29,14 @@ function periodicLunaSelfCheck(intervalMs = 10000) {
       }
       count++;
       if (count % 6 === 0) {
-        console.log('🟢 Luna periodic self-check running smoothly (every', intervalMs/1000, 'seconds)');
+        console.log('🟢 Luna periodic self-check running smoothly (interval varies)');
       }
     } catch (error) {
       console.error('❌ Luna self-check error:', error);
     } finally {
-      setTimeout(runChecks, intervalMs);
+      // Schedule next run 5–30 minutes random
+      const mins = Math.floor(Math.random() * (30 - 5 + 1)) + 5;
+      setTimeout(runChecks, mins * 60 * 1000);
     }
   }
   runChecks();
