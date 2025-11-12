@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
 import { useGame } from '@/contexts/GameContext';
-import { Lock, Check } from 'lucide-react';
+import { Lock, Check, Image as ImageIcon } from 'lucide-react';
 import { apiRequest } from '@/lib/queryClient';
 
 interface CharacterSelectionProps {
   isOpen: boolean;
   onClose: () => void;
+  openMenu?: (menuId: string) => void;
 }
 
-export default function CharacterSelection({ isOpen, onClose }: CharacterSelectionProps) {
+export default function CharacterSelection({ isOpen, onClose, openMenu }: CharacterSelectionProps) {
   const { state, characters } = useGame();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,6 +35,13 @@ export default function CharacterSelection({ isOpen, onClose }: CharacterSelecti
       setError('Network error - please try again');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleOpenGallery = () => {
+    if (openMenu) {
+      onClose();
+      openMenu('character-gallery');
     }
   };
 
@@ -65,12 +73,25 @@ export default function CharacterSelection({ isOpen, onClose }: CharacterSelecti
                 Current: <span className="text-purple-400 font-semibold">{state.activeCharacter || 'None'}</span>
               </p>
             </div>
-            <button
-              onClick={onClose}
-              className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
-            >
-              <span className="text-white text-xl">×</span>
-            </button>
+            <div className="flex items-center gap-2">
+              {/* Open Gallery Button */}
+              {openMenu && (
+                <button
+                  onClick={handleOpenGallery}
+                  className="flex items-center gap-2 px-4 py-2 bg-purple-600/20 hover:bg-purple-600/40 rounded-lg border border-purple-500/30 text-purple-300 hover:text-purple-100 transition-colors"
+                  title="Open Character Gallery"
+                >
+                  <ImageIcon className="w-4 h-4" />
+                  <span className="text-sm font-medium">Gallery</span>
+                </button>
+              )}
+              <button
+                onClick={onClose}
+                className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+              >
+                <span className="text-white text-xl">×</span>
+              </button>
+            </div>
           </div>
         </div>
 
