@@ -7,7 +7,7 @@
       "minLevel": 12
     },
     {
-      "upgradeId": "energy- capacity",
+      "upgradeId": "energy-capacity",
       "minLevel": 12
     },
     {
@@ -20,5 +20,5 @@
     "lustGems": 25
   },
   "unlocks": [],
-  "updatedAt": "2025-11-09T21:46:05.915Z"
+  "updatedAt": "2025-11-12T19:09:41.173Z"
 }
