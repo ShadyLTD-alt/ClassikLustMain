@@ -1,5 +1,5 @@
 import React from 'react';
-import CharacterSelectionScrollable from '@/components/CharacterSelectionScrollable';
+import CharacterGallery from './character-ui/CharacterGallery';
 
 interface Props {
   isOpen: boolean;
@@ -7,5 +7,5 @@ interface Props {
 }
 
 export default function CharacterGalleryMenu({ isOpen, onClose }: Props) {
-  return <CharacterSelectionScrollable isOpen={isOpen} onClose={onClose} />;
+  return <CharacterGallery isOpen={isOpen} onClose={onClose} />;
 }
