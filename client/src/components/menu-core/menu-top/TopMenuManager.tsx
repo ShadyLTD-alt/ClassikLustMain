@@ -1,7 +1,8 @@
 import React from 'react';
 import { useGame } from '@/contexts/GameContext';
-import { User, Crown, Zap, Flame } from 'lucide-react';
+import { User, Crown, Zap, Flame, Image } from 'lucide-react';
 import PlayerInfoMenu from './PlayerInfoMenu';
+import CharacterSelectionMenu from './CharacterSelectionMenu';
 import CharacterGalleryMenu from './CharacterGalleryMenu';
 import BoostStatusMenu from './BoostStatusMenu';
 
@@ -14,6 +15,7 @@ export interface TopMenuConfig {
 
 const TOP_MENUS: TopMenuConfig[] = [
   { id: 'player-info', component: PlayerInfoMenu, position: 'left' },
+  { id: 'character-selection', component: CharacterSelectionMenu, position: 'center' },
   { id: 'character-gallery', component: CharacterGalleryMenu, position: 'center' },
   { id: 'boost-status', component: BoostStatusMenu, position: 'right' }
 ];
@@ -33,7 +35,7 @@ export default function TopMenuManager({ activeMenu, openMenu, closeMenu }: Prop
       <div className="fixed top-0 left-0 right-0 z-30 bg-black/90 backdrop-blur border-b border-gray-700">
         <div className="mx-auto max-w-5xl px-4 py-3">
           <div className="flex items-center justify-between">
-            {/* ✅ FIXED: Player Info Button - Proper Structure */}
+            {/* Player Info Button */}
             <button 
               onClick={() => openMenu('player-info')} 
               className="flex items-center gap-3 hover:bg-purple-600/10 px-3 py-2 rounded-lg transition-colors"
@@ -58,11 +60,11 @@ export default function TopMenuManager({ activeMenu, openMenu, closeMenu }: Prop
               </div>
             </button>
             
-            {/* Character Gallery Button */}
+            {/* Character Selection Button (Crown) */}
             <button 
-              onClick={() => openMenu('character-gallery')} 
+              onClick={() => openMenu('character-selection')} 
               className="bg-purple-600/20 hover:bg-purple-600/40 px-2 py-2 rounded-full border border-purple-500/30 flex items-center justify-center transition-colors"
-              title="Character Gallery"
+              title="Character Selection"
             >
               <Crown className="w-5 h-5 text-purple-400" />
             </button>
