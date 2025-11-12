@@ -1,0 +1,16 @@
+{
+  "characterId": "aria",
+  "type": "NSFW",
+  "levelRequired": 1,
+  "nsfw": true,
+  "vip": false,
+  "event": false,
+  "hideFromGallery": false,
+  "random": false,
+  "enableForChat": false,
+  "chatSendPercent": 0,
+  "poses": [
+    "nude",
+    "standing"
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "id": "daily-taps",
+  "name": "Diky",
+  "description": "Yesy",
+  "requirementType": "tapCount",
+  "target": 1000,
+  "rewardType": "lp",
+  "rewardAmount": 500,
+  "resetInterval": "daily"
+}

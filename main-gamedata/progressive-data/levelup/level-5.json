@@ -3,15 +3,15 @@
   "cost": 2000,
   "requirements": [
     {
-      "upgradeId": "perTap",
-      "minLevel": 10
+      "upgradeId": "tap-power",
+      "minLevel": 12
     },
     {
-      "upgradeId": "perHour",
-      "minLevel": 10
+      "upgradeId": "energy- capacity",
+      "minLevel": 12
     },
     {
-      "upgradeId": "energyMax",
+      "upgradeId": "passive-income",
       "minLevel": 8
     }
   ],
@@ -19,9 +19,6 @@
     "lustPoints": 1200,
     "lustGems": 25
   },
-  "unlocks": [
-    "Character: Frost",
-    "New image slots"
-  ],
-  "updatedAt": "2025-11-09T19:08:42.467Z"
+  "unlocks": [],
+  "updatedAt": "2025-11-09T21:46:05.915Z"
 }

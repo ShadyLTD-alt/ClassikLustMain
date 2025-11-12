@@ -1,15 +1,23 @@
 {
   "level": 6,
   "cost": 3000,
-  "requirements": [],
+  "requirements": [
+    {
+      "upgradeId": "perTap",
+      "minLevel": 14
+    },
+    {
+      "upgradeId": "energyMax",
+      "minLevel": 12
+    }
+  ],
   "rewards": {
     "lustPoints": 1800,
-    "lustGems": 30,
-    "upgradeUnlocks": ["passive-income"]
+    "lustGems": 30
   },
   "unlocks": [
     "Upgrade: Passive Income"
   ],
   "createdAt": "2025-11-09T07:00:00.000Z",
-  "updatedAt": "2025-11-09T07:00:00.000Z"
+  "updatedAt": "2025-11-09T19:52:58.177Z"
 }

@@ -2,17 +2,26 @@
   "level": 4,
   "cost": 1500,
   "requirements": [
-    { "upgradeId": "tap-power", "minLevel": 20 },
-    { "upgradeId": "passive-income", "minLevel": 15 },
-    { "upgradeId": "income-multiplier", "minLevel": 10 }
+    {
+      "upgradeId": "tap-power",
+      "minLevel": 6
+    },
+    {
+      "upgradeId": "passive-income",
+      "minLevel": 5
+    },
+    {
+      "upgradeId": "income-multiplier",
+      "minLevel": 10
+    }
   ],
   "rewards": {
     "lustPoints": 800,
-    "lustGems": 15,
-    "characterUnlocks": ["Shadow"]
+    "lustGems": 15
   },
   "unlocks": [
     "Character: Shadow",
     "Legendary tier unlocked"
-  ]
+  ],
+  "updatedAt": "2025-11-09T19:52:02.750Z"
 }

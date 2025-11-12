@@ -1,0 +1,14 @@
+{
+  "id": "extra-tap-power",
+  "name": "Extra Tap Power",
+  "description": "More tap!",
+  "icon": "Zap",
+  "type": "perTap",
+  "maxLevel": 30,
+  "baseCost": 45,
+  "costMultiplier": 1.2,
+  "baseValue": 1,
+  "valueIncrement": 1,
+  "isEvent": false,
+  "levelRequirement": 4
+}
