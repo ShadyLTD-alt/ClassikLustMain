@@ -2,8 +2,8 @@
   "id": "dev_shadyltd",
   "username": "shadyltd",
   "telegramId": "",
-  "points": 125178,
-  "lustPoints": 125178,
+  "points": 125508,
+  "lustPoints": 125508,
   "lustGems": 10,
   "energy": 3999,
   "energyMax": 4000,
@@ -23,8 +23,8 @@
     "extra-tap-power": 18
   },
   "unlockedCharacters": [],
-  "totalTapsAllTime": 641,
-  "totalTapsToday": 641,
+  "totalTapsAllTime": 646,
+  "totalTapsToday": 646,
   "lpEarnedToday": 0,
   "upgradesPurchasedToday": 174,
   "consecutiveDays": 0,
@@ -38,7 +38,7 @@
   ],
   "claimedAchievements": [],
   "createdAt": "2025-11-09T01:23:13.437Z",
-  "updatedAt": "2025-11-12T20:20:34.937Z",
+  "updatedAt": "2025-11-12T20:40:49.320Z",
   "experience": 0,
   "lastActiveAt": "2025-11-09T01:23:25.874Z"
 }
