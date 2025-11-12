@@ -581,11 +581,20 @@ export function GameProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const addImage = useCallback((image: ImageConfig) => {
-    setImages(prev => [...prev, { ...image, url: normalizeImageUrl(image.url) }]);
+    const normalizedUrl = normalizeImageUrl(image.url);
+    if (normalizedUrl === null) return; // or handle however you want
+    setImages(prev => [...prev, { ...image, url: normalizedUrl }]);
   }, []);
 
   const updateImage = useCallback((image: ImageConfig) => {
-    setImages(prev => prev.map(img => img.id === image.id ? { ...image, url: normalizeImageUrl(image.url) } : img));
+    setImages(prev => prev.map(img => {
+      if (img.id === image.id) {
+        const normalizedUrl = normalizeImageUrl(image.url);
+        if (normalizedUrl === null) return img; // keep original if null
+        return { ...image, url: normalizedUrl };
+      }
+      return img;
+    }));
   }, []);
 
   const removeImage = useCallback((imageId: string) => {

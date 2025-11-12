@@ -535,6 +535,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // 🖼️ GET ALL IMAGES (formatted for character gallery)
+app.get('/api/images', requireAuth, async (req, res) => {
+  try {
+    const images: any[] = [];
+    
+    // Scan organized directory structure
+    async function scanDirectory(dirPath: string, webBasePath: string, characterId?: string) {
+      const entries = await fs.readdir(dirPath, { withFileTypes: true });
+      
+      for (const entry of entries) {
+        const fullPath = path.join(dirPath, entry.name);
+        const webPath = `${webBasePath}/${entry.name}`;
+        
+        if (entry.isDirectory()) {
+          // First level = character folders
+          if (!characterId) {
+            await scanDirectory(fullPath, webPath, entry.name);
+          } else {
+            // Second level = type folders
+            await scanDirectory(fullPath, webPath, characterId);
+          }
+        } else if (/\.(jpg|jpeg|png|gif|webp)$/i.test(entry.name)) {
+          // Load metadata
+          let metadata = null;
+          try {
+            const metaPath = path.join(metadataDir, `${entry.name}.meta.json`);
+            const metaContent = await fs.readFile(metaPath, 'utf-8');
+            metadata = JSON.parse(metaContent);
+          } catch {}
+          
+          images.push({
+            id: entry.name.split('.')[0], // Use filename without extension as ID
+            characterId: metadata?.characterId || characterId || 'unknown',
+            url: webPath,
+            filename: entry.name,
+            type: metadata?.type || 'other',
+            isHidden: metadata?.isHidden || false,
+            uploadedAt: (await fs.stat(fullPath)).birthtime.toISOString()
+          });
+        }
+      }
+    }
+    
+    await scanDirectory(uploadsDir, '/uploads');
+    
+    console.log(`🖼️ [IMAGES API] Returning ${images.length} images`);
+    res.json({ images });
+  } catch (e: any) {
+    console.error('🖼️ [IMAGES API] Error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
   app.get('/api/levels', requireAuth, (_req, res) => { 
     try { 
       const lvls = getLevelsFromMemory().map(l => ({ 
