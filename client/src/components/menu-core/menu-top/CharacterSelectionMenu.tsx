@@ -8,11 +8,5 @@ interface Props {
 }
 
 export default function CharacterSelectionMenu({ isOpen, onClose, openMenu }: Props) {
-  const handleClose = () => {
-    onClose();
-    // Optionally open character gallery after selection
-    // if (openMenu) openMenu('character-gallery');
-  };
-
-  return <CharacterSelection isOpen={isOpen} onClose={handleClose} />;
+  return <CharacterSelection isOpen={isOpen} onClose={onClose} openMenu={openMenu} />;
 }
