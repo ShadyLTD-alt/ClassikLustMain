@@ -31,7 +31,7 @@ const __dirname = path.dirname(__filename);
 const withTracking = async <T,>(name: string, op: () => Promise<T>): Promise<T> => { try { return await op(); } catch (e: any) { console.error(`[${name}] Error:`, e.message); throw e; } };
 
 const uploadsDir = path.join(__dirname, '../uploads');
-const metadataDir = path.join(__dirname, '../main-gamedata/meta-data');
+const metadataDir = path.join(__dirname, '../main-gamedata/progressive-data/images');
 
 // Create directories if they don't exist
 try {
@@ -42,7 +42,7 @@ try {
   console.error('Failed to create upload directories:', e);
 }
 
-// 📁 AUTO FOLDER ORGANIZATION HELPER
+// 📁 AUTO FOLDER ORGANIZATION HELPER - ✅ FIXED: uploads/characters/CHARACTERID/TYPE/
 async function organizeImageFile(
   tempPath: string,
   originalFilename: string,
@@ -50,9 +50,9 @@ async function organizeImageFile(
   type: string
 ): Promise<string> {
   try {
-    // Create organized folder structure: /uploads/character/type/
-    const characterFolder = path.join(uploadsDir, characterId);
-    const typeFolder = path.join(characterFolder, type);
+    // ✅ Create organized folder structure: /uploads/characters/characterId/type/
+    const characterFolder = path.join(uploadsDir, 'characters', characterId.toLowerCase());
+    const typeFolder = path.join(characterFolder, type.toLowerCase());
     
     // Create folders if they don't exist
     await fs.mkdir(characterFolder, { recursive: true });
@@ -68,15 +68,14 @@ async function organizeImageFile(
     // Move file from temp to organized location
     await fs.rename(tempPath, finalPath);
     
-    // Return web-accessible path
-    const webPath = `/uploads/characters/${characterId}/${type.toLowerCase()}/${uniqueFilename}`;
+    // ✅ Return web-accessible path with 'characters' folder
+    const webPath = `/uploads/characters/${characterId.toLowerCase()}/${type.toLowerCase()}/${uniqueFilename}`;
     console.log(`📁 [ORGANIZE] File organized: ${webPath}`);
     
     return webPath;
   } catch (error) {
     console.error('📁 [ORGANIZE] Failed:', error);
-    // If organization fails, return temp path
-    return `/uploads/characters/${path.basename(tempPath)}`;
+    return `/uploads/${path.basename(tempPath)}`;
   }
 }
 
@@ -146,11 +145,12 @@ async function findExistingPlayerData(username: string): Promise<any | null> {
 
 // 🗂️ RECURSIVE FILE FINDER FOR ORGANIZED STRUCTURE
 async function findImageFile(filename: string): Promise<string | null> {
-  // Search through organized folder structure
   try {
-    const characters = await fs.readdir(uploadsDir);
+    const charactersDir = path.join(uploadsDir, 'characters');
+    const characters = await fs.readdir(charactersDir);
+    
     for (const char of characters) {
-      const charPath = path.join(uploadsDir, char);
+      const charPath = path.join(charactersDir, char);
       const stat = await fs.stat(charPath);
       if (!stat.isDirectory()) continue;
       
@@ -184,16 +184,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const { createServer } = await import('http');
   const server = createServer(app);
 
-  // ========================================
-  // IMPORT MODULAR ROUTES
-  // ========================================
-  // Player routes now handled by player-routes.js
-  // - PATCH /api/player/active-character
-  // - GET /api/player/images?characterId=X
-  // - POST /api/player/set-display-image
-  // Admin routes handled by admin-routes.js
-  // - POST /api/admin/sync-media
-  
   app.get('/api/health', async (_req, res) => { 
     try { 
       const h = await playerStateManager.healthCheck(); 
@@ -317,11 +307,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } 
   });
 
-  // NOTE: Character selection & gallery endpoints moved to player-routes.js
-  // Use player-routes.js for:
-  // - PATCH /api/player/active-character
-  // - GET /api/player/images?characterId=X  
-  // - POST /api/player/set-display-image
+  // ✅ FIXED: PATCH /api/player/active-character
+  app.patch('/api/player/active-character', requireAuth, async (req, res) => {
+    try {
+      const { characterId } = req.body;
+      const player = req.player;
+
+      console.log(`🎭 [ACTIVE-CHAR] Request to set ${characterId} for player ${player.username}`);
+
+      if (!characterId) {
+        return res.status(400).json({ error: 'characterId is required' });
+      }
+
+      // Update player state with new active character
+      const updated = await updatePlayerState(player, {
+        selectedCharacterId: characterId,
+        activeCharacter: characterId,
+        displayImage: null
+      });
+
+      console.log(`✅ [ACTIVE-CHAR] Successfully set to ${characterId}`);
+
+      res.json({ 
+        success: true, 
+        activeCharacter: characterId,
+        player: updated,
+        message: `Character updated successfully!`
+      });
+    } catch (err: any) {
+      console.error('❌ [ACTIVE-CHAR] Error:', err);
+      res.status(500).json({ error: err.message || 'Failed to set active character' });
+    }
+  });
 
   app.post('/api/player/upgrades', requireAuth, async (req, res) => { 
     try { 
@@ -436,7 +453,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // 📤 UPLOAD MEDIA (with auto folder organization)
+  // 📤 UPLOAD MEDIA - ✅ FIXED: with dual metadata write
   app.post('/api/media', requireAuth, upload.single('file'), async (req, res) => {
     try {
       if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
@@ -458,12 +475,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const organizedPath = await organizeImageFile(tempPath, req.file.originalname, characterId, type);
       const finalFilename = path.basename(organizedPath);
       
-      // Save metadata
+      // ✅ DUAL METADATA WRITE: Save to both locations
       if (metadata) {
         try {
+          // 1. Save to progressive-data/images/
           const metaPath = path.join(metadataDir, `${finalFilename}.meta.json`);
           await fs.writeFile(metaPath, JSON.stringify(metadata, null, 2));
-          console.log(`✅ [UPLOAD] Metadata saved: ${finalFilename}.meta.json`);
+          
+          // 2. ✅ ALSO save to character-data/{character}/{type}/
+          const characterDataDir = path.join(
+            __dirname,
+            '../main-gamedata/character-data',
+            characterId.toLowerCase(),
+            type.toLowerCase()
+          );
+          await fs.mkdir(characterDataDir, { recursive: true });
+          
+          const characterMetaPath = path.join(characterDataDir, `${finalFilename}.json`);
+          await fs.writeFile(characterMetaPath, JSON.stringify(metadata, null, 2));
+          
+          console.log(`✅ [UPLOAD] Metadata synced to both progressive-data and character-data`);
         } catch (e) {
           console.warn(`⚠️  [UPLOAD] Failed to save metadata:`, e);
         }
@@ -491,9 +522,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (!metadata) return res.status(400).json({ error: 'Metadata required' });
       
-      // Save updated metadata
+      // Save updated metadata to both locations
       const metaPath = path.join(metadataDir, `${filename}.meta.json`);
       await fs.writeFile(metaPath, JSON.stringify(metadata, null, 2));
+      
+      // Also update in character-data if characterId exists
+      if (metadata.characterId && metadata.type) {
+        const characterDataDir = path.join(
+          __dirname,
+          '../main-gamedata/character-data',
+          metadata.characterId.toLowerCase(),
+          metadata.type.toLowerCase()
+        );
+        await fs.mkdir(characterDataDir, { recursive: true });
+        const characterMetaPath = path.join(characterDataDir, `${filename}.json`);
+        await fs.writeFile(characterMetaPath, JSON.stringify(metadata, null, 2));
+      }
       
       console.log(`✅ [UPDATE] Metadata updated for ${filename}`);
       res.json({ success: true, metadata });
@@ -517,7 +561,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Delete file
       await fs.unlink(filePath);
       
-      // Delete metadata if exists
+      // Delete metadata if exists (both locations)
       try {
         const metaPath = path.join(metadataDir, `${filename}.meta.json`);
         await fs.unlink(metaPath);
@@ -562,7 +606,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             } catch {}
             
             images.push({
-              id: entry.name.split('.')[0], // Use filename without extension as ID
+              id: entry.name.split('.')[0],
               characterId: metadata?.characterId || characterId || 'unknown',
               url: webPath,
               filename: entry.name,
@@ -584,8 +628,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-
-  //end of new
   app.get('/api/levels', requireAuth, (_req, res) => { 
     try { 
       const lvls = getLevelsFromMemory().map(l => ({ 
@@ -764,7 +806,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   return server;
 }
 
-console.log('✅ [ROUTES] All routes registered with auto folder organization');
-console.log('✅ [ROUTES] Character selection & gallery handled by player-routes.js');
-console.log('✅ [ROUTES] Media sync handled by admin-routes.js');
+console.log('✅ [ROUTES] All routes registered');
+console.log('✅ [ROUTES] Upload path: /uploads/characters/{characterId}/{type}/');
+console.log('✅ [ROUTES] Dual metadata write: progressive-data + character-data');
+console.log('✅ [ROUTES] Character selection: PATCH /api/player/active-character');
 
+export { registerRoutes };
