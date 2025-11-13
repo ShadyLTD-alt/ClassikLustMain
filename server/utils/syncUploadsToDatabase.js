@@ -1,5 +1,5 @@
 // server/utils/syncUploadsToDatabase.js
-// Auto-sync script to populate and patch mediaUploads table from /uploads directory
+// Auto-sync script for mediaUploads table and local JSON metadata by character
 
 const fs = require('fs').promises;
 const path = require('path');
@@ -11,6 +11,13 @@ const supabase = createClient(
 );
 
 const UPLOADS_DIR = path.resolve(__dirname, '../../uploads/characters');
+const METADATA_BASE = path.resolve(__dirname, '../../main-gamedata/character-data');
+
+async function ensureMetadataDir(character, type) {
+  const dir = path.join(METADATA_BASE, character, type);
+  await fs.mkdir(dir, { recursive: true });
+  return dir;
+}
 
 function parseFileMetadata(filename, characterId, relativePath) {
   const lower = filename.toLowerCase();
@@ -18,12 +25,10 @@ function parseFileMetadata(filename, characterId, relativePath) {
     characterId,
     filename,
     url: `/uploads/characters/${relativePath}`,
-    type: lower.includes('vip') ? 'vip' : 
-          lower.includes('nsfw') ? 'nsfw' : 
-          lower.includes('default') ? 'default' : 'Character',
+    type: lower.includes('vip') ? 'vip' : lower.includes('nsfw') ? 'nsfw' : lower.includes('default') ? 'default' : 'Character',
     unlockLevel: extractLevel(lower),
     categories: extractCategories(lower),
-    poses: extractPoses(lower),
+    poses: extractPoses(lower)
   };
 }
 
@@ -49,6 +54,25 @@ function extractPoses(filename) {
   return poses.length > 0 ? poses : ['default'];
 }
 
+function inferCharacterFromFilename(filename) {
+  const lower = (filename||'').toLowerCase();
+  for (const c of ['aria', 'frost', 'shadow', 'stella']) {
+    if (lower.includes(c)) return c;
+  }
+  return 'unknown';
+}
+
+async function saveMetadataJson(metadata) {
+  const dir = await ensureMetadataDir(
+    metadata.characterId || 'unknown',
+    metadata.type || 'Character'
+  );
+  const base = path.basename(metadata.filename, path.extname(metadata.filename));
+  const file = path.join(dir, `${base}.meta.json`);
+  await fs.writeFile(file, JSON.stringify(metadata, null, 2));
+  return file;
+}
+
 async function syncDirectory(dirPath, characterId = null, relativePath = '') {
   try {
     const entries = await fs.readdir(dirPath, { withFileTypes: true });
@@ -58,7 +82,7 @@ async function syncDirectory(dirPath, characterId = null, relativePath = '') {
       if (entry.isDirectory()) {
         await syncDirectory(fullPath, entry.name, newRelativePath);
       } else if (entry.isFile() && isImageFile(entry.name)) {
-        await syncImageFile(entry.name, characterId || 'unknown', newRelativePath);
+        await syncImageFile(entry.name, characterId || inferCharacterFromFilename(entry.name), newRelativePath);
       }
     }
   } catch (err) {
@@ -69,6 +93,49 @@ async function syncDirectory(dirPath, characterId = null, relativePath = '') {
 function isImageFile(filename) {
   const ext = path.extname(filename).toLowerCase();
   return ['.png', '.jpg', '.jpeg', '.gif', '.webp'].includes(ext);
+}
+
+async function syncImageFile(filename, characterId, relativePath) {
+  try {
+    const url = `/uploads/characters/${relativePath}`;
+    const metadata = parseFileMetadata(filename, characterId, relativePath);
+    await saveMetadataJson(metadata);
+    const { data: existing, error } = await supabase
+      .from('mediaUploads')
+      .select('id, characterId, url')
+      .eq('url', url)
+      .single();
+    if (error && error.code !== 'PGRST116') {
+      console.error(`[DB] Lookup fail for ${url}:`, error);
+    }
+    if (existing) {
+      if (!existing.characterId || !existing.url) {
+        await patchMissingFields();
+      } else {
+        if (process.env.DEBUG_VERBOSE === 'true') console.log(`✓ Already in DB: ${url}`);
+      }
+      return;
+    }
+    const { error: insError } = await supabase
+      .from('mediaUploads')
+      .insert({
+        characterId: metadata.characterId,
+        url: metadata.url,
+        filename: metadata.filename,
+        type: metadata.type,
+        unlockLevel: metadata.unlockLevel,
+        categories: metadata.categories,
+        poses: metadata.poses,
+        uploadedAt: new Date().toISOString()
+      });
+    if (insError) {
+      console.error(`[DB] Insert fail for ${url}:`, insError);
+    } else {
+      console.log(`[INS + JSON] Added to DB and metadata: ${url}`);
+    }
+  } catch (err) {
+    console.error(`[SYNC ERROR] ${filename}:`, err);
+  }
 }
 
 async function patchMissingFields(debugLog = true) {
@@ -82,7 +149,7 @@ async function patchMissingFields(debugLog = true) {
     return;
   }
   if (!images || images.length === 0) {
-    if(debugLog) console.log('PATCH[DB] No images found missing characterId or url');
+    if (debugLog) console.log('PATCH[DB] No images found missing characterId or url');
     return;
   }
   for (const img of images) {
@@ -107,65 +174,14 @@ async function patchMissingFields(debugLog = true) {
   }
 }
 
-function inferCharacterFromFilename(filename) {
-  const lower = (filename||'').toLowerCase();
-  if (lower.includes('aria')) return 'aria';
-  if (lower.includes('frost')) return 'frost';
-  if (lower.includes('shadow')) return 'shadow';
-  if (lower.includes('stella')) return 'stella';
-  return null;
-}
-
-async function syncImageFile(filename, characterId, relativePath) {
-  try {
-    const url = `/uploads/characters/${relativePath}`;
-    const { data: existing, error } = await supabase
-      .from('mediaUploads')
-      .select('id, characterId, url')
-      .eq('url', url)
-      .single();
-    if (error && error.code !== 'PGRST116') {
-      console.error(`[DB] Lookup fail for ${url}:`, error);
-    }
-    if (existing) {
-      if (!existing.characterId || !existing.url) {
-        await patchMissingFields();
-      } else {
-        if(process.env.DEBUG_VERBOSE==='true') console.log(`✓ Already in DB: ${url}`);
-      }
-      return;
-    }
-    const metadata = parseFileMetadata(filename, characterId, relativePath);
-    const { error: insError } = await supabase
-      .from('mediaUploads')
-      .insert({
-        characterId: metadata.characterId,
-        url: metadata.url,
-        filename: metadata.filename,
-        type: metadata.type,
-        unlockLevel: metadata.unlockLevel,
-        categories: metadata.categories,
-        poses: metadata.poses,
-        uploadedAt: new Date().toISOString(),
-      });
-    if (insError) {
-      console.error(`[DB] Insert fail for ${url}:`, insError);
-    } else {
-      if(process.env.DEBUG_VERBOSE==='true' || true) console.log(`[INS] Added to DB: ${url}`);
-    }
-  } catch (err) {
-    console.error(`[SYNC ERROR] ${filename}:`, err);
-  }
-}
-
 async function syncUploadsToDatabase() {
-  console.log('🔄 Starting upload sync (with debug logging) ...');
+  console.log('🔄 Starting upload sync + local JSON metadata...');
   console.log(`📁 Scanning: ${UPLOADS_DIR}`);
   await patchMissingFields(true);
   try {
     await fs.access(UPLOADS_DIR);
     await syncDirectory(UPLOADS_DIR);
-    console.log('✅ Upload sync complete!');
+    console.log('✅ Media and JSON metadata sync complete!');
     return { success: true, message: 'Sync completed successfully' };
   } catch (err) {
     if (err.code === 'ENOENT') {
