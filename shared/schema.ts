@@ -16,7 +16,7 @@ export const players = pgTable("players", {
   passiveIncomeRate: integer("passiveIncomeRate").default(0).notNull(),
   lastTapValue: integer("lastTapValue").default(1).notNull(),
   isAdmin: boolean("isAdmin").default(false).notNull(),
-  selectedCharacterId: text("selectedCharacterId").notNull(),
+  selectedCharacterId: text("selectedCharacterId"),
   selectedImageId: text("selectedImageId").notNull(),
   displayImage: text("displayImage").notNull(),
   activeCharacter: text("activeCharacter").notNull(),
