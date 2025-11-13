@@ -21,7 +21,7 @@ import {
   syncAchievements,
   syncLevels
 } from './utils/unifiedDataLoader';
-import { getPlayerState, updatePlayerState, selectCharacterForPlayer, setDisplayImageForPlayer, purchaseUpgradeForPlayer, playerStateManager } from './utils/playerStateManager';
+import { getPlayerState, updatePlayerState, purchaseUpgradeForPlayer, playerStateManager } from './utils/playerStateManager';
 import { storage } from './storage';
 import crypto from 'crypto';
 
@@ -184,6 +184,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const { createServer } = await import('http');
   const server = createServer(app);
 
+  // ========================================
+  // IMPORT MODULAR ROUTES
+  // ========================================
+  // Player routes now handled by player-routes.js
+  // - PATCH /api/player/active-character
+  // - GET /api/player/images?characterId=X
+  // - POST /api/player/set-display-image
+  // Admin routes handled by admin-routes.js
+  // - POST /api/admin/sync-media
+  
   app.get('/api/health', async (_req, res) => { 
     try { 
       const h = await playerStateManager.healthCheck(); 
@@ -239,7 +249,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       } else {
         const playerId = `dev_${sanitizedUsername}`;
-        console.log(`🆕 [DEV AUTH] Creating new player: ${playerId}`);        
+        console.log(`🆕 [DEV AUTH] Creating new player: ${playerId}`);
         player = await storage.getPlayer(playerId);
         if (!player) {
           const now = new Date();
@@ -308,24 +318,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: e.message }); 
     } 
   });
-  
-  app.post('/api/player/select-character', requireAuth, async (req, res) => { 
-    try { 
-      const updated = await withTracking('select-character', () => selectCharacterForPlayer(req.player!, req.body.characterId));
-      res.json({ success: true, player: updated }); 
-    } catch (e: any) { 
-      res.status(500).json({ error: e.message }); 
-    } 
-  });
-  
-  app.post('/api/player/set-display-image', requireAuth, async (req, res) => { 
-    try { 
-      const u = await withTracking('set-display-image', () => setDisplayImageForPlayer(req.player!, req.body.imageUrl)); 
-      res.json({ success: true, player: u }); 
-    } catch (e: any) { 
-      res.status(500).json({ error: e.message }); 
-    } 
-  });
+
+  // NOTE: Character selection & gallery endpoints moved to player-routes.js
+  // Use player-routes.js for:
+  // - PATCH /api/player/active-character
+  // - GET /api/player/images?characterId=X  
+  // - POST /api/player/set-display-image
 
   app.post('/api/player/upgrades', requireAuth, async (req, res) => { 
     try { 
@@ -536,57 +534,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // 🖼️ GET ALL IMAGES (formatted for character gallery)
-app.get('/api/images', requireAuth, async (req, res) => {
-  try {
-    const images: any[] = [];
-    
-    // Scan organized directory structure
-    async function scanDirectory(dirPath: string, webBasePath: string, characterId?: string) {
-      const entries = await fs.readdir(dirPath, { withFileTypes: true });
+  app.get('/api/images', requireAuth, async (req, res) => {
+    try {
+      const images: any[] = [];
       
-      for (const entry of entries) {
-        const fullPath = path.join(dirPath, entry.name);
-        const webPath = `${webBasePath}/${entry.name}`;
+      // Scan organized directory structure
+      async function scanDirectory(dirPath: string, webBasePath: string, characterId?: string) {
+        const entries = await fs.readdir(dirPath, { withFileTypes: true });
         
-        if (entry.isDirectory()) {
-          // First level = character folders
-          if (!characterId) {
-            await scanDirectory(fullPath, webPath, entry.name);
-          } else {
-            // Second level = type folders
-            await scanDirectory(fullPath, webPath, characterId);
-          }
-        } else if (/\.(jpg|jpeg|png|gif|webp)$/i.test(entry.name)) {
-          // Load metadata
-          let metadata = null;
-          try {
-            const metaPath = path.join(metadataDir, `${entry.name}.meta.json`);
-            const metaContent = await fs.readFile(metaPath, 'utf-8');
-            metadata = JSON.parse(metaContent);
-          } catch {}
+        for (const entry of entries) {
+          const fullPath = path.join(dirPath, entry.name);
+          const webPath = `${webBasePath}/${entry.name}`;
           
-          images.push({
-            id: entry.name.split('.')[0], // Use filename without extension as ID
-            characterId: metadata?.characterId || characterId || 'unknown',
-            url: webPath,
-            filename: entry.name,
-            type: metadata?.type || 'other',
-            isHidden: metadata?.isHidden || false,
-            uploadedAt: (await fs.stat(fullPath)).birthtime.toISOString()
-          });
+          if (entry.isDirectory()) {
+            // First level = character folders
+            if (!characterId) {
+              await scanDirectory(fullPath, webPath, entry.name);
+            } else {
+              // Second level = type folders
+              await scanDirectory(fullPath, webPath, characterId);
+            }
+          } else if (/\.(jpg|jpeg|png|gif|webp)$/i.test(entry.name)) {
+            // Load metadata
+            let metadata = null;
+            try {
+              const metaPath = path.join(metadataDir, `${entry.name}.meta.json`);
+              const metaContent = await fs.readFile(metaPath, 'utf-8');
+              metadata = JSON.parse(metaContent);
+            } catch {}
+            
+            images.push({
+              id: entry.name.split('.')[0], // Use filename without extension as ID
+              characterId: metadata?.characterId || characterId || 'unknown',
+              url: webPath,
+              filename: entry.name,
+              type: metadata?.type || 'other',
+              isHidden: metadata?.isHidden || false,
+              uploadedAt: (await fs.stat(fullPath)).birthtime.toISOString()
+            });
+          }
         }
       }
+      
+      await scanDirectory(uploadsDir, '/uploads');
+      
+      console.log(`🖼️ [IMAGES API] Returning ${images.length} images`);
+      res.json({ images });
+    } catch (e: any) {
+      console.error('🖼️ [IMAGES API] Error:', e);
+      res.status(500).json({ error: e.message });
     }
-    
-    await scanDirectory(uploadsDir, '/uploads');
-    
-    console.log(`🖼️ [IMAGES API] Returning ${images.length} images`);
-    res.json({ images });
-  } catch (e: any) {
-    console.error('🖼️ [IMAGES API] Error:', e);
-    res.status(500).json({ error: e.message });
-  }
-});
+  });
 
   app.get('/api/levels', requireAuth, (_req, res) => { 
     try { 
@@ -767,3 +765,5 @@ app.get('/api/images', requireAuth, async (req, res) => {
 }
 
 console.log('✅ [ROUTES] All routes registered with auto folder organization');
+console.log('✅ [ROUTES] Character selection & gallery handled by player-routes.js');
+console.log('✅ [ROUTES] Media sync handled by admin-routes.js');
