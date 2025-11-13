@@ -8,7 +8,8 @@ interface Character {
   description: string;
   rarity: string;
   unlockLevel: number;
-  image?: string;
+  defaultImage: string;
+  avatarImage: string;
 }
 
 interface CharactersEditProps {
@@ -79,8 +80,12 @@ export default function CharactersEdit({ character, onSave, onCancel }: Characte
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-300 mb-2">Image URL</label>
-          <input type="text" value={formData.image || ''} onChange={(e) => setFormData({ ...formData, image: e.target.value })} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white" placeholder="/uploads/character.png" />
+          <label className="block text-sm font-medium text-gray-300 mb-2">Default Main</label>
+          <input type="text" value={formData.defaultImage} onChange={(e) => setFormData({ ...formData, defaultImage: e.target.value })} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white" placeholder="/uploads/character.png" />
+        </div>
+                <div>
+          <label className="block text-sm font-medium text-gray-300 mb-2">Default Avatar</label>
+          <input type="text" value={formData.avatarImage} onChange={(e) => setFormData({ ...formData, avatarImage: e.target.value })} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white" placeholder="/uploads/character.png" />
         </div>
 
         <div className="flex gap-3 pt-4">

@@ -630,7 +630,7 @@ router.get('/images', async (req: Request, res: Response) => {
           const stats = await fs.stat(filePath);
           return {
             filename,
-            path: `/uploads/${filename}`,
+            path: `/uploads/characters/${filename}`,
             size: stats.size,
             uploadedAt: stats.mtime,
           };

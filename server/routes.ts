@@ -31,7 +31,7 @@ const __dirname = path.dirname(__filename);
 const withTracking = async <T,>(name: string, op: () => Promise<T>): Promise<T> => { try { return await op(); } catch (e: any) { console.error(`[${name}] Error:`, e.message); throw e; } };
 
 const uploadsDir = path.join(__dirname, '../uploads');
-const metadataDir = path.join(__dirname, '../main-gamedata/character-data/images');
+const metadataDir = path.join(__dirname, '../main-gamedata/meta-data');
 
 // Create directories if they don't exist
 try {
@@ -69,14 +69,14 @@ async function organizeImageFile(
     await fs.rename(tempPath, finalPath);
     
     // Return web-accessible path
-    const webPath = `/uploads/characters/${characterId}/${type}/${uniqueFilename}`;
+    const webPath = `/uploads/characters/${characterId}/${type.toLowerCase()}/${uniqueFilename}`;
     console.log(`📁 [ORGANIZE] File organized: ${webPath}`);
     
     return webPath;
   } catch (error) {
     console.error('📁 [ORGANIZE] Failed:', error);
     // If organization fails, return temp path
-    return `/uploads/${path.basename(tempPath)}`;
+    return `/uploads/characters/${path.basename(tempPath)}`;
   }
 }
 
@@ -234,7 +234,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
             energy: savedData.energy || 1000,
             energyMax: savedData.energyMax || 1000,
             level: savedData.level || 1,
-            experience: savedData.experience || 0,
             passiveIncomeRate: savedData.passiveIncomeRate || 0,
             lastTapValue: savedData.lastTapValue || 1,
             selectedCharacterId: savedData.selectedCharacterId,
@@ -263,7 +262,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
             energy: 1000,
             energyMax: 1000,
             level: 1, 
-            experience: 0, 
             passiveIncomeRate: 0, 
             lastTapValue: 1,
             selectedCharacterId: 'aria',
@@ -586,39 +584,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  //start of new
-// PATCH /api/player/active-character
-app.post('api/player/active-character', requireAuth, async (req, res) => {
-  try {
-    const { characterId } = req.body;
-    const player = req.player;
-
-    console.log(`🎭 [ACTIVE-CHAR] Request to set ${characterId} for player ${player.username}`);
-
-    if (!characterId) {
-      return res.status(400).json({ error: 'characterId is required' });
-    }
-
-    // Update player state with new active character
-    const updated = await updatePlayerState(player, {
-      selectedCharacterId: characterId,
-      activeCharacter: characterId,
-      displayImage: null
-    });
-
-    console.log(`✅ [ACTIVE-CHAR] Successfully set to ${characterId}`);
-
-    res.json({ 
-      success: true, 
-      activeCharacter: characterId,
-      player: updated,
-      message: `Character updated successfully!`
-    });
-  } catch (err) {
-    console.error('❌ [ACTIVE-CHAR] Error:', err);
-    res.status(500).json({ error: err.message || 'Failed to set active character' });
-  }
-});
 
   //end of new
   app.get('/api/levels', requireAuth, (_req, res) => { 
