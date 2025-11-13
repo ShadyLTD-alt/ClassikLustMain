@@ -9,8 +9,6 @@ import logger from "./logger";
 import adminRouter from "./routes/admin";
 import { requireAuth, requireAdmin } from "./middleware/auth";
 
-
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -80,27 +78,61 @@ app.use((req, res, next) => {
 (async () => {
   logger.info('🚀 Starting server initialization...');
 
-  // 🌙 Initialize Luna Bug (ESM-safe dynamic imports)
+  // 🌙 Phase 1: Initialize Luna Bug (ESM-safe dynamic imports)
   let luna = null;
   let lunaRouter = null;
   let setLunaInstance = null;
+  
   try {
+    logger.info('🌙 [PHASE 1] Initializing LunaBug system...');
+    
+    // Step 1: Load LunaBug config first
+    const lunaConfigPath = path.join(__dirname, '..', 'LunaBug', 'config', 'default.json');
+    let lunaConfig = {};
+    
+    try {
+      if (fs.existsSync(lunaConfigPath)) {
+        const configData = fs.readFileSync(lunaConfigPath, 'utf-8');
+        lunaConfig = JSON.parse(configData);
+        logger.info('✅ LunaBug config loaded from', lunaConfigPath);
+      } else {
+        logger.warn('⚠️ LunaBug config not found, using defaults');
+      }
+    } catch (configErr) {
+      logger.warn('⚠️ Failed to load LunaBug config:', configErr);
+    }
+
+    // Step 2: Import LunaBug class
     // @ts-ignore
     const { default: LunaBug } = await import('../LunaBug/luna.js');
+    logger.info('✅ LunaBug class imported');
+    
+    // Step 3: Import Luna API routes
     // @ts-ignore
     const lunaApi = await import('./routes/luna.js');
     lunaRouter = lunaApi.router;
     setLunaInstance = lunaApi.setLunaInstance;
-    luna = new LunaBug();
-    setLunaInstance(luna);
-    logger.info('✅ Luna Bug initialized');
+    logger.info('✅ Luna API routes imported');
+    
+    // Step 4: Create Luna instance with config
+    luna = new LunaBug(lunaConfig);
+    logger.info('✅ LunaBug instance created');
+    
+    // Step 5: Connect routes to Luna instance
+    if (setLunaInstance && luna) {
+      setLunaInstance(luna);
+      logger.info('✅ Luna instance connected to API routes');
+    }
+    
+    logger.info('✅ 🌙 Luna Bug initialized successfully');
   } catch (err) {
     const error = err as Error;
-    logger.warn('⚠️ Luna init skipped:', error?.message || err);
+    logger.error('❌ [PHASE 1] Luna initialization failed:', error?.message || err);
+    logger.warn('⚠️ Server will continue without Luna Bug');
   }
 
-  // ✅ UNIFIED DATA LOADER: Sync ALL game data from progressive-data directories ONLY
-  logger.info('🔄 Starting unified game data sync from progressive-data...');
+  // ✅ Phase 2: UNIFIED DATA LOADER - Sync ALL game data from progressive-data directories ONLY
+  logger.info('🔄 [PHASE 2] Starting unified game data sync from progressive-data...');
   try {
     await syncAllGameData();
     logger.info('✅ Game data synced successfully from progressive-data - memory cache populated');
@@ -110,31 +142,54 @@ app.use((req, res, next) => {
     logger.warn("⚠️ Server may not work correctly without game data");
   }
 
-  logger.info('📝 Registering routes...');
+  // ✅ Phase 3: Register core routes
+  logger.info('📝 [PHASE 3] Registering core routes...');
   const server = await registerRoutes(app);
+  logger.info('✅ Core routes registered');
 
-  // ✅ REGISTER CHARACTER SELECTION & GALLERY ROUTES
- // logger.info('👤 Registering player routes (character selection & gallery)...');
- // app.use('/api/player', playerRoutes);
- // logger.info('✅ Player routes registered at /api/player/*');
+  // ✅ Phase 4: Register player routes (ESM)
+  logger.info('👤 [PHASE 4] Registering player routes (ESM)...');
+  try {
+    // @ts-ignore
+    const { default: playerRoutes } = await import('./routes/player-routes.mjs');
+    app.use('/api/player', playerRoutes);
+    logger.info('✅ Player routes registered at /api/player/* (ESM)');
+  } catch (err) {
+    logger.error('❌ Failed to load player routes:', err);
+  }
 
-  // ✅ REGISTER ADMIN ROUTES - Full CRUD for all entities + media sync
-  logger.info('🔧 Registering admin routes...');
+  // ✅ Phase 5: Register admin routes (legacy + new ESM)
+  logger.info('🔧 [PHASE 5] Registering admin routes...');
   app.use('/api/admin', requireAuth, requireAdmin, adminRouter);
   logger.info('✅ Admin routes registered at /api/admin/*');
-
-  // Add Luna API routes if available
-  if (luna && lunaRouter) {
-    app.use('/api/luna', lunaRouter);
-    logger.info('✅ Luna API routes registered');
-  }
   
-  logger.info('✅ Routes registered successfully');
+  // Try to load additional admin routes from ESM
+  try {
+    // @ts-ignore
+    const { default: adminRoutesExtra } = await import('./routes/admin-routes.mjs');
+    app.use('/api/admin', requireAuth, requireAdmin, adminRoutesExtra);
+    logger.info('✅ Additional admin routes registered (ESM)');
+  } catch (err) {
+    logger.warn('⚠️ Additional admin routes not available:', err);
+  }
 
-  logger.info('📁 Setting up static file serving...');
+  // ✅ Phase 6: Add Luna API routes if available
+  if (luna && lunaRouter) {
+    logger.info('🌙 [PHASE 6] Registering Luna API routes...');
+    app.use('/api/luna', lunaRouter);
+    logger.info('✅ Luna API routes registered at /api/luna/*');
+  } else {
+    logger.warn('⚠️ [PHASE 6] Luna API routes not available');
+  }
+
+  logger.info('✅ All routes registered successfully');
+
+  // ✅ Phase 7: Static file serving
+  logger.info('📁 [PHASE 7] Setting up static file serving...');
   app.use("/uploads", express.static(path.join(__dirname, "..", "uploads")));
-  logger.info('✅ Static files configured');
+  logger.info('✅ Static files configured at /uploads');
 
+  // Error handler middleware
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
@@ -149,6 +204,8 @@ app.use((req, res, next) => {
     res.status(status).json({ message, error: err.message });
   });
 
+  // ✅ Phase 8: Vite setup or static serving
+  logger.info('👨‍💻 [PHASE 8] Setting up frontend serving...');
   if (app.get("env") === "development") {
     logger.info('Setting up Vite dev server...');
     await setupVite(app, server);
@@ -159,9 +216,10 @@ app.use((req, res, next) => {
     logger.info('Static files ready');
   }
 
+  // ✅ Phase 9: Start server
   const port = parseInt(process.env.PORT || '5000', 10);
-
-  logger.info(`🌍 Starting server on port ${port}...`);
+  logger.info(`🌍 [PHASE 9] Starting server on port ${port}...`);
+  
   server.listen({
     port,
     host: "0.0.0.0",
@@ -172,17 +230,25 @@ app.use((req, res, next) => {
     logger.info(`📦 Game Config: Using unifiedDataLoader (progressive-data only)`);
     logger.info(`🔧 Admin Panel API: http://0.0.0.0:${port}/api/admin/*`);
     logger.info(`👤 Player API: http://0.0.0.0:${port}/api/player/*`);
-
-    // Start Luna monitoring if initialized
     if (luna) {
+      logger.info(`🌙 Luna Bug API: http://0.0.0.0:${port}/api/luna/*`);
+    }
+
+    // ✅ Phase 10: Start Luna monitoring if initialized
+    if (luna) {
+      logger.info('🌙 [PHASE 10] Starting Luna Bug monitoring...');
       setTimeout(async () => {
         try {
           await luna.start();
-          logger.info('🌙 Luna Bug monitoring started');
+          logger.info('✅ 🌙 Luna Bug monitoring started successfully');
         } catch (err) {
-          logger.error('❌ Failed to start Luna Bug:', err);
+          logger.error('❌ Failed to start Luna Bug monitoring:', err);
         }
       }, 2000);
+    } else {
+      logger.info('⚠️ [PHASE 10] Luna Bug monitoring skipped (not initialized)');
     }
+    
+    logger.info('🎉 ✅ ALL PHASES COMPLETE - Server fully operational');
   });
 })();
