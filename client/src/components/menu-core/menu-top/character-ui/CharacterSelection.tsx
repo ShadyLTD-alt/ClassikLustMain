@@ -10,13 +10,15 @@ interface CharacterSelectionProps {
 }
 
 export default function CharacterSelection({ isOpen, onClose, openMenu }: CharacterSelectionProps) {
-  const { state, characters } = useGame();
+  const { state, characters, refreshPlayerState } = useGame();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedCharacterId, setSelectedCharacterId] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const handleCardClick = (characterId: string) => {
     setSelectedCharacterId(characterId);
+    setError(null);
   };
 
   const handleSelectCharacter = async () => {
@@ -24,15 +26,30 @@ export default function CharacterSelection({ isOpen, onClose, openMenu }: Charac
     try {
       setLoading(true);
       setError(null);
+      setSuccessMessage(null);
+      
       const response = await apiRequest('/api/player/active-character', {
         method: 'PATCH',
         body: JSON.stringify({ characterId: selectedCharacterId }),
       });
+      
       if (response.ok) {
+        const data = await response.json();
+        setSuccessMessage(data.message || 'Character selected successfully!');
         setSelectedCharacterId(null);
+        
+        // Refresh player state to update UI
+        if (refreshPlayerState) {
+          await refreshPlayerState();
+        }
+        
+        // Auto-close success message after 3 seconds
+        setTimeout(() => {
+          setSuccessMessage(null);
+        }, 3000);
       } else {
         const data = await response.json();
-        setError(data.message || 'Failed to set active character');
+        setError(data.error || data.message || 'Failed to set active character');
       }
     } catch (err) {
       console.error('Error setting active character:', err);
@@ -99,11 +116,21 @@ export default function CharacterSelection({ isOpen, onClose, openMenu }: Charac
 
         {/* Content */}
         <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
+          {/* Success Message */}
+          {successMessage && (
+            <div className="mb-4 p-3 bg-green-500/20 border border-green-500/50 rounded-lg text-green-200 text-sm flex items-center gap-2 animate-fade-in">
+              <Check className="w-4 h-4" />
+              {successMessage}
+            </div>
+          )}
+          
+          {/* Error Message */}
           {error && (
             <div className="mb-4 p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-200 text-sm">
               ⚠️ {error}
             </div>
           )}
+          
           {/* Unlocked Characters */}
           {unlockedCharacters.length > 0 && (
             <div className="mb-8">
@@ -133,7 +160,6 @@ export default function CharacterSelection({ isOpen, onClose, openMenu }: Charac
                           <Check className="w-4 h-4 text-white" />
                         </div>
                       )}
-                      {/* Highlight overlay for selected */}
                       {isSelected && !isActive && (
                         <div className="absolute inset-0 rounded-xl bg-purple-700/10 ring-2 ring-purple-400 pointer-events-none" style={{zIndex:10}}></div>
                       )}
@@ -167,11 +193,12 @@ export default function CharacterSelection({ isOpen, onClose, openMenu }: Charac
                   disabled={!selectedCharacterId || loading || selectedCharacterId === state.activeCharacter}
                   onClick={handleSelectCharacter}
                 >
-                  Select {selectedCharacterId ? characters.find(x=>x.id===selectedCharacterId)?.name : ''}
+                  {loading ? 'Selecting...' : `Select ${selectedCharacterId ? characters.find(x=>x.id===selectedCharacterId)?.name : ''}`}
                 </button>
               </div>
             </div>
           )}
+          
           {/* Locked Characters */}
           {lockedCharacters.length > 0 && (
             <div>
@@ -210,6 +237,7 @@ export default function CharacterSelection({ isOpen, onClose, openMenu }: Charac
               </div>
             </div>
           )}
+          
           {characters.length === 0 && (
             <div className="text-center py-12">
               <div className="w-16 h-16 rounded-full bg-gray-800 flex items-center justify-center mx-auto mb-4">
