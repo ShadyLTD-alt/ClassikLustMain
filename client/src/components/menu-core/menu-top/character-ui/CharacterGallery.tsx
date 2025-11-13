@@ -43,18 +43,32 @@ export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryPr
     }
   }, [isOpen, state.activeCharacter]);
 
+  // -------- UPDATED TO USE /api/media -----------
   const loadImages = async (characterId: string) => {
     try {
       setLoading(true);
       setError(null);
-
-      const response = await apiRequest(`/api/player/images?characterId=${characterId}`, {
-        method: 'GET',
-      });
-
+      const response = await apiRequest(`/api/media`, { method: 'GET' });
       if (response.ok) {
         const data = await response.json();
-        setImages(data.images || []);
+        // Filter and map to correct fields
+        const characterImages = (data.media || [])
+          .filter((img: any) => img.metadata?.characterId?.toLowerCase() === characterId.toLowerCase())
+          .map((img: any) => ({
+            id: img.filename.split('.')[0],
+            filename: img.filename,
+            path: img.path,
+            characterId: img.metadata?.characterId || characterId,
+            type: img.metadata?.type || 'default',
+            unlockLevel: img.metadata?.unlockLevel || 1,
+            isUnlocked: !img.metadata?.unlockLevel || state.level >= img.metadata.unlockLevel,
+            metadata: {
+              nsfw: img.metadata?.categories?.includes('nsfw') || false,
+              vip: img.metadata?.categories?.includes('vip') || false,
+              poses: img.metadata?.poses || []
+            }
+          }));
+        setImages(characterImages);
       } else {
         const data = await response.json();
         setError(data.message || 'Failed to load images');
@@ -73,7 +87,6 @@ export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryPr
     try {
       setSettingImage(imageId);
       setError(null);
-
       const response = await apiRequest('/api/player/set-display-image', {
         method: 'POST',
         body: JSON.stringify({
@@ -81,9 +94,7 @@ export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryPr
           characterId: selectedCharacter,
         }),
       });
-
       if (response.ok) {
-        console.log('✅ Display image set:', imageId);
         await loadImages(selectedCharacter);
       } else {
         const data = await response.json();
@@ -105,7 +116,6 @@ export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryPr
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
       <div className="relative w-full max-w-6xl max-h-[90vh] bg-gradient-to-br from-gray-900 via-purple-900/20 to-gray-900 rounded-2xl shadow-2xl border border-purple-500/30 overflow-hidden flex flex-col">
-        
         {/* Header */}
         <div className="relative p-6 border-b border-purple-500/30 bg-gradient-to-r from-purple-900/40 to-pink-900/40 flex-shrink-0">
           <div className="flex items-center justify-between mb-4">
@@ -124,7 +134,6 @@ export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryPr
               <span className="text-white text-xl">×</span>
             </button>
           </div>
-
           {/* Character Filter */}
           <div className="flex items-center gap-3">
             <label className="text-sm text-gray-300 font-medium">Character:</label>
@@ -139,8 +148,7 @@ export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryPr
                       px-4 py-2 rounded-lg font-medium text-sm transition-all whitespace-nowrap
                       ${selectedCharacter === character.id
                         ? 'bg-purple-500 text-white shadow-lg'
-                        : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-                      }
+                        : 'bg-gray-800 text-gray-300 hover:bg-gray-700'}
                     `}
                   >
                     {character.name}
@@ -150,16 +158,13 @@ export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryPr
             </div>
           </div>
         </div>
-
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6">
-          
           {error && (
             <div className="mb-4 p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-200 text-sm">
               ⚠️ {error}
             </div>
           )}
-
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <div className="text-center">
@@ -176,7 +181,6 @@ export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryPr
                     <span>✨ Available Images</span>
                     <span className="text-xs text-gray-400">({unlockedImages.length})</span>
                   </h3>
-                  
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                     {unlockedImages.map((image) => (
                       <button
@@ -190,45 +194,30 @@ export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryPr
                           src={image.path}
                           alt={image.filename}
                           className="w-full h-full object-cover"
-                          onError={(e) => {
-                            e.currentTarget.src = '/placeholder-image.png';
-                          }}
+                          onError={(e) => { e.currentTarget.src = '/placeholder-image.png'; }}
                         />
-
                         {/* Overlay on hover */}
                         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end">
                           <div className="p-3 w-full">
-                            <p className="text-white text-xs font-semibold truncate">
-                              {image.filename}
-                            </p>
+                            <p className="text-white text-xs font-semibold truncate">{image.filename}</p>
                             <div className="flex gap-1 mt-1 flex-wrap">
                               {image.metadata.nsfw && (
-                                <span className="px-2 py-0.5 bg-red-500 text-white text-[10px] rounded-full font-medium">
-                                  NSFW
-                                </span>
+                                <span className="px-2 py-0.5 bg-red-500 text-white text-[10px] rounded-full font-medium">NSFW</span>
                               )}
                               {image.metadata.vip && (
-                                <span className="px-2 py-0.5 bg-yellow-500 text-black text-[10px] rounded-full font-medium">
-                                  VIP
-                                </span>
+                                <span className="px-2 py-0.5 bg-yellow-500 text-black text-[10px] rounded-full font-medium">VIP</span>
                               )}
                               {image.type && (
-                                <span className="px-2 py-0.5 bg-purple-500 text-white text-[10px] rounded-full font-medium">
-                                  {image.type}
-                                </span>
+                                <span className="px-2 py-0.5 bg-purple-500 text-white text-[10px] rounded-full font-medium">{image.type}</span>
                               )}
                             </div>
                           </div>
                         </div>
-
-                        {/* Loading State */}
                         {settingImage === image.id && (
                           <div className="absolute inset-0 bg-black/70 flex items-center justify-center">
                             <div className="w-8 h-8 border-4 border-purple-500/30 border-t-purple-500 rounded-full animate-spin"></div>
                           </div>
                         )}
-
-                        {/* Click hint */}
                         <div className="absolute top-2 right-2 bg-black/60 rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <ImageIcon className="w-4 h-4 text-white" />
                         </div>
@@ -237,7 +226,6 @@ export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryPr
                   </div>
                 </div>
               )}
-
               {/* Locked Images */}
               {lockedImages.length > 0 && (
                 <div>
@@ -245,7 +233,6 @@ export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryPr
                     <span>🔒 Locked Images</span>
                     <span className="text-xs text-gray-400">({lockedImages.length})</span>
                   </h3>
-                  
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                     {lockedImages.map((image) => (
                       <div
@@ -258,7 +245,6 @@ export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryPr
                           alt={image.filename}
                           className="w-full h-full object-cover blur-sm"
                         />
-
                         {/* Lock Overlay */}
                         <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
                           <div className="text-center">
@@ -273,7 +259,6 @@ export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryPr
                   </div>
                 </div>
               )}
-
               {/* Empty State */}
               {!loading && images.length === 0 && (
                 <div className="text-center py-12">
@@ -286,8 +271,6 @@ export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryPr
                   </p>
                 </div>
               )}
-
-              {/* No Character Selected */}
               {!selectedCharacter && (
                 <div className="text-center py-12">
                   <div className="w-16 h-16 rounded-full bg-gray-800 flex items-center justify-center mx-auto mb-4">
