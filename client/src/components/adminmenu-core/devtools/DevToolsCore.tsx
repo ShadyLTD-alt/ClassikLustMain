@@ -23,7 +23,7 @@ export default function DevToolsCore() {
   // Luna Chat State
   const [lunaMessages, setLunaMessages] = useState<ChatMessage[]>([
     {
-      text: "🌙 Welcome! I'm Luna, your AI debugging assistant powered by Mistral AI. Please set your Mistral API key first to get started with debugging assistance!",
+      text: "🌙 Hey, i'm LunaBug! Interactive AI Debugger Chat.",
       sender: 'bot',
       timestamp: new Date().toISOString()
     }
@@ -155,12 +155,12 @@ Provide a clear analysis and solution.`;
           'Authorization': `Bearer ${apiKey}`
         },
         body: JSON.stringify({
-          model: 'mistral-medium',
+          model: 'open-mistral-7b',
           messages: [
             { role: 'system', content: 'You are Luna, an expert debugging assistant for ClassikLust game.' },
             { role: 'user', content: prompt }
           ],
-          temperature: 0.3,
+          temperature: 0.07,
           max_tokens: 1500
         })
       });
@@ -218,13 +218,13 @@ Provide a clear analysis and solution.`;
           'Authorization': `Bearer ${apiKey}`
         },
         body: JSON.stringify({
-          model: 'mistral-medium',
+          model: 'open-mistral-7b',
           messages: [
             { role: 'system', content: 'You are Luna, intelligent debugging assistant for ClassikLust game.' },
             { role: 'user', content: lunaChatInput }
           ],
           temperature: 0.7,
-          max_tokens: 1000
+          max_tokens: 2000
         })
       });
 
@@ -502,7 +502,7 @@ Provide a clear analysis and solution.`;
               <div className="flex-1 overflow-y-auto mb-3 space-y-2 max-h-80">
                 {lunaMessages.map((msg, idx) => (
                   <div key={idx} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[85%] p-3 rounded-lg ${
+                    <div className={`max-w-[95%] p-2 rounded-lg ${
                       msg.sender === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-200'
                     }`}>
                       <div className="text-sm whitespace-pre-wrap">{msg.text}</div>
@@ -518,14 +518,14 @@ Provide a clear analysis and solution.`;
                 <input
                   value={lunaChatInput}
                   onChange={(e) => setLunaChatInput(e.target.value)}
-                  placeholder="Ask Luna anything..."
+                  placeholder="Ask anything"
                   onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleChatSend()}
-                  className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+                  className="flex-1 px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-sm"
                   disabled={lunaLoading || !apiKeySet}
                 />
                 <button
                   onClick={handleChatSend}
-                  className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 text-white rounded"
+                  className="px-3 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 text-white rounded"
                   disabled={lunaLoading || !lunaChatInput.trim() || !apiKeySet}
                 >
                   <Send className="w-4 h-4" />
