@@ -811,4 +811,4 @@ console.log('✅ [ROUTES] Upload path: /uploads/characters/{characterId}/{type}/
 console.log('✅ [ROUTES] Dual metadata write: progressive-data + character-data');
 console.log('✅ [ROUTES] Character selection: PATCH /api/player/active-character');
 
-export { registerRoutes };
+//export { registerRoutes };

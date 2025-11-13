@@ -39,9 +39,9 @@
       "unlockLevel": 1,
       "description": "A melodic mage who weaves magic through song test test",
       "rarity": "rare",
-      "defaultImage": "/uploads/characters/Aria/character/default.png"
-      "avatarImage": "/uploads/characters/Aria/avatar/default.png",
-      "displayImage": "/uploads/characters/Aria/character/default.png",
+      "defaultImage": "/uploads/characters/aria/character/default.png"
+      "avatarImage": "/uploads/characters/aria/avatar/default.png",
+      "displayImage": "/uploads/characters/aria/character/default.png",
       "updatedAt": "2025-11-04T09:06:27.409Z"
     }
   ]
