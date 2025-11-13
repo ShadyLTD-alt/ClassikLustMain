@@ -3,6 +3,8 @@
 
 const express = require('express');
 const router = express.Router();
+const { requireAuth } = require('../middleware/auth');
+const { updatePlayerState, getPlayerState } = require('../utils/playerStateManager');
 const { createClient } = require('@supabase/supabase-js');
 
 const supabase = createClient(
@@ -10,82 +12,46 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY
 );
 
-// Middleware to get authenticated user
-const authenticateUser = async (req, res, next) => {
-  try {
-    const telegramId = req.user?.telegramId || req.body?.telegramId || req.query?.telegramId;
-    if (!telegramId) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-    
-    const { data: player, error } = await supabase
-      .from('players')
-      .select('*')
-      .eq('telegramId', telegramId)
-      .single();
-
-    if (error || !player) {
-      return res.status(404).json({ error: 'Player not found' });
-    }
-
-    req.player = player;
-    next();
-  } catch (err) {
-    console.error('Auth error:', err);
-    res.status(500).json({ error: 'Authentication failed' });
-  }
-};
-
 // PATCH /api/player/active-character
-router.patch('/active-character', authenticateUser, async (req, res) => {
+router.patch('/active-character', requireAuth, async (req, res) => {
   try {
     const { characterId } = req.body;
-    const { player } = req;
+    const player = req.player;
+
+    console.log(`🎭 [ACTIVE-CHAR] Request to set ${characterId} for player ${player.username}`);
 
     if (!characterId) {
       return res.status(400).json({ error: 'characterId is required' });
     }
 
-    const { data: character, error: charError } = await supabase
-      .from('characters')
-      .select('*')
-      .eq('id', characterId)
-      .single();
+    // Update player state with new active character
+    const updated = await updatePlayerState(player, {
+      selectedCharacterId: characterId,
+      activeCharacter: characterId,
+      displayImage: null
+    });
 
-    if (charError || !character) {
-      return res.status(404).json({ error: 'Character not found' });
-    }
-
-    if (character.unlockLevel && player.level < character.unlockLevel) {
-      return res.status(403).json({ error: 'Character not unlocked' });
-    }
-
-    const { error: updateError } = await supabase
-      .from('players')
-      .update({ activeCharacter: characterId })
-      .eq('id', player.id);
-
-    if (updateError) {
-      console.error('Update error:', updateError);
-      return res.status(500).json({ error: 'Failed to update active character' });
-    }
+    console.log(`✅ [ACTIVE-CHAR] Successfully set to ${characterId}`);
 
     res.json({ 
       success: true, 
       activeCharacter: characterId,
-      message: `${character.name} is now your active character!`
+      player: updated,
+      message: `Character updated successfully!`
     });
   } catch (err) {
-    console.error('Error setting active character:', err);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('❌ [ACTIVE-CHAR] Error:', err);
+    res.status(500).json({ error: err.message || 'Failed to set active character' });
   }
 });
 
 // GET /api/player/images?characterId={id}
-router.get('/images', authenticateUser, async (req, res) => {
+router.get('/images', requireAuth, async (req, res) => {
   try {
     const { characterId } = req.query;
-    const { player } = req;
+    const player = req.player;
+
+    console.log(`🖼️ [IMAGES] Request for characterId=${characterId}, player=${player.username}`);
 
     if (!characterId) {
       return res.status(400).json({ error: 'characterId query parameter is required' });
@@ -98,14 +64,17 @@ router.get('/images', authenticateUser, async (req, res) => {
       .order('unlockLevel', { ascending: true });
 
     if (error) {
-      console.error('Error fetching images:', error);
+      console.error('❌ [IMAGES] DB Error:', error);
       return res.status(500).json({ error: 'Failed to fetch images' });
     }
+
+    console.log(`📊 [IMAGES] Found ${mediaFiles?.length || 0} images for ${characterId}`);
 
     const enrichedImages = (mediaFiles || []).map(img => ({
       id: img.id,
       filename: img.filename || img.url?.split('/').pop(),
       path: img.url,
+      url: img.url, // ✅ Added for compatibility
       characterId: img.characterId,
       type: img.type || 'default',
       unlockLevel: img.unlockLevel || 1,
@@ -119,55 +88,39 @@ router.get('/images', authenticateUser, async (req, res) => {
 
     res.json({ images: enrichedImages });
   } catch (err) {
-    console.error('Error getting player images:', err);
+    console.error('❌ [IMAGES] Error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 // POST /api/player/set-display-image
-router.post('/set-display-image', authenticateUser, async (req, res) => {
+router.post('/set-display-image', requireAuth, async (req, res) => {
   try {
-    const { imageId, characterId } = req.body;
-    const { player } = req;
+    const { imageUrl } = req.body;
+    const player = req.player;
 
-    if (!imageId || !characterId) {
-      return res.status(400).json({ error: 'imageId and characterId are required' });
+    console.log(`🖼️ [DISPLAY-IMG] Request to set image for player ${player.username}`);
+
+    if (!imageUrl) {
+      return res.status(400).json({ error: 'imageUrl is required' });
     }
 
-    const { data: image, error: imgError } = await supabase
-      .from('mediaUploads')
-      .select('*')
-      .eq('id', imageId)
-      .eq('characterId', characterId)
-      .single();
+    const updated = await updatePlayerState(player, { displayImage: imageUrl });
 
-    if (imgError || !image) {
-      return res.status(404).json({ error: 'Image not found' });
-    }
-
-    if (image.unlockLevel && player.level < image.unlockLevel) {
-      return res.status(403).json({ error: 'Image not unlocked' });
-    }
-
-    const { error: updateError } = await supabase
-      .from('players')
-      .update({ displayImage: imageId })
-      .eq('id', player.id);
-
-    if (updateError) {
-      console.error('Update error:', updateError);
-      return res.status(500).json({ error: 'Failed to update display image' });
-    }
+    console.log(`✅ [DISPLAY-IMG] Successfully set to ${imageUrl}`);
 
     res.json({ 
       success: true, 
-      displayImage: imageId,
+      displayImage: imageUrl,
+      player: updated,
       message: 'Display image updated successfully!'
     });
   } catch (err) {
-    console.error('Error setting display image:', err);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('❌ [DISPLAY-IMG] Error:', err);
+    res.status(500).json({ error: 'Failed to set display image' });
   }
 });
+
+console.log('✅ [PLAYER-ROUTES] Module loaded');
 
 module.exports = router;
