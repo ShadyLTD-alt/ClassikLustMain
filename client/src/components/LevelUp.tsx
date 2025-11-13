@@ -181,23 +181,17 @@ export default function LevelUp({ isOpen, onClose }: LevelUpProps) {
       <DialogContent className="max-w-md bg-gray-900/95 backdrop-blur-lg text-white border-purple-500/50">
         <DialogHeader>
           <div className="flex items-center justify-between">
-            <DialogTitle className="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-              Level Up - Level {nextLevelData.level}
+Current Level: {playerData.level} 
+            <DialogTitle className="text-sm font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+
             </DialogTitle>
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={(e) => {
-                e.stopPropagation();
-                onClose();
-              }} 
-              className="text-gray-400 hover:text-white"
-            >
-              <X className="w-5 h-5" />
-            </Button>
+Next Level: {nextLevelData.level}
           </div>
-          <p className="text-center text-sm text-gray-400">
-            Current Level: {playerData.level} | Cost: <span className="text-purple-400 font-semibold">{cost}</span> points
+    
+          <p className="text-center text-x1 text-gray-400 font-bold">
+            LustPoints: 
+             <span className="text-sm font-semibold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent"> 
+               {Math.floor(playerData.points)}</span>
           </p>
         </DialogHeader>
 
@@ -283,14 +277,13 @@ export default function LevelUp({ isOpen, onClose }: LevelUpProps) {
             ) : !canAfford ? (
               `Need ${cost - playerData.points} more points`
             ) : (
-              'Requirements not met'
+              'Requirements Not Met'
             )}
           </Button>
 
           {/* Current Status */}
-          <div className="text-center text-sm text-gray-400 space-y-1">
-            <div>Your Points: <span className="text-purple-400 font-semibold">{Math.floor(playerData.points)}</span></div>
-            <div>Cost: <span className="text-purple-400 font-semibold">{cost}</span></div>
+          <div className="text-center text-x1 text-gray-400 space-y-1 font-bold">
+            <div>Level {nextLevelData.level} Cost: <span className="text-x1 font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">{cost}</span></div>
             {canAfford ? (
               <div className="text-green-400">✓ You have enough points!</div>
             ) : (
