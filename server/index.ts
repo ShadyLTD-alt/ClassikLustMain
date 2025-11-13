@@ -9,13 +9,6 @@ import logger from "./logger";
 import adminRouter from "./routes/admin";
 import { requireAuth, requireAdmin } from "./middleware/auth";
 
-<<<<<<< HEAD
-// ✅ Import character selection & gallery routes
-import playerRoutes from "./routes/player-routes";
-import adminRoutes from "./routes/admin-routes"
-
-=======
->>>>>>> 8e59be5a66478142da5bd671fc2696732247e324
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -118,17 +111,7 @@ app.use((req, res, next) => {
   logger.info('📝 Registering routes...');
   const server = await registerRoutes(app);
 
-<<<<<<< HEAD
-  // ✅ REGISTER CHARACTER SELECTION & GALLERY ROUTES
-  logger.info('👤 Registering player routes (character selection & gallery)...');
-  app.use('/api/player', playerRoutes);
-  app.use('/api/player', requireAuth, playerRoutes)
-  logger.info('✅ Player routes registered at /api/player/*');
-
-  // ✅ REGISTER ADMIN ROUTES - Full CRUD for all entities + media sync
-=======
   // ✅ REGISTER ADMIN ROUTES - Full CRUD for all entities
->>>>>>> 8e59be5a66478142da5bd671fc2696732247e324
   logger.info('🔧 Registering admin routes...');
   app.use('/api/admin', requireAuth, requireAdmin, adminRouter);
   logger.info('✅ Admin routes registered at /api/admin/*');
