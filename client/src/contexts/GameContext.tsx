@@ -11,6 +11,7 @@ interface GameState {
   energyMax: number;
   level: number;
   selectedCharacterId: string;
+  activeCharacter: string | null; // ✅ Added for character selection
   selectedImageId: string | null;
   selectedAvatarId: string | null;
   upgrades: Record<string, number>;
@@ -65,6 +66,7 @@ interface GameContextType {
   dispatch: (action: any) => void;
   calculateTapValue: () => number;
   retryConnection: () => void;
+  refreshPlayerState: () => Promise<void>; // ✅ Added for character selection refresh
 }
 
 const GameContext = createContext<GameContextType | undefined>(undefined);
@@ -77,6 +79,7 @@ const createInitialState = (): GameState => ({
   energyMax: 1000,
   level: 1,
   selectedCharacterId: 'aria',
+  activeCharacter: null, // ✅ Added
   selectedImageId: null,
   selectedAvatarId: null,
   upgrades: {},
@@ -225,7 +228,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
         level: player.level,
         isAdmin: player.isAdmin,
         upgrades: Object.keys(player.upgrades || {}).length,
-        selectedChar: player.selectedCharacterId
+        selectedChar: player.selectedCharacterId,
+        activeChar: player.activeCharacter // ✅ Added
       });
 
       console.log('📦 [GAMECONTEXT] Loading game configuration...');
@@ -278,6 +282,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         energyMax: player.energyMax || 1000,
         level: player.level || 1,
         selectedCharacterId: player.selectedCharacterId || (loadedCharacters[0]?.id || 'aria'),
+        activeCharacter: player.activeCharacter || null, // ✅ Added
         selectedImageId: player.selectedImageId || null,
         displayImage: normalizeImageUrl(player.displayImage),
         upgrades: player.upgrades || {},
@@ -307,6 +312,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         level: newState.level,
         isAdmin: newState.isAdmin,
         character: newState.selectedCharacterId,
+        activeCharacter: newState.activeCharacter, // ✅ Added
         upgradeCount: Object.keys(newState.upgrades).length
       });
       
@@ -336,6 +342,27 @@ export function GameProvider({ children }: { children: ReactNode }) {
       setIsInitialized(true);
     }
   }, [retryCount]);
+
+  // ✅ NEW: Refresh player state after character selection
+  const refreshPlayerState = useCallback(async () => {
+    console.log('🔄 [GAMECONTEXT] Refreshing player state...');
+    try {
+      const response = await apiRequest('/api/player/me', {}, 3000);
+      if (response.ok) {
+        const data = await response.json();
+        const player = data.player;
+        setState(prev => ({
+          ...prev,
+          selectedCharacterId: player.selectedCharacterId || prev.selectedCharacterId,
+          activeCharacter: player.activeCharacter || prev.activeCharacter,
+          displayImage: normalizeImageUrl(player.displayImage) || prev.displayImage
+        }));
+        console.log('✅ [GAMECONTEXT] Player state refreshed');
+      }
+    } catch (err) {
+      console.error('❌ [GAMECONTEXT] Failed to refresh player state:', err);
+    }
+  }, []);
 
   const retryConnection = useCallback(() => {
     console.log('🔄 [GAMECONTEXT] Manual retry requested');
@@ -518,6 +545,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       setState(prev => ({
         ...prev,
         selectedCharacterId: updatedPlayer.selectedCharacterId,
+        activeCharacter: updatedPlayer.activeCharacter || updatedPlayer.selectedCharacterId, // ✅ Added
         selectedImageId: updatedPlayer.selectedImageId,
         displayImage: normalizeImageUrl(updatedPlayer.displayImage)
       }));
@@ -582,7 +610,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
   const addImage = useCallback((image: ImageConfig) => {
     const normalizedUrl = normalizeImageUrl(image.url);
-    if (normalizedUrl === null) return; // or handle however you want
+    if (normalizedUrl === null) return;
     setImages(prev => [...prev, { ...image, url: normalizedUrl }]);
   }, []);
 
@@ -590,7 +618,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     setImages(prev => prev.map(img => {
       if (img.id === image.id) {
         const normalizedUrl = normalizeImageUrl(image.url);
-        if (normalizedUrl === null) return img; // keep original if null
+        if (normalizedUrl === null) return img;
         return { ...image, url: normalizedUrl };
       }
       return img;
@@ -674,7 +702,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
       resetGame,
       dispatch,
       calculateTapValue,
-      retryConnection
+      retryConnection,
+      refreshPlayerState // ✅ Added
     }}>
       {children}
       
@@ -701,7 +730,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
           
           <div className="text-xs text-gray-400 mb-3">
             User: {state.username || 'Unknown'} | 
-            Character: {state.selectedCharacterId || 'None'} | 
+            Character: {state.activeCharacter || state.selectedCharacterId || 'None'} | 
             Upgrades: {Object.keys(state.upgrades).length}
           </div>
           
