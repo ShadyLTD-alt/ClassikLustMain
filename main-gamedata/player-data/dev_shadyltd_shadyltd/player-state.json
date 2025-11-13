@@ -40,5 +40,6 @@
   "createdAt": "2025-11-09T01:23:13.437Z",
   "updatedAt": "2025-11-13T03:17:43.905Z",
   "experience": 0,
-  "lastActiveAt": "2025-11-09T01:23:25.874Z"
+  "lastActiveAt": "2025-11-09T01:23:25.874Z",
+  "activeCharacter": null
 }

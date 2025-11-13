@@ -10,8 +10,8 @@ import adminRouter from "./routes/admin";
 import { requireAuth, requireAdmin } from "./middleware/auth";
 
 // ✅ Import character selection & gallery routes
-import playerRoutes from "./routes/player-routes.js";
-import adminRoutes from "./routes/admin-routes.js";
+import playerRoutes from "./routes/player-routes";
+import adminRoutes from "./routes/admin-routes"
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -118,6 +118,7 @@ app.use((req, res, next) => {
   // ✅ REGISTER CHARACTER SELECTION & GALLERY ROUTES
   logger.info('👤 Registering player routes (character selection & gallery)...');
   app.use('/api/player', playerRoutes);
+  app.use('/api/player', requireAuth, playerRoutes)
   logger.info('✅ Player routes registered at /api/player/*');
 
   // ✅ REGISTER ADMIN ROUTES - Full CRUD for all entities + media sync
