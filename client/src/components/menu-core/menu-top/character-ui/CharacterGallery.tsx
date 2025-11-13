@@ -43,7 +43,6 @@ export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryPr
     }
   }, [isOpen, state.activeCharacter]);
 
-  // -------- UPDATED TO USE /api/media -----------
   const loadImages = async (characterId: string) => {
     try {
       setLoading(true);
@@ -51,7 +50,6 @@ export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryPr
       const response = await apiRequest(`/api/media`, { method: 'GET' });
       if (response.ok) {
         const data = await response.json();
-        // Filter and map to correct fields
         const characterImages = (data.media || [])
           .filter((img: any) => img.metadata?.characterId?.toLowerCase() === characterId.toLowerCase())
           .map((img: any) => ({
@@ -83,14 +81,17 @@ export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryPr
     }
   };
 
+  // UPDATED: send the image path as imageUrl
   const handleSetDisplayImage = async (imageId: string) => {
     try {
+      const selected = images.find(i => i.id === imageId);
+      if (!selected) return;
       setSettingImage(imageId);
       setError(null);
       const response = await apiRequest('/api/player/set-display-image', {
         method: 'POST',
         body: JSON.stringify({
-          imageId,
+          imageUrl: selected.path,
           characterId: selectedCharacter,
         }),
       });
@@ -189,14 +190,12 @@ export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryPr
                         disabled={settingImage === image.id}
                         className="relative group aspect-[3/4] rounded-xl overflow-hidden border-2 border-purple-500/30 hover:border-purple-500 hover:scale-105 transition-all duration-200 bg-gray-900"
                       >
-                        {/* Image */}
                         <img
                           src={image.path}
                           alt={image.filename}
                           className="w-full h-full object-cover"
                           onError={(e) => { e.currentTarget.src = '/placeholder-image.png'; }}
                         />
-                        {/* Overlay on hover */}
                         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end">
                           <div className="p-3 w-full">
                             <p className="text-white text-xs font-semibold truncate">{image.filename}</p>
@@ -239,13 +238,11 @@ export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryPr
                         key={image.id}
                         className="relative aspect-[3/4] rounded-xl overflow-hidden border-2 border-gray-700 bg-gray-900 opacity-60"
                       >
-                        {/* Image (blurred) */}
                         <img
                           src={image.path}
                           alt={image.filename}
                           className="w-full h-full object-cover blur-sm"
                         />
-                        {/* Lock Overlay */}
                         <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
                           <div className="text-center">
                             <Lock className="w-8 h-8 text-gray-400 mx-auto mb-2" />
@@ -259,7 +256,6 @@ export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryPr
                   </div>
                 </div>
               )}
-              {/* Empty State */}
               {!loading && images.length === 0 && (
                 <div className="text-center py-12">
                   <div className="w-16 h-16 rounded-full bg-gray-800 flex items-center justify-center mx-auto mb-4">
