@@ -28,7 +28,7 @@ function parseFileMetadata(filename, characterId, relativePath) {
 }
 
 function extractLevel(filename) {
-  const match = filename.match(/level?(\d+)|lv\.?(\d+)/i);
+  const match = filename.match(/level?(\d+)|lv\.?([0-9]+)/i);
   return match ? parseInt(match[1] || match[2]) : 1;
 }
 
@@ -52,11 +52,9 @@ function extractPoses(filename) {
 async function syncDirectory(dirPath, characterId = null, relativePath = '') {
   try {
     const entries = await fs.readdir(dirPath, { withFileTypes: true });
-
     for (const entry of entries) {
       const fullPath = path.join(dirPath, entry.name);
       const newRelativePath = relativePath ? `${relativePath}/${entry.name}` : entry.name;
-
       if (entry.isDirectory()) {
         await syncDirectory(fullPath, entry.name, newRelativePath);
       } else if (entry.isFile() && isImageFile(entry.name)) {
@@ -73,24 +71,67 @@ function isImageFile(filename) {
   return ['.png', '.jpg', '.jpeg', '.gif', '.webp'].includes(ext);
 }
 
+async function patchMissingFields() {
+  // Get all images missing characterId or url
+  const { data: images, error } = await supabase
+    .from('mediaUploads')
+    .select('id, filename, url, characterId')
+    .or('characterId.is.null,url.is.null')
+    .limit(1000);
+  if (error) {
+    console.error('Failed to find missing images:', error);
+    return;
+  }
+  if (!images || images.length === 0) return;
+  for (const img of images) {
+    // Attempt to infer character from filename or url
+    let characterId = img.characterId || inferCharacterFromFilename(img.filename || img.url);
+    let url = img.url;
+    if (!url && img.filename) {
+      // Try to infer path
+      url = `/uploads/characters/${characterId}/${img.filename}`;
+    }
+    if (!characterId || !url) continue;
+    const { error } = await supabase
+      .from('mediaUploads')
+      .update({ characterId, url })
+      .eq('id', img.id);
+    if (error) {
+      console.warn('Patch error', img, error);
+    } else {
+      console.log(`✓ Patched image: ${img.id} [${characterId}] ${url}`);
+    }
+  }
+}
+
+function inferCharacterFromFilename(filename) {
+  const lower = filename.toLowerCase();
+  if (lower.includes('aria')) return 'aria';
+  if (lower.includes('frost')) return 'frost';
+  if (lower.includes('shadow')) return 'shadow';
+  if (lower.includes('stella')) return 'stella';
+  return null;
+}
+
 async function syncImageFile(filename, characterId, relativePath) {
   try {
     const url = `/uploads/characters/${relativePath}`;
-    
     const { data: existing } = await supabase
       .from('mediaUploads')
       .select('id')
       .eq('url', url)
       .single();
-
     if (existing) {
-      console.log(`✓ Already in DB: ${url}`);
+      // Auto-patch if missing data
+      if (!existing.characterId || !existing.url) {
+        await patchMissingFields();
+      } else {
+        console.log(`✓ Already in DB: ${url}`);
+      }
       return;
     }
-
     const metadata = parseFileMetadata(filename, characterId, relativePath);
-
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('mediaUploads')
       .insert({
         characterId: metadata.characterId,
@@ -101,10 +142,7 @@ async function syncImageFile(filename, characterId, relativePath) {
         categories: metadata.categories,
         poses: metadata.poses,
         uploadedAt: new Date().toISOString(),
-      })
-      .select()
-      .single();
-
+      });
     if (error) {
       console.error(`✗ Failed to insert ${url}:`, error);
     } else {
@@ -118,7 +156,7 @@ async function syncImageFile(filename, characterId, relativePath) {
 async function syncUploadsToDatabase() {
   console.log('🔄 Starting upload sync...');
   console.log(`📁 Scanning: ${UPLOADS_DIR}`);
-
+  await patchMissingFields();
   try {
     await fs.access(UPLOADS_DIR);
     await syncDirectory(UPLOADS_DIR);
