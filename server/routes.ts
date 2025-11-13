@@ -24,9 +24,15 @@ import {
 import { getPlayerState, updatePlayerState, purchaseUpgradeForPlayer, playerStateManager } from './utils/playerStateManager';
 import { storage } from './storage';
 import crypto from 'crypto';
+import { createClient } from '@supabase/supabase-js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+const supabase = createClient(
+  process.env.SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_KEY!
+);
 
 const withTracking = async <T,>(name: string, op: () => Promise<T>): Promise<T> => { try { return await op(); } catch (e: any) { console.error(`[${name}] Error:`, e.message); throw e; } };
 
@@ -144,7 +150,7 @@ async function findExistingPlayerData(username: string): Promise<any | null> {
   }
 }
 
-// 🗂️ RECURSIVE FILE FINDER FOR ORGANIZED STRUCTURE
+// 🗜️ RECURSIVE FILE FINDER FOR ORGANIZED STRUCTURE
 async function findImageFile(filename: string): Promise<string | null> {
   // Search through organized folder structure
   try {
@@ -184,16 +190,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const { createServer } = await import('http');
   const server = createServer(app);
 
-  // ========================================
-  // IMPORT MODULAR ROUTES
-  // ========================================
-  // Player routes now handled by player-routes.js
-  // - PATCH /api/player/active-character
-  // - GET /api/player/images?characterId=X
-  // - POST /api/player/set-display-image
-  // Admin routes handled by admin-routes.js
-  // - POST /api/admin/sync-media
-  
   app.get('/api/health', async (_req, res) => { 
     try { 
       const h = await playerStateManager.healthCheck(); 
@@ -202,6 +198,123 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ status: 'error', error: e.message }); 
     } 
   });
+
+  // ========================================
+  // 👤 CHARACTER SELECTION & GALLERY ENDPOINTS
+  // ========================================
+
+  // PATCH /api/player/active-character
+  app.patch('/api/player/active-character', requireAuth, async (req, res) => {
+    try {
+      const { characterId } = req.body;
+      const player = req.player;
+
+      console.log(`🎭 [ACTIVE-CHAR] Request to set ${characterId} for player ${player?.username}`);
+
+      if (!characterId) {
+        return res.status(400).json({ error: 'characterId is required' });
+      }
+
+      // Update player state with new active character
+      const updated = await updatePlayerState(player!, {
+        selectedCharacterId: characterId,
+        activeCharacter: characterId,
+        displayImage: null
+      });
+
+      console.log(`✅ [ACTIVE-CHAR] Successfully set to ${characterId}`);
+
+      res.json({ 
+        success: true, 
+        activeCharacter: characterId,
+        player: updated,
+        message: `Character updated successfully!`
+      });
+    } catch (err: any) {
+      console.error('❌ [ACTIVE-CHAR] Error:', err);
+      res.status(500).json({ error: err.message || 'Failed to set active character' });
+    }
+  });
+
+  // GET /api/player/images?characterId={id}
+  app.get('/api/player/images', requireAuth, async (req, res) => {
+    try {
+      const { characterId } = req.query;
+      const player = req.player;
+
+      console.log(`🖼️ [IMAGES] Request for characterId=${characterId}, player=${player?.username}`);
+
+      if (!characterId) {
+        return res.status(400).json({ error: 'characterId query parameter is required' });
+      }
+
+      const { data: mediaFiles, error } = await supabase
+        .from('mediaUploads')
+        .select('*')
+        .eq('characterId', characterId)
+        .order('unlockLevel', { ascending: true });
+
+      if (error) {
+        console.error('❌ [IMAGES] DB Error:', error);
+        return res.status(500).json({ error: 'Failed to fetch images' });
+      }
+
+      console.log(`📊 [IMAGES] Found ${mediaFiles?.length || 0} images for ${characterId}`);
+
+      const enrichedImages = (mediaFiles || []).map((img: any) => ({
+        id: img.id,
+        filename: img.filename || img.url?.split('/').pop(),
+        path: img.url,
+        url: img.url,
+        characterId: img.characterId,
+        type: img.type || 'default',
+        unlockLevel: img.unlockLevel || 1,
+        isUnlocked: !img.unlockLevel || (player?.level || 1) >= img.unlockLevel,
+        metadata: {
+          nsfw: img.categories?.includes('nsfw') || false,
+          vip: img.categories?.includes('vip') || false,
+          poses: img.poses || []
+        }
+      }));
+
+      res.json({ images: enrichedImages });
+    } catch (err: any) {
+      console.error('❌ [IMAGES] Error:', err);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  // POST /api/player/set-display-image
+  app.post('/api/player/set-display-image', requireAuth, async (req, res) => {
+    try {
+      const { imageUrl } = req.body;
+      const player = req.player;
+
+      console.log(`🖼️ [DISPLAY-IMG] Request to set image for player ${player?.username}`);
+
+      if (!imageUrl) {
+        return res.status(400).json({ error: 'imageUrl is required' });
+      }
+
+      const updated = await updatePlayerState(player!, { displayImage: imageUrl });
+
+      console.log(`✅ [DISPLAY-IMG] Successfully set to ${imageUrl}`);
+
+      res.json({ 
+        success: true, 
+        displayImage: imageUrl,
+        player: updated,
+        message: 'Display image updated successfully!'
+      });
+    } catch (err: any) {
+      console.error('❌ [DISPLAY-IMG] Error:', err);
+      res.status(500).json({ error: 'Failed to set display image' });
+    }
+  });
+
+  // ========================================
+  // AUTHENTICATION
+  // ========================================
 
   app.post('/api/auth/dev', async (req, res) => {
     try {
@@ -238,6 +351,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             passiveIncomeRate: savedData.passiveIncomeRate || 0,
             lastTapValue: savedData.lastTapValue || 1,
             selectedCharacterId: savedData.selectedCharacterId,
+            activeCharacter: savedData.activeCharacter,
             displayImage: savedData.displayImage,
             isAdmin: savedData.isAdmin || false,
             consecutiveDays: savedData.consecutiveDays || 0,
@@ -267,6 +381,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             passiveIncomeRate: 0, 
             lastTapValue: 1,
             selectedCharacterId: 'aria',
+            activeCharacter: null,
             displayImage: null, 
             isAdmin: false,
             consecutiveDays: 0, 
@@ -318,12 +433,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: e.message }); 
     } 
   });
-
-  // NOTE: Character selection & gallery endpoints moved to player-routes.js
-  // Use player-routes.js for:
-  // - PATCH /api/player/active-character
-  // - GET /api/player/images?characterId=X  
-  // - POST /api/player/set-display-image
 
   app.post('/api/player/upgrades', requireAuth, async (req, res) => { 
     try { 
@@ -391,7 +500,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } 
   });
 
-  // 🗂️ GET ALL MEDIA (recursively searches organized folders)
+  // 🗜️ GET ALL MEDIA (recursively searches organized folders)
   app.get('/api/media', requireAuth, async (_req, res) => {
     try {
       const media: any[] = [];
@@ -505,7 +614,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // 🗑️ DELETE MEDIA
+  // 🗜️ DELETE MEDIA
   app.delete('/api/media/:filename', requireAuth, async (req, res) => {
     try {
       const { filename } = req.params;
@@ -764,6 +873,5 @@ export async function registerRoutes(app: Express): Promise<Server> {
   return server;
 }
 
-console.log('✅ [ROUTES] All routes registered with auto folder organization');
-console.log('✅ [ROUTES] Character selection & gallery handled by player-routes.js');
-console.log('✅ [ROUTES] Media sync handled by admin-routes.js');
+console.log('✅ [ROUTES] All routes registered (TypeScript)');
+console.log('✅ [ROUTES] Character selection & gallery endpoints added to routes.ts');
