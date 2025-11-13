@@ -1,5 +1,5 @@
 // server/utils/syncUploadsToDatabase.js
-// Auto-sync script to populate mediaUploads table from /uploads directory
+// Auto-sync script to populate and patch mediaUploads table from /uploads directory
 
 const fs = require('fs').promises;
 const path = require('path');
@@ -71,41 +71,44 @@ function isImageFile(filename) {
   return ['.png', '.jpg', '.jpeg', '.gif', '.webp'].includes(ext);
 }
 
-async function patchMissingFields() {
-  // Get all images missing characterId or url
+async function patchMissingFields(debugLog = true) {
   const { data: images, error } = await supabase
     .from('mediaUploads')
     .select('id, filename, url, characterId')
     .or('characterId.is.null,url.is.null')
     .limit(1000);
   if (error) {
-    console.error('Failed to find missing images:', error);
+    console.error('PATCH[DB] Failed to find missing images:', error);
     return;
   }
-  if (!images || images.length === 0) return;
+  if (!images || images.length === 0) {
+    if(debugLog) console.log('PATCH[DB] No images found missing characterId or url');
+    return;
+  }
   for (const img of images) {
-    // Attempt to infer character from filename or url
     let characterId = img.characterId || inferCharacterFromFilename(img.filename || img.url);
     let url = img.url;
     if (!url && img.filename) {
-      // Try to infer path
       url = `/uploads/characters/${characterId}/${img.filename}`;
     }
-    if (!characterId || !url) continue;
+    if (!characterId || !url) {
+      if(debugLog) console.warn('PATCH[DB] Could not infer values for:', img.filename);
+      continue;
+    }
     const { error } = await supabase
       .from('mediaUploads')
       .update({ characterId, url })
       .eq('id', img.id);
     if (error) {
-      console.warn('Patch error', img, error);
+      if(debugLog) console.warn('[PATCH FAIL]', img, error);
     } else {
-      console.log(`✓ Patched image: ${img.id} [${characterId}] ${url}`);
+      if(debugLog) console.log(`[PATCH] ${img.id}: set characterId=${characterId}, url=${url}`);
     }
   }
 }
 
 function inferCharacterFromFilename(filename) {
-  const lower = filename.toLowerCase();
+  const lower = (filename||'').toLowerCase();
   if (lower.includes('aria')) return 'aria';
   if (lower.includes('frost')) return 'frost';
   if (lower.includes('shadow')) return 'shadow';
@@ -116,22 +119,24 @@ function inferCharacterFromFilename(filename) {
 async function syncImageFile(filename, characterId, relativePath) {
   try {
     const url = `/uploads/characters/${relativePath}`;
-    const { data: existing } = await supabase
+    const { data: existing, error } = await supabase
       .from('mediaUploads')
-      .select('id')
+      .select('id, characterId, url')
       .eq('url', url)
       .single();
+    if (error && error.code !== 'PGRST116') {
+      console.error(`[DB] Lookup fail for ${url}:`, error);
+    }
     if (existing) {
-      // Auto-patch if missing data
       if (!existing.characterId || !existing.url) {
         await patchMissingFields();
       } else {
-        console.log(`✓ Already in DB: ${url}`);
+        if(process.env.DEBUG_VERBOSE==='true') console.log(`✓ Already in DB: ${url}`);
       }
       return;
     }
     const metadata = parseFileMetadata(filename, characterId, relativePath);
-    const { error } = await supabase
+    const { error: insError } = await supabase
       .from('mediaUploads')
       .insert({
         characterId: metadata.characterId,
@@ -143,20 +148,20 @@ async function syncImageFile(filename, characterId, relativePath) {
         poses: metadata.poses,
         uploadedAt: new Date().toISOString(),
       });
-    if (error) {
-      console.error(`✗ Failed to insert ${url}:`, error);
+    if (insError) {
+      console.error(`[DB] Insert fail for ${url}:`, insError);
     } else {
-      console.log(`✓ Added to DB: ${url}`);
+      if(process.env.DEBUG_VERBOSE==='true' || true) console.log(`[INS] Added to DB: ${url}`);
     }
   } catch (err) {
-    console.error(`Error syncing ${filename}:`, err);
+    console.error(`[SYNC ERROR] ${filename}:`, err);
   }
 }
 
 async function syncUploadsToDatabase() {
-  console.log('🔄 Starting upload sync...');
+  console.log('🔄 Starting upload sync (with debug logging) ...');
   console.log(`📁 Scanning: ${UPLOADS_DIR}`);
-  await patchMissingFields();
+  await patchMissingFields(true);
   try {
     await fs.access(UPLOADS_DIR);
     await syncDirectory(UPLOADS_DIR);
