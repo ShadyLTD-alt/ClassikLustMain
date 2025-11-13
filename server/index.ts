@@ -9,6 +9,8 @@ import logger from "./logger";
 import adminRouter from "./routes/admin";
 import { requireAuth, requireAdmin } from "./middleware/auth";
 
+
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -111,7 +113,12 @@ app.use((req, res, next) => {
   logger.info('📝 Registering routes...');
   const server = await registerRoutes(app);
 
-  // ✅ REGISTER ADMIN ROUTES - Full CRUD for all entities
+  // ✅ REGISTER CHARACTER SELECTION & GALLERY ROUTES
+ // logger.info('👤 Registering player routes (character selection & gallery)...');
+ // app.use('/api/player', playerRoutes);
+ // logger.info('✅ Player routes registered at /api/player/*');
+
+  // ✅ REGISTER ADMIN ROUTES - Full CRUD for all entities + media sync
   logger.info('🔧 Registering admin routes...');
   app.use('/api/admin', requireAuth, requireAdmin, adminRouter);
   logger.info('✅ Admin routes registered at /api/admin/*');
@@ -164,6 +171,7 @@ app.use((req, res, next) => {
     logger.info(`✅ Server is ready and accepting connections on http://0.0.0.0:${port}`);
     logger.info(`📦 Game Config: Using unifiedDataLoader (progressive-data only)`);
     logger.info(`🔧 Admin Panel API: http://0.0.0.0:${port}/api/admin/*`);
+    logger.info(`👤 Player API: http://0.0.0.0:${port}/api/player/*`);
 
     // Start Luna monitoring if initialized
     if (luna) {
