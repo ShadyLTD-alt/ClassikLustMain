@@ -123,6 +123,7 @@ class PlayerStateManager {
       energyRegenRate: 1,
       lastTapValue: 1, 
       selectedCharacterId: 'aria',
+      activeCharacter: null, // ✅ Added for character selection
       displayImage: null, 
       upgrades: {}, 
       unlockedCharacters: ['aria'],
@@ -236,6 +237,11 @@ class PlayerStateManager {
         data.energy = data.energyMax;
       }
       
+      // ✅ Ensure activeCharacter exists
+      if (!data.activeCharacter && data.selectedCharacterId) {
+        data.activeCharacter = data.selectedCharacterId;
+      }
+      
       console.log(`📊 [PLAYER LOAD] Recalculated stats - energyMax: ${data.energyMax}, energyRegen: ${data.energyRegenRate}, passiveIncome: ${data.passiveIncomeRate}`);
     } catch (e: any) {
       this.errorReports.push(`Luna: rebuilt ${filePath} for new or broken profile (${e.message})`);
@@ -244,6 +250,7 @@ class PlayerStateManager {
       data.username = player.username;
       data.telegramId = player.telegramId || '';
       data.isAdmin = player.isAdmin || false;
+      data.activeCharacter = null;
       await fs.writeFile(filePath, JSON.stringify(data, null, 2));
       console.warn(`🌙 Luna: created new save file for ${actualPlayerKey}: ${e.message}`);
     }
@@ -370,7 +377,11 @@ export async function updatePlayerState(player: any, updates: any) {
 }
 
 export async function selectCharacterForPlayer(player: any, characterId: string) { 
-  return await updatePlayerState(player, { selectedCharacterId: characterId, displayImage: null }); 
+  return await updatePlayerState(player, { 
+    selectedCharacterId: characterId, 
+    activeCharacter: characterId, // ✅ Set activeCharacter when selecting
+    displayImage: null 
+  }); 
 }
 
 export async function setDisplayImageForPlayer(player: any, imageUrl: string) { 
