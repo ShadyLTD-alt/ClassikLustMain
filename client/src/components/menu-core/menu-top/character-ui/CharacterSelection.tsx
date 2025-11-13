@@ -13,19 +13,23 @@ export default function CharacterSelection({ isOpen, onClose, openMenu }: Charac
   const { state, characters } = useGame();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedCharacterId, setSelectedCharacterId] = useState<string | null>(null);
 
-  const handleSelectCharacter = async (characterId: string) => {
+  const handleCardClick = (characterId: string) => {
+    setSelectedCharacterId(characterId);
+  };
+
+  const handleSelectCharacter = async () => {
+    if (!selectedCharacterId) return;
     try {
       setLoading(true);
       setError(null);
-
       const response = await apiRequest('/api/player/active-character', {
         method: 'PATCH',
-        body: JSON.stringify({ characterId }),
+        body: JSON.stringify({ characterId: selectedCharacterId }),
       });
-
       if (response.ok) {
-        console.log('✅ Active character set:', characterId);
+        setSelectedCharacterId(null);
       } else {
         const data = await response.json();
         setError(data.message || 'Failed to set active character');
@@ -58,7 +62,6 @@ export default function CharacterSelection({ isOpen, onClose, openMenu }: Charac
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
       <div className="relative w-full max-w-4xl max-h-[90vh] bg-gradient-to-br from-gray-900 via-purple-900/20 to-gray-900 rounded-2xl shadow-2xl border border-purple-500/30 overflow-hidden">
-        
         {/* Header */}
         <div className="relative p-6 border-b border-purple-500/30 bg-gradient-to-r from-purple-900/40 to-pink-900/40">
           <div className="flex items-center justify-between">
@@ -74,7 +77,6 @@ export default function CharacterSelection({ isOpen, onClose, openMenu }: Charac
               </p>
             </div>
             <div className="flex items-center gap-2">
-              {/* Open Gallery Button */}
               {openMenu && (
                 <button
                   onClick={handleOpenGallery}
@@ -97,13 +99,11 @@ export default function CharacterSelection({ isOpen, onClose, openMenu }: Charac
 
         {/* Content */}
         <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
-          
           {error && (
             <div className="mb-4 p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-200 text-sm">
               ⚠️ {error}
             </div>
           )}
-
           {/* Unlocked Characters */}
           {unlockedCharacters.length > 0 && (
             <div className="mb-8">
@@ -111,33 +111,32 @@ export default function CharacterSelection({ isOpen, onClose, openMenu }: Charac
                 <span>✨ Available Characters</span>
                 <span className="text-xs text-gray-400">({unlockedCharacters.length})</span>
               </h3>
-              
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 {unlockedCharacters.map((character) => {
                   const isActive = state.activeCharacter === character.id;
-                  
+                  const isSelected = selectedCharacterId === character.id;
                   return (
                     <button
                       key={character.id}
-                      onClick={() => handleSelectCharacter(character.id)}
-                      disabled={loading || isActive}
+                      onClick={() => handleCardClick(character.id)}
+                      disabled={loading}
                       className={`
                         relative p-4 rounded-xl border-2 transition-all duration-200
-                        ${isActive
-                          ? 'border-green-500 bg-green-500/20 shadow-lg shadow-green-500/50'
-                          : 'border-purple-500/30 bg-gray-800/50 hover:border-purple-500 hover:bg-gray-800 hover:scale-105'
-                        }
+                        ${isActive ? 'border-green-500 bg-green-500/20 shadow-lg shadow-green-500/50'
+                        : isSelected ? 'border-purple-400 bg-purple-800/30 ring-2 ring-purple-300 scale-105'
+                        :'border-purple-500/30 bg-gray-800/50 hover:border-purple-500 hover:bg-gray-800 hover:scale-105'}
                         ${loading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
                       `}
                     >
-                      {/* Active Badge */}
                       {isActive && (
                         <div className="absolute top-2 right-2 w-6 h-6 rounded-full bg-green-500 flex items-center justify-center">
                           <Check className="w-4 h-4 text-white" />
                         </div>
                       )}
-
-                      {/* Character Avatar */}
+                      {/* Highlight overlay for selected */}
+                      {isSelected && !isActive && (
+                        <div className="absolute inset-0 rounded-xl bg-purple-700/10 ring-2 ring-purple-400 pointer-events-none" style={{zIndex:10}}></div>
+                      )}
                       <div className="aspect-square rounded-lg overflow-hidden mb-3 bg-gray-900">
                         <img
                           src={character.defaultImage || '/placeholder-character.png'}
@@ -148,8 +147,6 @@ export default function CharacterSelection({ isOpen, onClose, openMenu }: Charac
                           }}
                         />
                       </div>
-
-                      {/* Character Info */}
                       <div className="text-center">
                         <p className="font-semibold text-white text-sm truncate">
                           {character.name}
@@ -164,9 +161,17 @@ export default function CharacterSelection({ isOpen, onClose, openMenu }: Charac
                   );
                 })}
               </div>
+              <div className="flex justify-center mt-8">
+                <button
+                  className="px-8 py-3 rounded-lg bg-purple-600 text-white font-bold text-lg shadow hover:bg-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed mt-2"
+                  disabled={!selectedCharacterId || loading || selectedCharacterId === state.activeCharacter}
+                  onClick={handleSelectCharacter}
+                >
+                  Select {selectedCharacterId ? characters.find(x=>x.id===selectedCharacterId)?.name : ''}
+                </button>
+              </div>
             </div>
           )}
-
           {/* Locked Characters */}
           {lockedCharacters.length > 0 && (
             <div>
@@ -174,14 +179,12 @@ export default function CharacterSelection({ isOpen, onClose, openMenu }: Charac
                 <span>🔒 Locked Characters</span>
                 <span className="text-xs text-gray-400">({lockedCharacters.length})</span>
               </h3>
-              
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 {lockedCharacters.map((character) => (
                   <div
                     key={character.id}
                     className="relative p-4 rounded-xl border-2 border-gray-700 bg-gray-900/50 opacity-60"
                   >
-                    {/* Lock Icon */}
                     <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-xl">
                       <div className="text-center">
                         <Lock className="w-8 h-8 text-gray-400 mx-auto mb-2" />
@@ -190,8 +193,6 @@ export default function CharacterSelection({ isOpen, onClose, openMenu }: Charac
                         </p>
                       </div>
                     </div>
-
-                    {/* Character Avatar (blurred) */}
                     <div className="aspect-square rounded-lg overflow-hidden mb-3 bg-gray-900 blur-sm">
                       <img
                         src={character.defaultImage || '/placeholder-character.png'}
@@ -199,8 +200,6 @@ export default function CharacterSelection({ isOpen, onClose, openMenu }: Charac
                         className="w-full h-full object-cover"
                       />
                     </div>
-
-                    {/* Character Info */}
                     <div className="text-center">
                       <p className="font-semibold text-gray-500 text-sm truncate">
                         {character.name}
@@ -211,8 +210,6 @@ export default function CharacterSelection({ isOpen, onClose, openMenu }: Charac
               </div>
             </div>
           )}
-
-          {/* Empty State */}
           {characters.length === 0 && (
             <div className="text-center py-12">
               <div className="w-16 h-16 rounded-full bg-gray-800 flex items-center justify-center mx-auto mb-4">
