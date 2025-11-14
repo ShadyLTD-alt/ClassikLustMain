@@ -1,31 +1,28 @@
 // 🌙 Luna Bug - Intelligent Debug & Fix Assistant
-// Purpose: Automatically detect and fix common game issues for Steven
+// Purpose: Automatically detect and fix common game issues
 
-  // 🌙 Luna Bug - Intelligent Debug & Fix Assistant
-  // Purpose: Automatically detect and fix common game issues for Steven
+import ChatInterface from './modules/chatInterface.js';
+import SchemaAuditor from './plugins/schemaAuditor.js';
 
-  // CHANGE THESE TWO LINES - use import instead of require:
-  import ChatInterface from './modules/chatInterface.js';
-  import SchemaAuditor from './plugins/schemaAuditor.js';
+class LunaBug {
+  constructor(config = {}) {
+    this.name = 'Luna';
+    this.version = '2.0.0';
+    this.isActive = true;
+    this.config = config;
 
-  class LunaBug {
-    constructor() {
-      this.name = 'Luna';
-      this.version = '2.0.0';
-      this.isActive = true;
+    // Plugin system
+    this.plugins = new Map();
 
-      // Plugin system
-      this.plugins = new Map();
+    // Initialize core modules
+    this.chat = new ChatInterface(this);
 
-      // Initialize core modules
-      this.chat = new ChatInterface(this);
+    // Initialize plugins
+    this.loadPlugin('SchemaAuditor', SchemaAuditor);
 
-      // Initialize plugins
-      this.loadPlugin('SchemaAuditor', SchemaAuditor);
-
-      console.log('🌙 Luna Bug v2.0.0 initialized successfully');
-      console.log('🎮 Active plugins:', Array.from(this.plugins.keys()));
-    }
+    console.log('🌙 Luna Bug v2.0.0 initialized successfully');
+    console.log('🎮 Active plugins:', Array.from(this.plugins.keys()));
+  }
 
   loadPlugin(name, PluginClass) {
     try {
@@ -44,19 +41,19 @@
   }
 
   // 🔍 START ALL MONITORING
-  async startMonitoring() {
+  async start() {
     console.log('👁️ Luna: Starting comprehensive monitoring...');
     
     // Start schema monitoring
     const schemaAuditor = this.getPlugin('SchemaAuditor');
-    if (schemaAuditor) {
+    if (schemaAuditor && typeof schemaAuditor.startMonitoring === 'function') {
       await schemaAuditor.startMonitoring();
     }
     
     console.log('✅ Luna: All monitoring systems active');
   }
 
-  // 🎮 STEVEN'S COMMAND INTERFACE
+  // 🎮 COMMAND INTERFACE
   async handleCommand(command, args = []) {
     console.log(`🎮 Luna command: ${command}`, args);
     
@@ -68,9 +65,9 @@
       case 'audit':
         return await this.runFullAudit();
       case 'chat.test':
-        return await this.chat.sendTestAlert();
+        return await this.chat?.sendTestAlert();
       case 'chat.clear':
-        return this.chat.clearAlerts();
+        return this.chat?.clearAlerts();
       default:
         return { error: 'Unknown command' };
     }
@@ -109,12 +106,17 @@
     
     // Run schema audit
     const schemaAuditor = this.getPlugin('SchemaAuditor');
-    if (schemaAuditor) {
+    if (schemaAuditor && typeof schemaAuditor.auditSchema === 'function') {
       results.schema = await schemaAuditor.auditSchema();
     }
     
     console.log('✅ Luna: Full audit completed');
     return results;
+  }
+
+  async attemptAutoFix(issue) {
+    console.log('🔧 Luna: Auto-fixing issue:', issue);
+    return { fixed: false, message: 'Auto-fix not yet implemented for this issue' };
   }
 
   // 🌙 LUNA'S PERSONALITY RESPONSES
@@ -133,19 +135,5 @@
   }
 }
 
-// Initialize Luna instance
-const lunaBug = new LunaBug();
-
-// Create a simple router object for compatibility
-const router = {};
-
-// Function to set luna instance
-const setLunaInstance = (instance) => {
-  if (instance && typeof instance === 'object') {
-    Object.assign(lunaBug, instance);
-  }
-};
-
-// CLEAN ESM EXPORTS - keep these as is:
-export { router, setLunaInstance };
-export default lunaBug;
+// ✅ ESM DEFAULT EXPORT
+export default LunaBug;
