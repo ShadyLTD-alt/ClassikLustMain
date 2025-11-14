@@ -1,37 +1,47 @@
 // 🌙 Luna Bug - Intelligent Debug & Fix Assistant
+// 🔧 FIXED: Now uses Winston logger for unified logging
 // Purpose: Automatically detect and fix common game issues
 
 import ChatInterface from './modules/chatInterface.js';
 import SchemaAuditor from './plugins/schemaAuditor.js';
 
 class LunaBug {
-  constructor(config = {}) {
+  constructor(config = {}, logger = null) {
     this.name = 'Luna';
     this.version = '2.0.0';
     this.isActive = true;
     this.config = config;
+    
+    // ✅ NEW: Winston logger integration
+    // Falls back to console if logger not provided
+    this.logger = logger || {
+      info: console.log.bind(console),
+      error: console.error.bind(console),
+      warn: console.warn.bind(console),
+      debug: console.log.bind(console)
+    };
 
     // Plugin system
     this.plugins = new Map();
 
-    // Initialize core modules
-    this.chat = new ChatInterface(this);
+    // Initialize core modules (pass logger)
+    this.chat = new ChatInterface(this, this.logger);
 
-    // Initialize plugins
+    // Initialize plugins (pass logger)
     this.loadPlugin('SchemaAuditor', SchemaAuditor);
 
-    console.log('🌙 Luna Bug v2.0.0 initialized successfully');
-    console.log('🎮 Active plugins:', Array.from(this.plugins.keys()));
+    this.logger.info('🌙 Luna Bug v2.0.0 initialized with Winston logger');
+    this.logger.info('🎮 Active plugins: ' + Array.from(this.plugins.keys()).join(', '));
   }
 
   loadPlugin(name, PluginClass) {
     try {
-      const plugin = new PluginClass(this);
+      const plugin = new PluginClass(this, this.logger);
       this.plugins.set(name, plugin);
-      console.log(`✅ Plugin loaded: ${name}`);
+      this.logger.info(`✅ Plugin loaded: ${name}`);
       return plugin;
     } catch (error) {
-      console.error(`❌ Failed to load plugin ${name}:`, error);
+      this.logger.error(`❌ Failed to load plugin ${name}:`, error);
       return null;
     }
   }
@@ -42,7 +52,7 @@ class LunaBug {
 
   // 🔍 START ALL MONITORING
   async start() {
-    console.log('👁️ Luna: Starting comprehensive monitoring...');
+    this.logger.info('👁️  Luna: Starting comprehensive monitoring...');
     
     // Start schema monitoring
     const schemaAuditor = this.getPlugin('SchemaAuditor');
@@ -50,12 +60,12 @@ class LunaBug {
       await schemaAuditor.startMonitoring();
     }
     
-    console.log('✅ Luna: All monitoring systems active');
+    this.logger.info('✅ Luna: All monitoring systems active');
   }
 
   // 🎮 COMMAND INTERFACE
   async handleCommand(command, args = []) {
-    console.log(`🎮 Luna command: ${command}`, args);
+    this.logger.debug(`🎮 Luna command: ${command}`, args);
     
     switch (command) {
       case 'status':
@@ -96,7 +106,7 @@ class LunaBug {
   }
 
   async runFullAudit() {
-    console.log('🧵 Luna: Running full system audit...');
+    this.logger.info('🧵 Luna: Running full system audit...');
     
     const results = {
       schema: [],
@@ -110,12 +120,12 @@ class LunaBug {
       results.schema = await schemaAuditor.auditSchema();
     }
     
-    console.log('✅ Luna: Full audit completed');
+    this.logger.info('✅ Luna: Full audit completed');
     return results;
   }
 
   async attemptAutoFix(issue) {
-    console.log('🔧 Luna: Auto-fixing issue:', issue);
+    this.logger.info('🔧 Luna: Auto-fixing issue:', issue);
     return { fixed: false, message: 'Auto-fix not yet implemented for this issue' };
   }
 
@@ -130,7 +140,7 @@ class LunaBug {
     ];
     
     const randomResponse = responses[Math.floor(Math.random() * responses.length)];
-    console.log(randomResponse, message);
+    this.logger.info(randomResponse, message);
     return randomResponse;
   }
 }
