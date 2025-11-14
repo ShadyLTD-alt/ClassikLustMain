@@ -13,6 +13,50 @@ interface ChatMessage {
   timestamp: string;
 }
 
+interface AIConfig {
+  model: string;
+  temperature: number;
+  maxTokens: number;
+  systemPrompt: string;
+}
+
+const DEFAULT_AI_CONFIG: AIConfig = {
+  model: 'open-mistral-7b',
+  temperature: 0.3,
+  maxTokens: 2500,
+  systemPrompt: `You are Luna, an expert debugging AI assistant for ClassikLust game development.
+
+Your role:
+- Provide detailed, educational explanations with code examples
+- Break down complex errors into simple terms
+- Explain WHY something went wrong, not just HOW to fix it
+- Teach best practices and patterns
+- Reference specific lines, functions, and technical concepts
+- Use emojis strategically for readability
+- Format code blocks properly with syntax highlighting hints
+
+When debugging:
+1. Analyze the root cause
+2. Explain the technical reason
+3. Provide a clear solution with code
+4. Suggest best practices to prevent similar issues
+5. Offer additional learning resources if relevant
+
+Be thorough, technical, and educational. Users want to LEARN, not just get quick fixes.`
+};
+
+const CLI_COMMANDS = [
+  { cmd: 'luna.cli.status()', desc: 'Show Luna system status', icon: '📊' },
+  { cmd: 'luna.cli.health()', desc: 'Quick health check', icon: '💚' },
+  { cmd: 'await luna.cli.diagnose()', desc: 'Run full system diagnostic', icon: '🔍' },
+  { cmd: 'luna.cli.logs(20)', desc: 'Show last 20 log entries', icon: '📝' },
+  { cmd: 'luna.cli.errors(10)', desc: 'Show last 10 errors', icon: '🚨' },
+  { cmd: 'luna.cli.plugins()', desc: 'List all loaded plugins', icon: '🔌' },
+  { cmd: 'await luna.cli.audit()', desc: 'Force schema audit', icon: '🧪' },
+  { cmd: 'luna.cli.help()', desc: 'Show all available commands', icon: '❓' 
+  },
+];
+
 export default function DevToolsCore() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [filter, setFilter] = useState<'all' | 'info' | 'warn' | 'error'>('all');
@@ -155,14 +199,15 @@ Provide a clear analysis and solution.`;
           'Authorization': `Bearer ${apiKey}`
         },
         body: JSON.stringify({
-          model: 'open-mistral-7b',
+          model: aiConfig.model,
           messages: [
-            { role: 'system', content: 'You are Luna, an expert debugging assistant for ClassikLust game.' },
+            { role: 'system', content: aiConfig.systemPrompt },
             { role: 'user', content: prompt }
           ],
-          temperature: 0.07,
-          max_tokens: 1500
+          temperature: aiConfig.temperature,
+          max_tokens: aiConfig.maxTokens
         })
+
       });
 
       if (!response.ok) throw new Error('API request failed');
@@ -218,14 +263,15 @@ Provide a clear analysis and solution.`;
           'Authorization': `Bearer ${apiKey}`
         },
         body: JSON.stringify({
-          model: 'open-mistral-7b',
+          model: aiConfig.model,
           messages: [
-            { role: 'system', content: 'You are Luna, intelligent debugging assistant for ClassikLust game.' },
+            { role: 'system', content: aiConfig.systemPrompt },
             { role: 'user', content: lunaChatInput }
           ],
-          temperature: 0.7,
-          max_tokens: 2000
+          temperature: aiConfig.temperature,
+          max_tokens: aiConfig.maxTokens
         })
+
       });
 
       if (!response.ok) throw new Error('API request failed');
@@ -254,6 +300,81 @@ Provide a clear analysis and solution.`;
       setLunaLoading(false);
     }
   };
+
+  // AI Configuration State
+const [showSettings, setShowSettings] = useState(false);
+const [aiConfig, setAiConfig] = useState<AIConfig>(() => {
+  const saved = localStorage.getItem('luna_ai_config');
+  return saved ? JSON.parse(saved) : DEFAULT_AI_CONFIG;
+});
+
+// Console Enhancement State
+const [consoleInput, setConsoleInput] = useState('');
+const [consoleHistory, setConsoleHistory] = useState<string[]>([]);
+const [historyIndex, setHistoryIndex] = useState(-1);
+
+// Save AI config whenever it changes
+useEffect(() => {
+  localStorage.setItem('luna_ai_config', JSON.stringify(aiConfig));
+}, [aiConfig]
+         );
+
+  const resetAIConfig = () => {
+  if (confirm('Reset AI configuration to defaults?')) {
+    setAiConfig(DEFAULT_AI_CONFIG);
+    alert('✅ AI Config reset to defaults!');
+  }
+};
+
+const executeConsoleCommand = (command: string) => {
+  try {
+    // Add to history
+    setConsoleHistory(prev => [...prev, command]);
+    setHistoryIndex(-1);
+    
+    // Log the command
+    addLog('info', `> ${command}`);
+    
+    // Execute via eval (admin dev tools only)
+    const result = eval(command);
+    
+    // Log result
+    if (result !== undefined) {
+      const resultStr = typeof result === 'object' ? JSON.stringify(result, null, 2) : String(result);
+      addLog('info', `← ${resultStr}`);
+    }
+  } catch (error: any) {
+    addLog('error', `❌ ${error.message}`);
+  }
+};
+
+const handleConsoleKeyDown = (e: React.KeyboardEvent) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    if (consoleInput.trim()) {
+      executeConsoleCommand(consoleInput);
+      setConsoleInput('');
+    }
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (consoleHistory.length > 0 && historyIndex < consoleHistory.length - 1) {
+      const newIndex = historyIndex + 1;
+      setHistoryIndex(newIndex);
+      setConsoleInput(consoleHistory[consoleHistory.length - 1 - newIndex]);
+    }
+  } else if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    if (historyIndex > 0) {
+      const newIndex = historyIndex - 1;
+      setHistoryIndex(newIndex);
+      setConsoleInput(consoleHistory[consoleHistory.length - 1 - newIndex]);
+    } else if (historyIndex === 0) {
+      setHistoryIndex(-1);
+      setConsoleInput('');
+    }
+  }
+
+};
 
   return (
     <div className="space-y-4">
@@ -325,10 +446,89 @@ Provide a clear analysis and solution.`;
           🌙 Luna AI Debug
         </button>
       </div>
-
+<div className="flex justify-between items-center">
+  <div>
+    <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+      <Terminal className="w-5 h-5 text-green-400" />
+      Developer Tools
+    </h3>
+    <p className="text-sm text-gray-400">Console viewer + Luna AI debugging assistant</p>
+  </div>
+  <button
+    onClick={() => setShowSettings(!showSettings)}
+    className="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg flex items-center gap-2"
+  >
+    <Settings className="w-4 h-4" />
+    AI Settings
+  </button>
+</div>
+      
       {/* CONSOLE VIEW */}
       {activeView === 'console' && (
         <>
+          {/* 📟 Command List UI */}
+    <div className="bg-gray-800 rounded-lg p-4 border border-green-500/30">
+      <h4 className="text-sm font-semibold text-green-300 mb-3 flex items-center gap-2">
+        <Command className="w-4 h-4" />
+        Available Commands
+      </h4>
+      <div className="grid grid-cols-2 gap-2">
+        {CLI_COMMANDS.map((cmd, idx) => (
+          <button
+            key={idx}
+            onClick={() => {
+              setConsoleInput(cmd.cmd);
+              // Auto-execute if it's a simple command
+              if (!cmd.cmd.includes('await')) {
+                executeConsoleCommand(cmd.cmd);
+                setConsoleInput('');
+              }
+            }}
+            className="flex items-center gap-2 px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded text-left text-sm text-gray-300 hover:text-white transition-colors"
+          >
+            <span>{cmd.icon}</span>
+            <div className="flex-1 min-w-0">
+              <code className="text-xs text-green-400 block truncate">{cmd.cmd}</code>
+              <span className="text-xs text-gray-500">{cmd.desc}</span>
+            </div>
+            <Play className="w-3 h-3 text-gray-500" />
+          </button>
+        ))}
+      </div>
+    </div>{/* Interactive Console Input */}
+<div className="bg-gray-800 rounded-lg p-3 border border-green-500/30">
+  <div className="flex items-center gap-2 mb-2">
+    <Terminal className="w-4 h-4 text-green-400" />
+    <span className="text-sm text-gray-300 font-semibold">Interactive Console</span>
+  </div>
+  <div className="flex gap-2">
+    <span className="text-green-400 font-mono">&gt;</span>
+    <input
+      type="text"
+      value={consoleInput}
+      onChange={(e) => setConsoleInput(e.target.value)}
+      onKeyDown={handleConsoleKeyDown}
+      placeholder="Type command or select from list above... (↑/↓ for history)"
+      className="flex-1 px-3 py-2 bg-gray-900 border border-gray-700 rounded text-white font-mono text-sm"
+    />
+    <button
+      onClick={() => {
+        if (consoleInput.trim()) {
+          executeConsoleCommand(consoleInput);
+          setConsoleInput('');
+        }
+      }}
+      className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded flex items-center gap-2"
+    >
+      <Play className="w-4 h-4" />
+      Run
+    </button>
+  </div>
+  <p className="text-xs text-gray-500 mt-2">
+    ⚡ Quick access to Luna CLI commands. Press Enter to execute, ↑/↓ for history.
+  </p>
+</div>
+          
           <div className="flex justify-between items-center bg-gray-800 p-3 rounded-lg">
             <div className="flex gap-2">
               <button
@@ -535,7 +735,78 @@ Provide a clear analysis and solution.`;
           </div>
         </div>
       )}
-
+{/* ⚙️ AI SETTINGS PANEL */}
+{showSettings && (
+  <div className="bg-gray-800 rounded-lg p-4 border border-purple-500/50">
+    <h4 className="text-lg font-semibold text-purple-300 mb-4 flex items-center gap-2">
+      <Settings className="w-5 h-5" />
+      Luna AI Configuration
+    </h4>
+    <div className="grid grid-cols-2 gap-4">
+      <div>
+        <label className="text-sm text-gray-300 block mb-2">Model</label>
+        <select
+          value={aiConfig.model}
+          onChange={(e) => setAiConfig({ ...aiConfig, model: e.target.value })}
+          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
+        >
+          <option value="open-mistral-7b">Mistral 7B (Fast)</option>
+          <option value="mistral-small-latest">Mistral Small (Balanced)</option>
+          <option value="mistral-medium-latest">Mistral Medium (Smart)</option>
+          <option value="mistral-large-latest">Mistral Large (Best)</option>
+        </select>
+      </div>
+      <div>
+        <label className="text-sm text-gray-300 block mb-2">
+          Temperature: {aiConfig.temperature}
+        </label>
+        <input
+          type="range"
+          min="0"
+          max="1"
+          step="0.1"
+          value={aiConfig.temperature}
+          onChange={(e) => setAiConfig({ ...aiConfig, temperature: parseFloat(e.target.value) })}
+          className="w-full"
+        />
+        <p className="text-xs text-gray-500 mt-1">
+          {aiConfig.temperature < 0.3 ? 'Focused & Precise' : aiConfig.temperature < 0.7 ? 'Balanced' : 'Creative & Varied'}
+        </p>
+      </div>
+      <div>
+        <label className="text-sm text-gray-300 block mb-2">Max Tokens</label>
+        <input
+          type="number"
+          value={aiConfig.maxTokens}
+          onChange={(e) => setAiConfig({ ...aiConfig, maxTokens: parseInt(e.target.value) })}
+          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
+          min="500"
+          max="8000"
+          step="100"
+        />
+        <p className="text-xs text-gray-500 mt-1">Response length limit</p>
+      </div>
+      <div className="flex items-end">
+        <button
+          onClick={resetAIConfig}
+          className="w-full px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded"
+        >
+          Reset to Defaults
+        </button>
+      </div>
+    </div>
+    <div className="mt-4">
+      <label className="text-sm text-gray-300 block mb-2">System Prompt</label>
+      <textarea
+        value={aiConfig.systemPrompt}
+        onChange={(e) => setAiConfig({ ...aiConfig, systemPrompt: e.target.value })}
+        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white font-mono text-sm"
+        rows={8}
+        placeholder="Define Luna's personality and behavior..."
+      />
+    </div>
+  </div>
+)}
       {/* Quick Actions */}
       <div className="bg-gray-800 rounded-lg p-4">
         <h4 className="text-sm font-semibold text-white mb-3">Quick Actions</h4>
