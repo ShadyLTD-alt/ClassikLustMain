@@ -49,7 +49,7 @@ interface GameContextType {
   selectCharacter: (characterId: string) => Promise<boolean>;
   selectImage: (imageId: string) => void;
   selectAvatar: (imageId: string) => void;
-  setDisplayImage: (displayImage: string) => void; // ✅ RENAMED from displayImage
+  setDisplayImage: (displayImage: string) => void;
   levelUp: () => Promise<boolean>;
   canLevelUp: () => boolean;
   toggleAdmin: () => void;
@@ -132,10 +132,7 @@ const apiRequest = async (url: string, options: RequestInit = {}, timeoutMs: num
 };
 
 export function GameProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<GameState>(() => {
-    console.log('🎮 [GAMECONTEXT] Initializing with DEFAULT state');
-    return createInitialState();
-  });
+  const [state, setState] = useState<GameState>(createInitialState);
   const [upgrades, setUpgrades] = useState<UpgradeConfig[]>([]);
   const [characters, setCharacters] = useState<CharacterConfig[]>([]);
   const [images, setImages] = useState<ImageConfig[]>([]);
@@ -175,59 +172,38 @@ export function GameProvider({ children }: { children: ReactNode }) {
   }, [state.boostActive, state.boostExpiresAt]);
 
   const loadAllData = useCallback(async () => {
-    console.log('🔄 [GAMECONTEXT] Starting data load (attempt ' + (retryCount + 1) + ')...');
+    console.log(`┌── 🔄 GameContext Init (attempt ${retryCount + 1})`);
     setConnectionStatus('connecting');
     setLastError(null);
 
     const sessionToken = localStorage.getItem('sessionToken');
     if (!sessionToken) {
-      console.log('❌ [GAMECONTEXT] No session token');
+      console.error('└── ❌ No session token');
       setConnectionStatus('offline');
-      setLastError('Not authenticated - please login');
+      setLastError('Not authenticated');
       setIsInitialized(true);
       return;
     }
 
     try {
-      console.log('🎯 [GAMECONTEXT] Testing server connection...');
       const healthRes = await apiRequest('/api/health', {}, 2000);
-      if (!healthRes.ok) {
-        throw new Error(`Server unreachable (${healthRes.status})`);
-      }
-      console.log('✅ [GAMECONTEXT] Server is responding');
+      if (!healthRes.ok) throw new Error(`Server unreachable`);
 
-      console.log('🔑 [GAMECONTEXT] Validating session...');
       const authRes = await apiRequest('/api/auth/me', {}, 3000);
-      
       if (!authRes.ok) {
         if (authRes.status === 401) {
           localStorage.removeItem('sessionToken');
-          throw new Error('Session expired - please login again');
+          throw new Error('Session expired');
         }
-        throw new Error(`Auth failed (${authRes.status})`);
+        throw new Error(`Auth failed`);
       }
 
       const authData = await authRes.json();
-      if (!authData.success || !authData.player) {
-        throw new Error('Invalid auth response');
-      }
+      if (!authData.success || !authData.player) throw new Error('Invalid auth');
       
       const player = authData.player;
-      console.log('👤 [GAMECONTEXT] Player data received from backend:', {
-        username: player.username,
-        lustPoints: player.lustPoints,
-        energy: player.energy,
-        energyMax: player.energyMax,
-        passiveIncomeRate: player.passiveIncomeRate,
-        level: player.level,
-        isAdmin: player.isAdmin,
-        upgrades: Object.keys(player.upgrades || {}).length,
-        selectedChar: player.selectedCharacterId,
-        activeChar: player.activeCharacter,
-        displayImage: player.displayImage
-      });
+      console.log(`├── 👤 Player: ${player.username} | Lvl ${player.level} | Admin: ${player.isAdmin}`);
 
-      console.log('📦 [GAMECONTEXT] Loading game configuration...');
       const configResults = await Promise.allSettled([
         apiRequest('/api/upgrades', {}, 3000).then(r => r.ok ? r.json() : { upgrades: [] }),
         apiRequest('/api/characters', {}, 3000).then(r => r.ok ? r.json() : { characters: [] }),
@@ -252,7 +228,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       const imageConfigs: ImageConfig[] = loadedMedia.map((m: any) => ({
         id: m.id,
         characterId: m.characterId,
-        url: m.url, // ✅ Backend already normalizes
+        url: m.url,
         unlockLevel: m.unlockLevel,
         categories: m.categories || [],
         poses: m.poses || [],
@@ -260,12 +236,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       }));
       setImages(imageConfigs);
       
-      console.log('✅ [GAMECONTEXT] Config loaded:', {
-        upgrades: loadedUpgrades.length,
-        characters: loadedCharacters.length,
-        levels: loadedLevels.length,
-        media: imageConfigs.length
-      });
+      console.log(`├── 📚 Config loaded: ${loadedUpgrades.length} upgrades, ${loadedCharacters.length} chars, ${imageConfigs.length} images`);
 
       const newState = {
         username: player.username,
@@ -279,7 +250,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         selectedCharacterId: player.selectedCharacterId || (loadedCharacters[0]?.id || 'aria'),
         activeCharacter: player.activeCharacter || null,
         selectedImageId: player.selectedImageId || null,
-        displayImage: player.displayImage, // ✅ Backend already normalizes
+        displayImage: player.displayImage,
         upgrades: player.upgrades || {},
         unlockedCharacters: Array.isArray(player.unlockedCharacters) ? player.unlockedCharacters : ['aria'],
         unlockedImages: Array.isArray(player.unlockedImages) ? player.unlockedImages : [],
@@ -299,40 +270,27 @@ export function GameProvider({ children }: { children: ReactNode }) {
         selectedAvatarId: null
       };
       
-      console.log('📢 [GAMECONTEXT] Setting player state to loaded data:', {
-        lustPoints: newState.lustPoints,
-        energy: newState.energy,
-        energyMax: newState.energyMax,
-        passiveIncome: newState.passiveIncomeRate,
-        level: newState.level,
-        isAdmin: newState.isAdmin,
-        character: newState.selectedCharacterId,
-        activeCharacter: newState.activeCharacter,
-        displayImage: newState.displayImage,
-        upgradeCount: Object.keys(newState.upgrades).length
-      });
-      
       setState(newState);
 
       setConnectionStatus('connected');
       setLastError(null);
       setRetryCount(0);
-      console.log('✅ [GAMECONTEXT] All data loaded and state updated successfully');
+      console.log('└── ✅ GameContext ready');
       
     } catch (error) {
-      console.error('❌ [GAMECONTEXT] Load failed:', error);
+      console.error('└── ❌ Load failed:', error instanceof Error ? error.message : 'Unknown error');
       
       if (error instanceof Error) {
         if (error.name === 'AbortError' || error.message.includes('timeout')) {
           setConnectionStatus('timeout');
-          setLastError('Connection timeout - check internet connection');
+          setLastError('Connection timeout');
         } else {
           setConnectionStatus('offline');
           setLastError(error.message);
         }
       } else {
         setConnectionStatus('offline');
-        setLastError('Unknown connection error');
+        setLastError('Unknown error');
       }
     } finally {
       setIsInitialized(true);
@@ -340,7 +298,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
   }, [retryCount]);
 
   const refreshPlayerState = useCallback(async () => {
-    console.log('🔄 [GAMECONTEXT] Refreshing player state...');
     try {
       const response = await apiRequest('/api/player/me', {}, 3000);
       if (response.ok) {
@@ -350,22 +307,19 @@ export function GameProvider({ children }: { children: ReactNode }) {
           ...prev,
           selectedCharacterId: player.selectedCharacterId || prev.selectedCharacterId,
           activeCharacter: player.activeCharacter || prev.activeCharacter,
-          displayImage: player.displayImage || prev.displayImage // ✅ Backend already normalizes
+          displayImage: player.displayImage || prev.displayImage
         }));
-        console.log('✅ [GAMECONTEXT] Player state refreshed');
       }
     } catch (err) {
-      console.error('❌ [GAMECONTEXT] Failed to refresh player state:', err);
+      console.error('❌ Player state refresh failed:', err);
     }
   }, []);
 
   const retryConnection = useCallback(() => {
-    console.log('🔄 [GAMECONTEXT] Manual retry requested');
     setRetryCount(prev => prev + 1);
   }, []);
 
   useEffect(() => {
-    console.log('🚀 [GAMECONTEXT] Initial loadAllData triggered');
     loadAllData();
   }, [loadAllData]);
 
@@ -397,7 +351,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
         syncCounter++;
         if (syncCounter >= 120) {
           syncCounter = 0;
-          
           apiRequest('/api/player/me', {
             method: 'PATCH',
             body: JSON.stringify({
@@ -450,16 +403,14 @@ export function GameProvider({ children }: { children: ReactNode }) {
   }, [calculateTapValue]);
 
   const dispatch = useCallback((action: any) => {
-    console.log('📤 [GAMECONTEXT] Dispatch action:', action.type);
     switch (action.type) {
       case 'SET_POINTS':
         setState(prev => ({ ...prev, points: action.payload, lustPoints: action.payload }));
         break;
       case 'UPDATE_DISPLAY_IMAGE':
-        setState(prev => ({ ...prev, displayImage: action.payload })); // ✅ Backend already normalizes
+        setState(prev => ({ ...prev, displayImage: action.payload }));
         break;
       case 'REFRESH_FROM_SERVER':
-        console.log('🔄 [GAMECONTEXT] Manual refresh requested');
         loadAllData();
         break;
       default:
@@ -483,28 +434,23 @@ export function GameProvider({ children }: { children: ReactNode }) {
     setPendingPurchases(prev => new Set(prev).add(upgradeId));
 
     try {
-      console.log(`🛍️ [GAMECONTEXT] Purchasing ${upgradeId} level ${newLevel}`);
+      console.log(`🛍️ Purchasing ${upgradeId} Lvl ${newLevel}`);
       
       const response = await apiRequest('/api/player/upgrades', {
         method: 'POST',
         body: JSON.stringify({ upgradeId, level: newLevel })
       }, 5000);
 
-      if (!response.ok) {
-        throw new Error(`Purchase failed: ${response.status}`);
-      }
+      if (!response.ok) throw new Error(`Purchase failed`);
 
-      console.log('✅ [GAMECONTEXT] Upgrade purchased, syncing all caches...');
-      
       await loadAllData();
       await invalidateAllGameQueries(queryClient);
       
-      console.log('🔄 [GAMECONTEXT] All caches synced - UI should update instantly');
-      
+      console.log('✅ Upgrade purchased');
       return true;
     } catch (err) {
-      console.error(`❌ [GAMECONTEXT] Purchase failed:`, err);
-      setLastError(`Upgrade purchase failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      console.error('❌ Purchase failed:', err);
+      setLastError('Upgrade purchase failed');
       return false;
     } finally {
       setPendingPurchases(prev => {
@@ -519,16 +465,12 @@ export function GameProvider({ children }: { children: ReactNode }) {
     if (!state.unlockedCharacters.includes(characterId) || connectionStatus !== 'connected') return false;
 
     try {
-      console.log(`🎭 [GAMECONTEXT] Selecting ${characterId}`);
-      
       const response = await apiRequest('/api/player/select-character', {
         method: 'POST',
         body: JSON.stringify({ characterId })
       }, 5000);
 
-      if (!response.ok) {
-        throw new Error(`Selection failed: ${response.status}`);
-      }
+      if (!response.ok) throw new Error('Selection failed');
 
       const result = await response.json();
       const updatedPlayer = result.player;
@@ -538,14 +480,13 @@ export function GameProvider({ children }: { children: ReactNode }) {
         selectedCharacterId: updatedPlayer.selectedCharacterId,
         activeCharacter: updatedPlayer.activeCharacter || updatedPlayer.selectedCharacterId,
         selectedImageId: updatedPlayer.selectedImageId,
-        displayImage: updatedPlayer.displayImage // ✅ Backend already normalizes
+        displayImage: updatedPlayer.displayImage
       }));
 
-      console.log(`✅ [GAMECONTEXT] Successfully selected ${characterId}`);
       return true;
     } catch (error) {
-      console.error('❌ [GAMECONTEXT] Selection failed:', error);
-      setLastError(`Character selection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error('❌ Character selection failed:', error);
+      setLastError('Character selection failed');
       return false;
     }
   }, [state.unlockedCharacters, connectionStatus]);
@@ -555,7 +496,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     setState(prev => ({ 
       ...prev, 
       selectedImageId: imageId,
-      displayImage: selectedImg?.url || prev.displayImage // ✅ Backend already normalizes
+      displayImage: selectedImg?.url || prev.displayImage
     }));
   }, [images]);
 
@@ -563,10 +504,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
     setState(prev => ({ ...prev, selectedAvatarId: imageId }));
   }, []);
 
-  // ✅ NEW: setDisplayImage (renamed from displayImage to avoid collision)
   const setDisplayImage = useCallback((imageUrl: string) => {
-    console.log(`🖼️ [GAMECONTEXT] setDisplayImage called with:`, imageUrl);
-    setState(prev => ({ ...prev, displayImage: imageUrl })); // Backend already normalizes
+    setState(prev => ({ ...prev, displayImage: imageUrl }));
   }, []);
 
   const canLevelUp = useCallback(() => {
@@ -606,11 +545,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const addImage = useCallback((image: ImageConfig) => {
-    setImages(prev => [...prev, image]); // Backend already normalizes
+    setImages(prev => [...prev, image]);
   }, []);
 
   const updateImage = useCallback((image: ImageConfig) => {
-    setImages(prev => prev.map(img => img.id === image.id ? image : img)); // Backend already normalizes
+    setImages(prev => prev.map(img => img.id === image.id ? image : img));
   }, []);
 
   const removeImage = useCallback((imageId: string) => {
@@ -674,7 +613,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       selectCharacter,
       selectImage,
       selectAvatar,
-      setDisplayImage, // ✅ RENAMED from displayImage
+      setDisplayImage,
       levelUp,
       canLevelUp,
       toggleAdmin,
@@ -706,8 +645,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
               'bg-red-500'
             }`} />
             <span className="font-medium">
-              {connectionStatus === 'connected' ? '🟢 Connected' :
-               connectionStatus === 'connecting' ? '🟡 Connecting...' :
+              {connectionStatus === 'connected' ? '🟬 Connected' :
+               connectionStatus === 'connecting' ? '🟬 Connecting...' :
                connectionStatus === 'timeout' ? '🟠 Timeout' :
                '🔴 Offline'}
             </span>
@@ -718,9 +657,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
           )}
           
           <div className="text-xs text-gray-400 mb-3">
-            User: {state.username || 'Unknown'} | 
-            Character: {state.activeCharacter || state.selectedCharacterId || 'None'} | 
-            Upgrades: {Object.keys(state.upgrades).length}
+            {state.username || 'Unknown'} | {state.activeCharacter || state.selectedCharacterId || 'None'} | {Object.keys(state.upgrades).length} upgrades
           </div>
           
           <div className="flex gap-2">
@@ -749,5 +686,3 @@ export function useGame() {
   if (!context) throw new Error('useGame must be used within GameProvider');
   return context;
 }
-
-console.log('✅ [GAMECONTEXT] Module loaded - uses backend stats directly, no embedded data');
