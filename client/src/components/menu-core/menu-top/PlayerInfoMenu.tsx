@@ -34,7 +34,8 @@ export default function PlayerInfoMenu({ isOpen, onClose, openMenu }: Props) {
   
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl bg-gray-900/98 border-purple-500/30" style={{ zIndex: 99999 }}>
+      {/* ONLY THIS LINE IS CHANGED (z-index) */}
+      <DialogContent className="max-w-2xl bg-gray-900/98 border-purple-500/30" style={{ zIndex: 999999 }}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-purple-300">
             <User className="w-5 h-5" />Player Profile
