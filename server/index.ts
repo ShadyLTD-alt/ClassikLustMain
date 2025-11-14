@@ -124,6 +124,14 @@ app.use((req, res, next) => {
       logger.info('✅ [LunaBug] Instance is connected to API routes');
     }
     
+    // ---- ADD THIS ----
+    if (luna) {
+      (global as any).luna = luna;
+      logger.info('🌙 Luna instance exposed globally for CLI access');
+      logger.info('💻 Try: luna.cli.status(), luna.cli.help()');
+    }
+    // ---- END ADDITION ----
+
     logger.info('✅ 🌙 [LunaBug] Instance initialized successfully');
   } catch (err) {
     const error = err as Error;
@@ -224,10 +232,6 @@ app.use((req, res, next) => {
     host: "0.0.0.0",
     reusePort: true,
   }, () => {
- //   logger.info(`✅ Server listening on port ${port}`);
-  //  logger.info(`✅ Server is ready and accepting connections on http://0.0.0.0:${port}`);
-//    logger.info(`🔧 Admin Panel API: http://0.0.0.0:${port}/api/admin/*`);
-  //  logger.info(`👤 Player API: http://0.0.0.0:${port}/api/player/*`);
     if (luna) {
       logger.info(`🌙 Luna Bug API: http://0.0.0.0:${port}/api/luna/*`);
     }
