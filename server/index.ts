@@ -75,8 +75,41 @@ app.use((req, res, next) => {
   next();
 });
 
+// ✅ NEW: Environment variable validation
+function validateEnvironment() {
+  const required = [
+    'DATABASE_URL',
+    'SUPABASE_URL',
+    'SUPABASE_ANON_KEY',
+    'SESSION_SECRET'
+  ];
+  
+  const missing = required.filter(key => !process.env[key]);
+  
+  if (missing.length > 0) {
+    logger.error('❌ Missing required environment variables:', missing);
+    logger.error('📝 Please add these to your .env file:');
+    missing.forEach(key => {
+      logger.error(`   ${key}=<your-value-here>`);
+    });
+    
+    // Don't exit in development - allow dev mode to continue with warnings
+    if (process.env.NODE_ENV === 'production') {
+      logger.error('🚫 Cannot start in production without all environment variables');
+      process.exit(1);
+    } else {
+      logger.warn('⚠️  Running in development mode with missing env vars - some features may not work');
+    }
+  } else {
+    logger.info('✅ All required environment variables present');
+  }
+}
+
 (async () => {
   logger.info('🚀 [LunaBug] Starting system initialization...');
+  
+  // ✅ PHASE 0: Validate environment first
+  validateEnvironment();
 
   // 🌙 Phase 1: Initialize Luna Bug (ESM-safe dynamic imports)
   let luna = null;
@@ -94,18 +127,19 @@ app.use((req, res, next) => {
       if (fs.existsSync(lunaConfigPath)) {
         const configData = fs.readFileSync(lunaConfigPath, 'utf-8');
         lunaConfig = JSON.parse(configData);
-        logger.info('✅ [LunaBug] Config data loaded from', lunaConfigPath);
+        logger.info('✅ [LunaBug] Config data loaded from ' + lunaConfigPath);
       } else {
-        logger.warn('⚠️ [LunaBug] Config data not found, using defaults');
+        logger.warn(`⚠️  [LunaBug] Config file not found at: ${lunaConfigPath}`);
+        logger.warn('⚠️  [LunaBug] Using default config');
       }
     } catch (configErr) {
-      logger.warn('⚠️ Failed to load LunaBug config:', configErr);
+      logger.warn('⚠️  Failed to load LunaBug config:', configErr);
     }
 
     // Step 2: Import LunaBug class
     // @ts-ignore
     const { default: LunaBug } = await import('../LunaBug/luna.js');
-    logger.info('✅ [LunaBug] Class config imported');
+    logger.info('✅ [LunaBug] Class imported');
     
     // Step 3: Import Luna API routes
     // @ts-ignore
@@ -114,21 +148,22 @@ app.use((req, res, next) => {
     setLunaInstance = lunaApi.setLunaInstance;
     logger.info('✅ [LunaBug] API routes imported');
     
-    // Step 4: Create Luna instance with config
-    luna = new LunaBug(lunaConfig);
-    logger.info('✅ [LunaBug] instance created');
+    // Step 4: Create Luna instance with config AND LOGGER
+    // ✅ CRITICAL FIX: Now passing Winston logger to LunaBug
+    luna = new LunaBug(lunaConfig, logger);
+    logger.info('✅ [LunaBug] Instance created with Winston logger integration');
     
     // Step 5: Connect routes to Luna instance
     if (setLunaInstance && luna) {
       setLunaInstance(luna);
-      logger.info('✅ [LunaBug] Instance is connected to API routes');
+      logger.info('✅ [LunaBug] Instance connected to API routes');
     }
     
-    logger.info('✅ 🌙 [LunaBug] Instance initialized successfully');
+    logger.info('✅ 🌙 [LunaBug] Initialization complete - all logs will appear in Winston files');
   } catch (err) {
     const error = err as Error;
     logger.error('❌ [PHASE 1] [LunaBug] initialization failed:', error?.message || err);
-    logger.warn('⚠️ Server will continue without Luna Bug');
+    logger.warn('⚠️  Server will continue without Luna Bug');
   }
 
   // ✅ Phase 2: UNIFIED DATA LOADER - Sync ALL game data from progressive-data directories ONLY
@@ -138,7 +173,7 @@ app.use((req, res, next) => {
     logger.info('✅ Game-Data synced successfully from progressive-data - memory cache populated');
   } catch (err) {
     logger.error("❌ CRITICAL: Failed to sync game data on startup:", err);
-    logger.warn("⚠️ Server may not work correctly without game data");
+    logger.warn("⚠️  Server may not work correctly without game data");
   }
 
   // ✅ Phase 3: Register core routes
@@ -169,7 +204,7 @@ app.use((req, res, next) => {
     app.use('/api/admin', requireAuth, requireAdmin, adminRoutesExtra);
     logger.info('✅ Additional admin routes registered (ESM)');
   } catch (err) {
-    logger.warn('⚠️ Additional admin routes not available:', err);
+    logger.warn('⚠️  Additional admin routes not available:', err);
   }
 
   // ✅ Phase 6: Add Luna API routes if available
@@ -178,7 +213,7 @@ app.use((req, res, next) => {
     app.use('/api/luna', lunaRouter);
     logger.info('✅ LunaBug API routes registered at /api/luna/*');
   } else {
-    logger.warn('⚠️ [PHASE 6] Luna API routes not available');
+    logger.warn('⚠️  [PHASE 6] Luna API routes not available');
   }
 
   logger.info('✅ All routes registered successfully');
@@ -224,10 +259,10 @@ app.use((req, res, next) => {
     host: "0.0.0.0",
     reusePort: true,
   }, () => {
- //   logger.info(`✅ Server listening on port ${port}`);
-  //  logger.info(`✅ Server is ready and accepting connections on http://0.0.0.0:${port}`);
-//    logger.info(`🔧 Admin Panel API: http://0.0.0.0:${port}/api/admin/*`);
-  //  logger.info(`👤 Player API: http://0.0.0.0:${port}/api/player/*`);
+    logger.info(`✅ Server listening on port ${port}`);
+    logger.info(`✅ Server ready at http://0.0.0.0:${port}`);
+    logger.info(`🔧 Admin Panel API: http://0.0.0.0:${port}/api/admin/*`);
+    logger.info(`👤 Player API: http://0.0.0.0:${port}/api/player/*`);
     if (luna) {
       logger.info(`🌙 Luna Bug API: http://0.0.0.0:${port}/api/luna/*`);
     }
@@ -244,9 +279,10 @@ app.use((req, res, next) => {
         }
       }, 2000);
     } else {
-      logger.info('⚠️ [PHASE 10] LunaBug monitoring skipped (not initialized)');
+      logger.info('⚠️  [PHASE 10] LunaBug monitoring skipped (not initialized)');
     }
     
     logger.info('🎉 ✅ ALL PHASES COMPLETE - Server fully operational');
+    logger.info('📝 Logs: logs/combined.log, logs/error.log, logs/debug.log');
   });
 })();
