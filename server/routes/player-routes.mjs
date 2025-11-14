@@ -96,30 +96,33 @@ router.get('/images', async (req, res) => {
   }
 });
 
-// ✅ FIXED: POST /api/player/set-display-image
+// ✅ POST /api/player/set-display-image (accepts imageUrl OR path)
 router.post('/set-display-image', async (req, res) => {
   try {
-    const { imageUrl } = req.body;
+    const { imageUrl, path } = req.body;  // ✅ Accept both names
     const player = req.player;
+    
+    // Use whichever is provided
+    const imageToSet = imageUrl || path;
 
-    if (!imageUrl) {
+    if (!imageToSet) {
       return res.status(400).json({ 
         success: false, 
-        error: 'imageUrl is required' 
+        error: 'imageUrl or path is required' 
       });
     }
 
-    console.log(`🖼️ [ROUTE] Setting display image for ${player.username}: ${imageUrl}`);
+    console.log(`🖼️ [SET-DISPLAY] Player: ${player.username}, Image: ${imageToSet}`);
 
-    await setDisplayImageForPlayer(player, imageUrl);
+    const updated = await setDisplayImageForPlayer(player, imageToSet);
 
     res.json({ 
       success: true, 
-      imageUrl,
+      displayImage: updated.displayImage,
       message: 'Display image updated successfully' 
     });
   } catch (error) {
-    console.error('❌ [ROUTE] Error setting display image:', error);
+    console.error('❌ [SET-DISPLAY] Exception:', error);
     res.status(500).json({ 
       success: false, 
       error: error.message || 'Failed to set display image' 
