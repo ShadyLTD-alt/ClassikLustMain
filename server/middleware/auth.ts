@@ -46,6 +46,9 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   }
 }
 
+// ✅ ADD: Export alias for backward compatibility
+export const authenticateToken = requireAuth;
+
 export function requireAdmin(req: Request, res: Response, next: NextFunction) {
   // Check admin token first (for external admin tools)
   const adminToken = req.headers['x-admin-token'] as string;
