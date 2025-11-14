@@ -3,6 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { storage } from '../storage';
 import fileLock from './fileLock';
+import { ensureDate, sanitizeDateFields } from './dateHelper';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -17,13 +18,12 @@ const dataCache = {
   characters: new Map<string, any>()
 };
 
-// ✅ FIXED: All data from progressive-data
 const FOLDER_MAP = {
   levels: 'progressive-data/levelup',
   tasks: 'progressive-data/tasks',
   achievements: 'progressive-data/achievements',
   upgrades: 'progressive-data/upgrades',
-  characters: 'progressive-data/characters'  // ✅ FIXED: Use progressive-data/characters
+  characters: 'progressive-data/characters'
 } as const;
 
 type ContentType = keyof typeof FOLDER_MAP;
@@ -31,7 +31,9 @@ type ContentType = keyof typeof FOLDER_MAP;
 async function loadJSONFile<T>(filePath: string): Promise<T | null> {
   try {
     const content = await fs.readFile(filePath, 'utf-8');
-    return JSON.parse(content);
+    const parsed = JSON.parse(content);
+    // 🔧 FIXED: Sanitize dates on load
+    return sanitizeDateFields(parsed) as T;
   } catch (error) {
     console.error(`Failed to load ${filePath}:`, error);
     return null;
@@ -81,7 +83,8 @@ export async function loadGameDataById<T = any>(
   
   try {
     const content = await fs.readFile(filePath, 'utf-8');
-    return JSON.parse(content);
+    const parsed = JSON.parse(content);
+    return sanitizeDateFields(parsed) as T;
   } catch (error) {
     return null;
   }
@@ -109,17 +112,20 @@ export async function saveGameData<T extends { id: string } | { level: number }>
   const filePath = path.join(dirPath, fileName);
   
   try {
+    // 🔧 FIXED: Sanitize dates before saving
+    const sanitized = sanitizeDateFields(data);
+    
     await fileLock.withLock(filePath, async () => {
       await fs.mkdir(dirPath, { recursive: true });
-      await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8');
+      await fs.writeFile(filePath, JSON.stringify(sanitized, null, 2), 'utf-8');
     });
     
     console.log(`💾 Saved ${contentType}/${fileName}`);
     
-    dataCache[contentType].set(itemId, data);
+    dataCache[contentType].set(itemId, sanitized);
     
     try {
-      await syncToDatabase(contentType, data);
+      await syncToDatabase(contentType, sanitized);
       console.log(`🔄 Synced ${contentType}/${itemId} to database`);
     } catch (dbError: any) {
       console.warn(`⚠️  DB sync warning for ${contentType}/${itemId}:`, dbError.message);
@@ -139,16 +145,25 @@ export async function deleteGameData(
   contentType: ContentType,
   id: string
 ): Promise<{ success: boolean; error?: string }> {
+  // 🔧 CRITICAL FIX: Validate ID before using in file path
+  if (!id || id === 'undefined' || id === 'null') {
+    console.error(`❌ [DELETE] Invalid ID: "${id}"`);
+    return { success: false, error: `Invalid ${contentType} ID: "${id}"` };
+  }
+  
   const folderName = FOLDER_MAP[contentType];
   const fileName = contentType === 'levels' ? `level-${id}.json` : `${id}.json`;
   const filePath = path.join(GAMEDATA_ROOT, folderName, fileName);
   
+  console.log(`🗑️ [DELETE] Attempting to delete: ${filePath}`);
+  
   try {
     try {
       await fs.unlink(filePath);
-      console.log(`🗑️  Deleted ${contentType}/${fileName}`);
+      console.log(`🗑️ Deleted ${contentType}/${fileName}`);
     } catch (error: any) {
       if (error.code !== 'ENOENT') throw error;
+      console.warn(`⚠️  File not found: ${filePath}`);
     }
     
     dataCache[contentType].delete(id);
