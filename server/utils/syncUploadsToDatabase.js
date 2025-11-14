@@ -1,9 +1,13 @@
 // server/utils/syncUploadsToDatabase.js
 // Auto-sync script for mediaUploads table and local JSON metadata by character
 
-const fs = require('fs').promises;
-const path = require('path');
-const { createClient } = require('@supabase/supabase-js');
+import fs from 'fs/promises';
+import path from 'path';
+import { createClient } from '@supabase/supabase-js';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -174,7 +178,7 @@ async function patchMissingFields(debugLog = true) {
   }
 }
 
-async function syncUploadsToDatabase() {
+export async function syncUploadsToDatabase() {
   console.log('🔄 Starting upload sync + local JSON metadata...');
   console.log(`📁 Scanning: ${UPLOADS_DIR}`);
   await patchMissingFields(true);
@@ -194,13 +198,4 @@ async function syncUploadsToDatabase() {
       return { success: false, message: err.message };
     }
   }
-}
-
-module.exports = { syncUploadsToDatabase };
-
-if (require.main === module) {
-  syncUploadsToDatabase().then((result) => {
-    console.log('Sync result:', result);
-    process.exit(result.success ? 0 : 1);
-  });
 }
