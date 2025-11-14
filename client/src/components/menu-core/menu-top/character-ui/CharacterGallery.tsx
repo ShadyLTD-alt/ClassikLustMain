@@ -57,7 +57,7 @@ export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryPr
             id: img.filename.split('.')[0],
             filename: img.filename,
             url: img.url,
-            path: img.path,
+            path: img.path || img.url,
             characterId: img.metadata?.characterId || characterId,
             type: img.metadata?.type || 'default',
             unlockLevel: img.metadata?.unlockLevel || 1,
@@ -96,7 +96,7 @@ export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryPr
       const response = await apiRequest('/api/player/set-display-image', {
         method: 'POST',
         body: JSON.stringify({
-          url: selected.path,  // ← Try both fields (in case naming is inconsistent)
+          path: selected.path || selected.url  // ← Try both fields (in case naming is inconsistent)
         }),
       });
 
@@ -195,7 +195,7 @@ export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryPr
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                     {unlockedImages.map((image) => {
                       const isCurrentDisplay = state.displayImage === image.path;
-                      const isSettingThisImage = settingImage === image.id;
+                      const isSettingThisImage = settingImage === image.path;
                       
                       return (
                         <div
