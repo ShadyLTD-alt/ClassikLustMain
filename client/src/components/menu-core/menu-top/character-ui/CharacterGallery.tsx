@@ -75,7 +75,7 @@ export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryPr
         setImages([]);
       }
     } catch (err) {
-      console.error('Error loading images:', err);
+      console.error('❌ [GALLERY] Error loading images:', err);
       setError('Network error - please try again');
       setImages([]);
     } finally {
@@ -86,34 +86,36 @@ export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryPr
   const handleSetDisplayImage = async (imageId: string) => {
     try {
       const selected = images.find(i => i.id === imageId);
-      if (!selected) return;
+      if (!selected) {
+        console.error('❌ [GALLERY] Image not found:', imageId);
+        return;
+      }
 
       setSettingImage(imageId);
       setError(null);
 
-      console.log(`🖼️ [GALLERY] Setting display image:`, selected);
+      const imageUrlToSet = selected.path || selected.url;
+      console.log(`🖼️ [GALLERY] Setting display image:`, imageUrlToSet);
 
       const response = await apiRequest('/api/player/set-display-image', {
         method: 'POST',
         body: JSON.stringify({
-          path: selected.path || selected.url  // ← Try both fields (in case naming is inconsistent)
+          imageUrl: imageUrlToSet  // ✅ Changed from 'path' to 'imageUrl'
         }),
       });
 
       if (response.ok) {
         const data = await response.json();
-        console.log('✅ [GALLERY] Display image set successfully:', data);
-
-        // Refresh images to show "Current" badge
+        console.log('✅ [GALLERY] Display image set:', data.displayImage);
         await loadImages(selectedCharacter);
       } else {
         const data = await response.json();
         setError(data.error || 'Failed to set display image');
-        console.error('❌ [GALLERY] Error response:', data);
+        console.error('❌ [GALLERY] API error:', data);
       }
     } catch (err) {
       console.error('❌ [GALLERY] Exception:', err);
-      setError('Network error - please try again');
+      setError('Network error');
     } finally {
       setSettingImage(null);
     }
@@ -195,7 +197,7 @@ export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryPr
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                     {unlockedImages.map((image) => {
                       const isCurrentDisplay = state.displayImage === image.path;
-                      const isSettingThisImage = settingImage === image.path;
+                      const isSettingThisImage = settingImage === image.id;
                       
                       return (
                         <div
