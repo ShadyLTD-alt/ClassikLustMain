@@ -1,5 +1,6 @@
 // server/routes/player-routes.mjs
 // Backend API endpoints for character selection and gallery (ESM)
+// 🔧 FIXED: Use SUPABASE_SERVICE_ROLE_KEY (correct env var name)
 
 import express from 'express';
 import { createClient } from '@supabase/supabase-js';
@@ -8,10 +9,21 @@ import { setDisplayImageForPlayer, updatePlayerState, getPlayerState } from '../
 
 const router = express.Router();
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY
-);
+// 🔧 FIXED: Use correct environment variable name
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+  console.error('❌ [PLAYER-ROUTES] Missing Supabase credentials');
+  console.error('   SUPABASE_URL:', supabaseUrl ? '✅ Set' : '❌ Missing');
+  console.error('   SUPABASE_SERVICE_ROLE_KEY:', process.env.SUPABASE_SERVICE_ROLE_KEY ? '✅ Set' : '❌ Missing');
+  console.error('   Falling back to SUPABASE_ANON_KEY:', process.env.SUPABASE_ANON_KEY ? '✅ Set' : '❌ Missing');
+  throw new Error('supabaseKey is required. Set SUPABASE_SERVICE_ROLE_KEY or SUPABASE_ANON_KEY in .env');
+}
+
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+console.log('✅ [PLAYER-ROUTES] Supabase client initialized');
 
 // ✅ Apply requireAuth to all routes
 router.use(requireAuth);
@@ -115,6 +127,8 @@ router.post('/set-display-image', async (req, res) => {
     console.log(`🖼️ [SET-DISPLAY] Player: ${player.username}, Image: ${imageToSet}`);
 
     const updated = await setDisplayImageForPlayer(player, imageToSet);
+
+    console.log(`✅ [SET-DISPLAY] Updated successfully - displayImage now: ${updated.displayImage}`);
 
     res.json({ 
       success: true, 
