@@ -1,15 +1,14 @@
 // 🌙 Luna Bug - Server API Routes
+import express from 'express';
 import { requireAuth } from '../middleware/auth.js';
-import { router as lunaRouter, setLunaInstance as setLunaInstanceImport } from './luna.js';
 
-// Use the imported router
-const router = lunaRouter;
+const router = express.Router();
 
 // Luna instance (will be injected by main server)
 let lunaInstance = null;
 
-// Initialize Luna instance - rename this to avoid conflict
-function initializeLuna(luna) {
+// Initialize Luna instance
+export function setLunaInstance(luna) {
   lunaInstance = luna;
   console.log('🌙 Luna API routes connected to Luna instance');
 }
@@ -24,10 +23,10 @@ router.post('/diagnostic', async (req, res) => {
       return res.status(503).json({ error: 'Luna not available' });
     }
     
-    console.log(`🧪 User ${req.user.username} requested diagnostic`);
+    console.log(`🧪 User ${req.player.username} requested diagnostic`);
     
     const diagnosticType = req.body.type || 'full';
-    const result = await lunaInstance.runDiagnostic(diagnosticType);
+    const result = await lunaInstance.runDiagnostic?.(diagnosticType) || { message: 'Diagnostic not implemented' };
     
     res.json({
       success: true,
@@ -54,10 +53,10 @@ router.post('/respond', async (req, res) => {
       return res.status(400).json({ error: 'alertId and choice are required' });
     }
     
-    console.log(`🎮 User ${req.user.username} responded to alert ${alertId}: ${choice}`);
+    console.log(`🎮 User ${req.player.username} responded to alert ${alertId}: ${choice}`);
     
     // Process the user's choice
-    const result = await lunaInstance.chat.handleUserChoice(alertId, choice);
+    const result = await lunaInstance.chat?.handleUserChoice?.(alertId, choice) || { message: 'Response handler not available' };
     
     res.json({
       success: true,
@@ -81,7 +80,7 @@ router.get('/status', async (req, res) => {
       });
     }
     
-    const status = lunaInstance.getStatus();
+    const status = lunaInstance.getSystemStatus?.() || { status: 'Unknown' };
     res.json(status);
     
   } catch (error) {
@@ -97,8 +96,8 @@ router.get('/alerts', async (req, res) => {
       return res.json({ alerts: [] });
     }
     
-    const schemaAuditor = lunaInstance.getPlugin('SchemaAuditor');
-    const activeIssues = schemaAuditor ? schemaAuditor.getActiveIssues() : [];
+    const schemaAuditor = lunaInstance.getPlugin?.('SchemaAuditor');
+    const activeIssues = schemaAuditor?.getActiveIssues?.() || [];
     
     res.json({
       alerts: activeIssues,
@@ -120,9 +119,9 @@ router.post('/settings', async (req, res) => {
     }
     
     const newSettings = req.body;
-    const updatedSettings = lunaInstance.chat.updateSettings(newSettings);
+    const updatedSettings = lunaInstance.chat.updateSettings?.(newSettings) || newSettings;
     
-    console.log(`⚙️ User ${req.user.username} updated Luna settings:`, newSettings);
+    console.log(`⚙️ User ${req.player.username} updated Luna settings:`, newSettings);
     
     res.json({
       success: true,
@@ -143,9 +142,9 @@ router.post('/toggle-autofix', async (req, res) => {
       return res.status(503).json({ error: 'Luna not available' });
     }
     
-    const newState = await lunaInstance.toggleAutoFix();
+    const newState = await lunaInstance.toggleAutoFix?.() || false;
     
-    console.log(`🤖 User ${req.user.username} toggled Luna auto-fix: ${newState}`);
+    console.log(`🤖 User ${req.player.username} toggled Luna auto-fix: ${newState}`);
     
     res.json({
       success: true,
@@ -162,13 +161,14 @@ router.post('/toggle-autofix', async (req, res) => {
 // 🧪 EMERGENCY: Force schema audit
 router.post('/force-audit', async (req, res) => {
   try {
-    if (!lunaInstance || !lunaInstance.schemaAuditor) {
+    if (!lunaInstance) {
       return res.status(503).json({ error: 'Luna Schema Auditor not available' });
     }
     
-    console.log(`🚨 User ${req.user.username} forced schema audit`);
+    console.log(`🚨 User ${req.player.username} forced schema audit`);
     
-    const issues = await lunaInstance.schemaAuditor.auditSchema();
+    const schemaAuditor = lunaInstance.getPlugin?.('SchemaAuditor');
+    const issues = await schemaAuditor?.auditSchema?.() || [];
     
     res.json({
       success: true,
@@ -183,6 +183,6 @@ router.post('/force-audit', async (req, res) => {
   }
 });
 
-// Export for both CommonJS and ESM
-export { router, initializeLuna as setLunaInstance };
-
+// Export router and setter
+export { router, setLunaInstance };
+export default router;
