@@ -68,7 +68,7 @@ export default function TasksMenu({ isOpen, onClose }: Props) {
       const r = await apiRequest("GET", "/api/achievements");
       return await r.json();
     },
-    enabled: isOpen,
+   enabled: isOpen,
   });
   const claimTaskMutation = useMutation({
     mutationFn: async (taskId: string) => {
