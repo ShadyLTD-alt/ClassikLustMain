@@ -196,17 +196,7 @@ export default function TasksAchievementsMenuV2({ isOpen, onClose }: TasksAchiev
               <Trophy className="w-6 h-6 text-yellow-400" />
             </div>
             Tasks & Achievements
-            <Button 
-              onClick={(e) => {
-                e.stopPropagation();
-                onClose();
-              }}
-              variant="ghost" 
-              size="icon"
-              className="ml-auto hover:bg-red-500/20 hover:text-red-400"
-            >
-              <X className="w-5 h-5" />
-            </Button>
+
           </DialogTitle>
         </DialogHeader>
 

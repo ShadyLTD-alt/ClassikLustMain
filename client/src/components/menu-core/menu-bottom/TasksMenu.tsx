@@ -117,7 +117,7 @@ export default function TasksMenu({ isOpen, onClose }: Props) {
   const totalUnclaimed = unclaimedTasks + unclaimedAchievements;
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-4xl bg-gray-900/95 border-purple-500/30">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-purple-300">
