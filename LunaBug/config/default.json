@@ -1,0 +1,55 @@
+{
+  "name": "Luna",
+  "version": "2.0.0",
+  "enabled": true,
+  "description": "LunaBug - Intelligent Debug & Fix Assistant for ClassikLust",
+  
+  "monitoring": {
+    "schema": true,
+    "performance": true,
+    "errors": true,
+    "intervalMinutes": 5
+  },
+  
+  "chat": {
+    "enabled": true,
+    "autoRespond": false,
+    "maxAlerts": 10,
+    "alertSound": true
+  },
+  
+  "autoFix": {
+    "enabled": false,
+    "safeMode": true,
+    "requireApproval": true
+  },
+  
+  "plugins": {
+    "schemaAuditor": {
+      "enabled": true,
+      "interval": 300000,
+      "checkDataTypes": true,
+      "checkRequiredFields": true,
+      "checkRelationships": true
+    }
+  },
+  
+  "logging": {
+    "level": "info",
+    "winston": true,
+    "consoleOutput": false,
+    "fileOutput": true
+  },
+  
+  "notifications": {
+    "desktop": false,
+    "telegram": false,
+    "email": false
+  },
+  
+  "advanced": {
+    "debugMode": false,
+    "verboseLogging": false,
+    "memoryMonitoring": false
+  }
+}
