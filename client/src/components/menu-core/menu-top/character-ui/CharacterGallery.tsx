@@ -25,7 +25,7 @@ interface GalleryImage {
 }
 
 export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryProps) {
-  const { state, characters } = useGame();
+  const { state, characters, updatePlayer } = useGame();
   const [selectedCharacter, setSelectedCharacter] = useState<string>('');
   const [images, setImages] = useState<GalleryImage[]>([]);
   const [loading, setLoading] = useState(false);
@@ -69,6 +69,7 @@ export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryPr
             }
           }));
         setImages(characterImages);
+        console.log(`✅ [GALLERY] Loaded ${characterImages.length} images for ${characterId}`);
       } else {
         const data = await response.json();
         setError(data.message || 'Failed to load images');
@@ -83,6 +84,7 @@ export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryPr
     }
   };
 
+  // 🔧 FIXED: Proper displayImage API call with path parameter
   const handleSetDisplayImage = async (imageId: string) => {
     try {
       const selected = images.find(i => i.id === imageId);
@@ -94,20 +96,31 @@ export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryPr
       setSettingImage(imageId);
       setError(null);
 
-      const imageUrlToSet = selected.path || selected.url;
-      console.log(`🖼️ [GALLERY] Setting display image:`, imageUrlToSet);
+      // Use path (not url) for backend
+      const imagePath = selected.path || selected.url;
+      console.log(`🖼️ [GALLERY] Setting display image to: ${imagePath}`);
 
       const response = await apiRequest('/api/player/set-display-image', {
         method: 'POST',
         body: JSON.stringify({
-          imageUrl: imageUrlToSet  // ✅ Changed from 'path' to 'imageUrl'
+          path: imagePath  // 🔧 FIXED: Use 'path' parameter (backend accepts both)
         }),
       });
 
       if (response.ok) {
         const data = await response.json();
-        console.log('✅ [GALLERY] Display image set:', data.displayImage);
+        console.log('✅ [GALLERY] Display image updated:', data.displayImage);
+        
+        // ✅ Update local state immediately
+        if (updatePlayer) {
+          await updatePlayer({ displayImage: data.displayImage });
+        }
+        
+        // Reload images to reflect current state
         await loadImages(selectedCharacter);
+        
+        // Show success feedback
+        setError(null);
       } else {
         const data = await response.json();
         setError(data.error || 'Failed to set display image');
@@ -196,7 +209,7 @@ export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryPr
                   </h3>
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                     {unlockedImages.map((image) => {
-                      const isCurrentDisplay = state.displayImage === image.path;
+                      const isCurrentDisplay = state.displayImage === image.path || state.displayImage === image.url;
                       const isSettingThisImage = settingImage === image.id;
                       
                       return (
@@ -210,7 +223,7 @@ export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryPr
                             className="w-full h-full object-cover"
                             onError={(e) => { e.currentTarget.src = '/placeholder-image.png'; }}
                           />
-                          {/* Always-Visible Button Overlay */}
+                          {/* ✅ FIXED: Always-Visible Button Overlay */}
                           <div className="absolute inset-0 flex flex-col justify-end opacity-90 group-hover:opacity-100 transition">
                             <button
                               onClick={() => handleSetDisplayImage(image.id)}
@@ -232,7 +245,7 @@ export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryPr
                               ) : isCurrentDisplay ? (
                                 <span>✅ Current</span>
                               ) : (
-                                <span>🖼️ Set as Display</span>
+                                <span>🖼️ Set Display</span>
                               )}
                             </button>
                           </div>
