@@ -49,7 +49,7 @@ interface GameContextType {
   selectCharacter: (characterId: string) => Promise<boolean>;
   selectImage: (imageId: string) => void;
   selectAvatar: (imageId: string) => void;
-  setDisplayImage: (displayImage: string) => void;
+  setDisplayImage: (imageId: string) => void;
   levelUp: () => Promise<boolean>;
   canLevelUp: () => boolean;
   toggleAdmin: () => void;
@@ -250,7 +250,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         selectedCharacterId: player.selectedCharacterId || (loadedCharacters[0]?.id || 'aria'),
         activeCharacter: player.activeCharacter || null,
         selectedImageId: player.selectedImageId || null,
-        displayImage: player.displayImage,
+        displayImage: player.displayImage || null,
         upgrades: player.upgrades || {},
         unlockedCharacters: Array.isArray(player.unlockedCharacters) ? player.unlockedCharacters : ['aria'],
         unlockedImages: Array.isArray(player.unlockedImages) ? player.unlockedImages : [],
@@ -504,7 +504,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     setState(prev => ({ ...prev, selectedAvatarId: imageId }));
   }, []);
 
-  const setDisplayImage = useCallback((imageUrl: string) => {
+  const setDisplayImage = useCallback((imageUr: string) => {
     setState(prev => ({ ...prev, displayImage: imageUrl }));
   }, []);
 
