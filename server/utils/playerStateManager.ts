@@ -357,7 +357,11 @@ export async function getPlayerState(player: any) {
 
 export async function updatePlayerState(player: any, updates: any) { 
   const current = await playerStateManager.loadPlayer(player); 
-  const updated = { ...current, ...updates, updatedAt: new Date().toISOString() }; 
+  const updated = { ...current, ...updates, updatedAt: new Date().toISOString() };
+  // PATCH SAFETY: preserve current.displayImage if not provided in update/patch
+  if (typeof updates.displayImage === 'undefined') {
+    updated.displayImage = current.displayImage;
+  }
   ['points', 'lustPoints', 'lustGems', 'energy', 'energyMax', 'level', 'passiveIncomeRate', 'energyRegenRate', 'lastTapValue', 'totalTapsAllTime', 'totalTapsToday', 'lpEarnedToday', 'upgradesPurchasedToday', 'consecutiveDays', 'boostMultiplier'].forEach(field => { 
     if (typeof updated[field] === 'number') updated[field] = Math.round(updated[field]); 
   }); 
