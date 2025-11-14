@@ -76,7 +76,7 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  logger.info('🚀 Starting server initialization...');
+  logger.info('🚀 [LunaBug] Starting system initialization...');
 
   // 🌙 Phase 1: Initialize Luna Bug (ESM-safe dynamic imports)
   let luna = null;
@@ -84,7 +84,7 @@ app.use((req, res, next) => {
   let setLunaInstance = null;
   
   try {
-    logger.info('🌙 [PHASE 1] Initializing LunaBug system...');
+    logger.info('🌙 [PHASE 1] [LunaBug] Initializing system...');
     
     // Step 1: Load LunaBug config first
     const lunaConfigPath = path.join(__dirname, '..', 'LunaBug', 'config', 'default.json');
@@ -94,9 +94,9 @@ app.use((req, res, next) => {
       if (fs.existsSync(lunaConfigPath)) {
         const configData = fs.readFileSync(lunaConfigPath, 'utf-8');
         lunaConfig = JSON.parse(configData);
-        logger.info('✅ LunaBug config loaded from', lunaConfigPath);
+        logger.info('✅ [LunaBug] Config data loaded from', lunaConfigPath);
       } else {
-        logger.warn('⚠️ LunaBug config not found, using defaults');
+        logger.warn('⚠️ [LunaBug] Config data not found, using defaults');
       }
     } catch (configErr) {
       logger.warn('⚠️ Failed to load LunaBug config:', configErr);
@@ -105,29 +105,29 @@ app.use((req, res, next) => {
     // Step 2: Import LunaBug class
     // @ts-ignore
     const { default: LunaBug } = await import('../LunaBug/luna.js');
-    logger.info('✅ LunaBug class imported');
+    logger.info('✅ [LunaBug] Class config imported');
     
     // Step 3: Import Luna API routes
     // @ts-ignore
     const lunaApi = await import('./routes/luna.js');
     lunaRouter = lunaApi.router;
     setLunaInstance = lunaApi.setLunaInstance;
-    logger.info('✅ Luna API routes imported');
+    logger.info('✅ [LunaBug] API routes imported');
     
     // Step 4: Create Luna instance with config
     luna = new LunaBug(lunaConfig);
-    logger.info('✅ LunaBug instance created');
+    logger.info('✅ [LunaBug] instance created');
     
     // Step 5: Connect routes to Luna instance
     if (setLunaInstance && luna) {
       setLunaInstance(luna);
-      logger.info('✅ Luna instance connected to API routes');
+      logger.info('✅ [LunaBug] Instance is connected to API routes');
     }
     
-    logger.info('✅ 🌙 Luna Bug initialized successfully');
+    logger.info('✅ 🌙 [LunaBug] Instance initialized successfully');
   } catch (err) {
     const error = err as Error;
-    logger.error('❌ [PHASE 1] Luna initialization failed:', error?.message || err);
+    logger.error('❌ [PHASE 1] [LunaBug] initialization failed:', error?.message || err);
     logger.warn('⚠️ Server will continue without Luna Bug');
   }
 
@@ -135,8 +135,7 @@ app.use((req, res, next) => {
   logger.info('🔄 [PHASE 2] Starting unified game data sync from progressive-data...');
   try {
     await syncAllGameData();
-    logger.info('✅ Game data synced successfully from progressive-data - memory cache populated');
-    logger.info('📍 Data Source: main-gamedata/progressive-data/ (SINGLE SOURCE OF TRUTH)');
+    logger.info('✅ Game-Data synced successfully from progressive-data - memory cache populated');
   } catch (err) {
     logger.error("❌ CRITICAL: Failed to sync game data on startup:", err);
     logger.warn("⚠️ Server may not work correctly without game data");
@@ -175,9 +174,9 @@ app.use((req, res, next) => {
 
   // ✅ Phase 6: Add Luna API routes if available
   if (luna && lunaRouter) {
-    logger.info('🌙 [PHASE 6] Registering Luna API routes...');
+    logger.info('🌙 [PHASE 6] Registering LunaBug API routes...');
     app.use('/api/luna', lunaRouter);
-    logger.info('✅ Luna API routes registered at /api/luna/*');
+    logger.info('✅ LunaBug API routes registered at /api/luna/*');
   } else {
     logger.warn('⚠️ [PHASE 6] Luna API routes not available');
   }
@@ -225,28 +224,27 @@ app.use((req, res, next) => {
     host: "0.0.0.0",
     reusePort: true,
   }, () => {
-    logger.info(`✅ Server listening on port ${port}`);
-    logger.info(`✅ Server is ready and accepting connections on http://0.0.0.0:${port}`);
-    logger.info(`📦 Game Config: Using unifiedDataLoader (progressive-data only)`);
-    logger.info(`🔧 Admin Panel API: http://0.0.0.0:${port}/api/admin/*`);
-    logger.info(`👤 Player API: http://0.0.0.0:${port}/api/player/*`);
+ //   logger.info(`✅ Server listening on port ${port}`);
+  //  logger.info(`✅ Server is ready and accepting connections on http://0.0.0.0:${port}`);
+//    logger.info(`🔧 Admin Panel API: http://0.0.0.0:${port}/api/admin/*`);
+  //  logger.info(`👤 Player API: http://0.0.0.0:${port}/api/player/*`);
     if (luna) {
       logger.info(`🌙 Luna Bug API: http://0.0.0.0:${port}/api/luna/*`);
     }
 
     // ✅ Phase 10: Start Luna monitoring if initialized
     if (luna) {
-      logger.info('🌙 [PHASE 10] Starting Luna Bug monitoring...');
+      logger.info('🌙 [PHASE 10] Starting LunaBug monitoring...');
       setTimeout(async () => {
         try {
           await luna.start();
-          logger.info('✅ 🌙 Luna Bug monitoring started successfully');
+          logger.info('✅ 🌙 LunaBug monitoring started successfully');
         } catch (err) {
           logger.error('❌ Failed to start Luna Bug monitoring:', err);
         }
       }, 2000);
     } else {
-      logger.info('⚠️ [PHASE 10] Luna Bug monitoring skipped (not initialized)');
+      logger.info('⚠️ [PHASE 10] LunaBug monitoring skipped (not initialized)');
     }
     
     logger.info('🎉 ✅ ALL PHASES COMPLETE - Server fully operational');
