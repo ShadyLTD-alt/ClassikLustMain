@@ -12,6 +12,7 @@ function resolvePlayerKey(player: any): string {
   }
   return player.id || player.username || 'unknown';
 }
+console.log('[KeyGen] telegramId:', player.telegramId, 'username:', player.username, 'key:', generatedKey);
 
 function calculateDerivedStats(playerUpgrades: Record<string, number>) {
   const upgrades = getUpgradesFromMemory();

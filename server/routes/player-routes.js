@@ -98,6 +98,11 @@ router.post('/set-display-image', requireAuth, async (req, res) => {
   try {
     const { imageUrl } = req.body;
     const player = req.player;
+    console.log('REQ SESSION:', req.sessionToken, 'USER:', req.user);
+console.log('REQ BODY:', req.body);
+if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
+if (!req.body || !req.body.imageUrl) return res.status(400).json({ error: 'No imageUrl provided' });
+    
 
     console.log(`🖼️ [DISPLAY-IMG] Request to set image for player ${player.username}`);
 
