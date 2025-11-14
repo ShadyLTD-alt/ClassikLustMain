@@ -3,6 +3,8 @@
 
 import express from 'express';
 import { createClient } from '@supabase/supabase-js';
+import { authenticateToken } from '../middleware/auth.js';
+import { setDisplayImageForPlayer } from '../utils/playerStateManager.js';
 
 const router = express.Router();
 
@@ -51,7 +53,7 @@ router.patch('/active-character', async (req, res) => {
     const updated = await updatePlayerState(player, {
       selectedCharacterId: characterId,
       activeCharacter: characterId,
-      displayImage: null
+      displayImage: path,
     });
 
     console.log(`✅ [ACTIVE-CHAR] Successfully set to ${characterId}`);
@@ -96,7 +98,7 @@ router.get('/images', async (req, res) => {
     const enrichedImages = (mediaFiles || []).map(img => ({
       id: img.id,
       filename: img.filename || img.url?.split('/').pop(),
-      path: img.url,
+      path: img.url || img.path,
       url: img.url, // ✅ Added for compatibility
       characterId: img.characterId,
       type: img.type || 'default',
@@ -117,32 +119,36 @@ router.get('/images', async (req, res) => {
 });
 
 // POST /api/player/set-display-image
-router.post('/set-display-image', async (req, res) => {
+router.post('/player/set-display-image', authenticateToken, async (req, res) => {
   try {
-    const { imageUrl } = req.body;
-    const player = req.player;
+    const { path } = req.body;  // ← Changed from imageUrl to url
+    const player = req.user;   // ← Changed from playerId to player object
 
-    console.log(`🖼️ [DISPLAY-IMG] Request to set image for player ${player.username}`);
-
-    if (!imageUrl) {
-      return res.status(400).json({ error: 'imageUrl is required' });
+    if (!path) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'url is required' 
+      });
     }
 
-    const updated = await updatePlayerState(player, { displayImage: imageUrl });
+    console.log(`🖼️ [ROUTE] Setting display image for ${player.username}`);
 
-    console.log(`✅ [DISPLAY-IMG] Successfully set to ${imageUrl}`);
+    await setDisplayImageForPlayer(player, path);
 
     res.json({ 
       success: true, 
-      displayImage: imageUrl,
-      player: updated,
-      message: 'Display image updated successfully!'
+      path,
+      message: 'Display image updated successfully' 
     });
-  } catch (err) {
-    console.error('❌ [DISPLAY-IMG] Error:', err);
-    res.status(500).json({ error: 'Failed to set display image' });
+  } catch (error) {
+    console.error('❌ [ROUTE] Error setting display image:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message || 'Failed to set display image' 
+    });
   }
 });
+
 
 // POST /api/player/update - General player update endpoint
 router.post('/update', async (req, res) => {

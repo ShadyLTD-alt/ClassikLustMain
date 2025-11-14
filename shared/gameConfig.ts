@@ -33,7 +33,6 @@ export interface ImageConfig {
   url: string;
   unlockLevel: number;
   isAvatar?: boolean;
-  isDisplay?: boolean;
   imageType?: 'character' | 'avatar' | 'vip' | 'other';
   categories?: {          // MAKE OPTIONAL to match GameContext
     nsfw?: boolean;

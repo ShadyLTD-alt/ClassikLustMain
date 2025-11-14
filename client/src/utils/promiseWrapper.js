@@ -169,11 +169,9 @@ export const safeSetDisplayImage = async (imageUrl) => {
   return withSafeAsync(
     () => safeApiCall('/api/player/set-display-image', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('sessionToken') || ''}`
-      },
-      body: JSON.stringify({ imageUrl })
+      body: JSON.stringify({ 
+        url: imageUrl  // ← Changed from imageUrl to url
+      })
     }),
     {
       timeout: 3000,

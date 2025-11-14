@@ -11,6 +11,7 @@ interface CharacterGalleryProps {
 interface GalleryImage {
   id: string;
   filename: string;
+  url: string;
   path: string;
   characterId: string;
   type: string;
@@ -55,6 +56,7 @@ export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryPr
           .map((img: any) => ({
             id: img.filename.split('.')[0],
             filename: img.filename,
+            url: img.url,
             path: img.path,
             characterId: img.metadata?.characterId || characterId,
             type: img.metadata?.type || 'default',
@@ -85,23 +87,32 @@ export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryPr
     try {
       const selected = images.find(i => i.id === imageId);
       if (!selected) return;
+
       setSettingImage(imageId);
       setError(null);
+
+      console.log(`🖼️ [GALLERY] Setting display image:`, selected);
+
       const response = await apiRequest('/api/player/set-display-image', {
         method: 'POST',
         body: JSON.stringify({
-          imageUrl: selected.path,
-          characterId: selectedCharacter,
+          url: selected.path,  // ← Try both fields (in case naming is inconsistent)
         }),
       });
+
       if (response.ok) {
+        const data = await response.json();
+        console.log('✅ [GALLERY] Display image set successfully:', data);
+
+        // Refresh images to show "Current" badge
         await loadImages(selectedCharacter);
       } else {
         const data = await response.json();
-        setError(data.message || 'Failed to set display image');
+        setError(data.error || 'Failed to set display image');
+        console.error('❌ [GALLERY] Error response:', data);
       }
     } catch (err) {
-      console.error('Error setting display image:', err);
+      console.error('❌ [GALLERY] Exception:', err);
       setError('Network error - please try again');
     } finally {
       setSettingImage(null);

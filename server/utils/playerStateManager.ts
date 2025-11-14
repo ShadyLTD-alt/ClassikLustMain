@@ -371,24 +371,33 @@ export async function updatePlayerState(player: any, updates: any) {
 }
 
 export async function selectCharacterForPlayer(player: any, characterId: string) { 
-  return await updatePlayerState(player, { selectedCharacterId: characterId, displayImage: null }); 
+  return await updatePlayerState(player, { selectedCharacterId: characterId}); 
 }
 
-export async function setDisplayImageForPlayer(player: any, imageUrl: string): Promise<any> {
-  console.log(`🖼️ [SET DISPLAY] Player object:`, { id: player.id, username: player.username, telegramId: player.telegramId });
-  console.log(`🖼️ [SET DISPLAY] Setting display image to: ${imageUrl}`);
+export async function setDisplayImageForPlayer(player: any, path: string): Promise<any> {
+  console.log(`🖼️ [SET DISPLAY] Player:`, { 
+    id: player.id, 
+    username: player.username, 
+    currentCharacter: player.selectedCharacterId 
+  });
+  console.log(`🖼️ [SET DISPLAY] Setting display image to: ${path}`);
 
-  if (!imageUrl || typeof imageUrl !== 'string') {
+  // Validate input
+  if (!path || typeof path !== 'string') {
     throw new Error('Valid image URL is required');
   }
 
-  const normalizedUrl = imageUrl.startsWith('/') ? imageUrl : `/${imageUrl}`;
+  // Normalize URL (ensure leading slash)
+  const normalizedUrl = path.startsWith('/') ? path : `/${path}`;
   console.log(`🖼️ [SET DISPLAY] Normalized URL: ${normalizedUrl}`);
 
-  const updated = await updatePlayerState(player, { displayImage: normalizedUrl });
-  
-  console.log(`✅ [SET DISPLAY] Successfully updated displayImage via updatePlayerState`);
-  
+  // Update ONLY the displayImage field - don't touch anything else
+  const updated = await updatePlayerState(player, { 
+    displayImage: normalizedUrl 
+  });
+
+  console.log(`✅ [SET DISPLAY] Successfully updated displayImage for ${player.selectedCharacterId}`);
+
   return updated;
 }
 

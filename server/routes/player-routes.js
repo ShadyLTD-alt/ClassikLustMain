@@ -28,7 +28,6 @@ router.patch('/active-character', requireAuth, async (req, res) => {
     const updated = await updatePlayerState(player, {
       selectedCharacterId: characterId,
       activeCharacter: characterId,
-      displayImage: null
     });
 
     console.log(`✅ [ACTIVE-CHAR] Successfully set to ${characterId}`);
@@ -73,7 +72,7 @@ router.get('/images', requireAuth, async (req, res) => {
     const enrichedImages = (mediaFiles || []).map(img => ({
       id: img.id,
       filename: img.filename || img.url?.split('/').pop(),
-      path: img.url,
+      path: img.url || img.path,
       url: img.url, // ✅ Added for compatibility
       characterId: img.characterId,
       type: img.type || 'default',
@@ -96,27 +95,27 @@ router.get('/images', requireAuth, async (req, res) => {
 // POST /api/player/set-display-image
 router.post('/set-display-image', requireAuth, async (req, res) => {
   try {
-    const { imageUrl } = req.body;
+    const { path } = req.body;
     const player = req.player;
     console.log('REQ SESSION:', req.sessionToken, 'USER:', req.user);
 console.log('REQ BODY:', req.body);
 if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
-if (!req.body || !req.body.imageUrl) return res.status(400).json({ error: 'No imageUrl provided' });
+if (!req.body || !req.body.path) return res.status(400).json({ error: 'No imageUrl provided' });
     
 
     console.log(`🖼️ [DISPLAY-IMG] Request to set image for player ${player.username}`);
 
-    if (!imageUrl) {
+    if (!path) {
       return res.status(400).json({ error: 'imageUrl is required' });
     }
 
-    const updated = await updatePlayerState(player, { displayImage: imageUrl });
+    const updated = await updatePlayerState(player, { displayImage: path });
 
-    console.log(`✅ [DISPLAY-IMG] Successfully set to ${imageUrl}`);
+    console.log(`✅ [DISPLAY-IMG] Successfully set to ${path}`);
 
     res.json({ 
       success: true, 
-      displayImage: imageUrl,
+      displayImage: path,
       player: updated,
       message: 'Display image updated successfully!'
     });

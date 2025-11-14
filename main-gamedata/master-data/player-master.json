@@ -52,7 +52,7 @@
       "selectedCharacterId": { "type": "string", "default": "aria" },
       "selectedImageId": { "type": "string", "nullable": true },
       "selectedAvatarId": { "type": "string", "nullable": true },
-      "displayImage": { "type": "string", "nullable": true },
+      "displayImage": { "type": "string", "default": "/uploads/characters/aria/character/default.png" },
       "isAdmin": { "type": "boolean", "default": false },
       "boostActive": { "type": "boolean", "default": false },
       "boostMultiplier": { "type": "decimal", "default": 1.0 },

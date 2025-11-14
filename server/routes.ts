@@ -24,6 +24,7 @@ import {
 import { getPlayerState, updatePlayerState, purchaseUpgradeForPlayer, playerStateManager } from './utils/playerStateManager';
 import { storage } from './storage';
 import crypto from 'crypto';
+import playerRoutes from './routes/player-routes.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -181,6 +182,7 @@ async function findImageFile(filename: string): Promise<string | null> {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  
   const { createServer } = await import('http');
   const server = createServer(app);
 
@@ -313,20 +315,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { characterId } = req.body;
       const player = req.player;
 
-      console.log(`🎭 [ACTIVE-CHAR] Request to set ${characterId} for player ${player.username}`);
-
-      if (!characterId) {
-        return res.status(400).json({ error: 'characterId is required' });
-      }
-
-      // Update player state with new active character
+      // Just update the active character - display images are stored per-character
       const updated = await updatePlayerState(player, {
         selectedCharacterId: characterId,
         activeCharacter: characterId,
-        displayImage: null
+        // DON'T touch characterDisplayImages at all
       });
-
-      console.log(`✅ [ACTIVE-CHAR] Successfully set to ${characterId}`);
 
       res.json({ 
         success: true, 
@@ -802,13 +796,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: e.message });
     }
   });
-  
+
   return server;
 }
 
 console.log('✅ [ROUTES] All routes registered');
-console.log('✅ [ROUTES] Upload path: /uploads/characters/{characterId}/{type}/');
-console.log('✅ [ROUTES] Dual metadata write: progressive-data + character-data');
-console.log('✅ [ROUTES] Character selection: PATCH /api/player/active-character');
 
-//export { registerRoutes };
+
+

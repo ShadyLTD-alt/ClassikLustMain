@@ -49,6 +49,7 @@ interface GameContextType {
   selectCharacter: (characterId: string) => Promise<boolean>;
   selectImage: (imageId: string) => void;
   selectAvatar: (imageId: string) => void;
+  displayImage: (displayImage: string) => void;
   levelUp: () => Promise<boolean>;
   canLevelUp: () => boolean;
   toggleAdmin: () => void;

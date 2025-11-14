@@ -231,13 +231,13 @@ router.post('/ai', async (req, res) => {
             'Authorization': `Bearer ${process.env.MISTRAL_API_KEY}`
           },
           body: JSON.stringify({
-            model: 'mistral-large-latest',
+            model: 'open-mistral-7b',
             messages: [
               { role: 'system', content: system || 'You are LunaBug, a helpful AI assistant for ClassikLust game development. Focus on JSON-first architecture and avoid AsyncLock patterns. Be concise and practical.' },
               { role: 'user', content: message || `Debug this code:\n\n${code}\n\nError: ${error}` }
             ],
             max_tokens: 1200,
-            temperature: 0.3
+            temperature: 0.7
           }),
           timeout: 12000
         });
