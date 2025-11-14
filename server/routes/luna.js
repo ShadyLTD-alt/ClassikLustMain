@@ -1,5 +1,5 @@
 // 🌙 Luna Bug - Server API Routes
-// 🔧 FIXED: Always return JSON (no HTML/text responses)
+// 🔧 FIXED: Removed duplicate export causing build failure
 import express from 'express';
 import { requireAuth } from '../middleware/auth.js';
 
@@ -97,10 +97,8 @@ router.post('/respond', async (req, res) => {
 });
 
 // GET /api/luna/status - Get Luna's current status
-// 🔧 CRITICAL FIX: This was returning undefined/HTML causing JSON.parse errors
 router.get('/status', async (req, res) => {
   try {
-    // Always return valid JSON, even when Luna is not available
     if (!lunaInstance) {
       return res.json({ 
         luna: { 
@@ -122,7 +120,6 @@ router.get('/status', async (req, res) => {
     
   } catch (error) {
     console.error('❌ Luna status API error:', error);
-    // Even errors must return JSON
     res.status(500).json({ 
       error: 'Status check failed',
       message: error.message || 'Unknown error',
@@ -266,6 +263,5 @@ router.post('/force-audit', async (req, res) => {
   }
 });
 
-// Export router and setter
-export { router, setLunaInstance };
+// ✅ FIXED: Only export router (default), setLunaInstance is already exported above
 export default router;
