@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Terminal, Activity, Database, Zap, Trash2, RefreshCw, Moon, MessageSquare, Code, Send } from 'lucide-react';
+import { Terminal, Activity, Database, Zap, Trash2, RefreshCw, Moon, MessageSquare, Code, Send, Settings, Command, Play } from 'lucide-react';
+
 
 interface LogEntry {
   timestamp: string;
@@ -124,6 +125,17 @@ export default function DevToolsCore() {
     }
   }, [lunaMessages]);
 
+  // AI Configuration State
+const [showSettings, setShowSettings] = useState(false);
+const [aiConfig, setAiConfig] = useState<AIConfig>(() => {
+  const saved = localStorage.getItem('luna_ai_config');
+  return saved ? JSON.parse(saved) : DEFAULT_AI_CONFIG;
+});
+
+// Console Enhancement State
+const [consoleInput, setConsoleInput] = useState('');
+const [consoleHistory, setConsoleHistory] = useState<string[]>([]);
+const [historyIndex, setHistoryIndex] = useState(-1);
   const addLog = (level: 'info' | 'warn' | 'error', message: string) => {
     setLogs(prev => {
       const newLogs = [...prev, {
@@ -301,17 +313,7 @@ Provide a clear analysis and solution.`;
     }
   };
 
-  // AI Configuration State
-const [showSettings, setShowSettings] = useState(false);
-const [aiConfig, setAiConfig] = useState<AIConfig>(() => {
-  const saved = localStorage.getItem('luna_ai_config');
-  return saved ? JSON.parse(saved) : DEFAULT_AI_CONFIG;
-});
-
-// Console Enhancement State
-const [consoleInput, setConsoleInput] = useState('');
-const [consoleHistory, setConsoleHistory] = useState<string[]>([]);
-const [historyIndex, setHistoryIndex] = useState(-1);
+  
 
 // Save AI config whenever it changes
 useEffect(() => {
