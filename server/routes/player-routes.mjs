@@ -3,39 +3,18 @@
 
 import express from 'express';
 import { createClient } from '@supabase/supabase-js';
-import { authenticateToken } from '../middleware/auth.js';
-import { setDisplayImageForPlayer } from '../utils/playerStateManager.js';
+import { requireAuth } from '../middleware/auth.js';
+import { setDisplayImageForPlayer, updatePlayerState, getPlayerState } from '../utils/playerStateManager.js';
 
 const router = express.Router();
-
-// Dynamic imports for auth and utilities (will be loaded when needed)
-let requireAuth, updatePlayerState, getPlayerState;
-
-// Initialize dependencies
-async function initDependencies() {
-  if (!requireAuth) {
-    const authModule = await import('../middleware/auth.js');
-    requireAuth = authModule.requireAuth;
-    
-    const playerStateModule = await import('../utils/playerStateManager.js');
-    updatePlayerState = playerStateModule.updatePlayerState;
-    getPlayerState = playerStateModule.getPlayerState;
-  }
-}
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
 );
 
-// Middleware to ensure dependencies are loaded
-router.use(async (req, res, next) => {
-  await initDependencies();
-  if (requireAuth) {
-    return requireAuth(req, res, next);
-  }
-  next();
-});
+// ✅ Apply requireAuth to all routes
+router.use(requireAuth);
 
 // PATCH /api/player/active-character
 router.patch('/active-character', async (req, res) => {
@@ -53,7 +32,6 @@ router.patch('/active-character', async (req, res) => {
     const updated = await updatePlayerState(player, {
       selectedCharacterId: characterId,
       activeCharacter: characterId,
-      displayImage: path,
     });
 
     console.log(`✅ [ACTIVE-CHAR] Successfully set to ${characterId}`);
@@ -99,7 +77,7 @@ router.get('/images', async (req, res) => {
       id: img.id,
       filename: img.filename || img.url?.split('/').pop(),
       path: img.url || img.path,
-      url: img.url, // ✅ Added for compatibility
+      url: img.url,
       characterId: img.characterId,
       type: img.type || 'default',
       unlockLevel: img.unlockLevel || 1,
@@ -118,26 +96,26 @@ router.get('/images', async (req, res) => {
   }
 });
 
-// POST /api/player/set-display-image
-router.post('/player/set-display-image', authenticateToken, async (req, res) => {
+// ✅ FIXED: POST /api/player/set-display-image
+router.post('/set-display-image', async (req, res) => {
   try {
-    const { path } = req.body;  // ← Changed from imageUrl to url
-    const player = req.user;   // ← Changed from playerId to player object
+    const { imageUrl } = req.body;
+    const player = req.player;
 
-    if (!path) {
+    if (!imageUrl) {
       return res.status(400).json({ 
         success: false, 
-        error: 'url is required' 
+        error: 'imageUrl is required' 
       });
     }
 
-    console.log(`🖼️ [ROUTE] Setting display image for ${player.username}`);
+    console.log(`🖼️ [ROUTE] Setting display image for ${player.username}: ${imageUrl}`);
 
-    await setDisplayImageForPlayer(player, path);
+    await setDisplayImageForPlayer(player, imageUrl);
 
     res.json({ 
       success: true, 
-      path,
+      imageUrl,
       message: 'Display image updated successfully' 
     });
   } catch (error) {
@@ -148,7 +126,6 @@ router.post('/player/set-display-image', authenticateToken, async (req, res) => 
     });
   }
 });
-
 
 // POST /api/player/update - General player update endpoint
 router.post('/update', async (req, res) => {
