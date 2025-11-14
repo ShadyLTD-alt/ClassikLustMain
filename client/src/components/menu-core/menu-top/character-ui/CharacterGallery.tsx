@@ -81,7 +81,6 @@ export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryPr
     }
   };
 
-  // UPDATED: send the image path as imageUrl
   const handleSetDisplayImage = async (imageId: string) => {
     try {
       const selected = images.find(i => i.id === imageId);
@@ -183,21 +182,49 @@ export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryPr
                     <span className="text-xs text-gray-400">({unlockedImages.length})</span>
                   </h3>
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                    {unlockedImages.map((image) => (
-                      <button
-                        key={image.id}
-                        onClick={() => handleSetDisplayImage(image.id)}
-                        disabled={settingImage === image.id}
-                        className="relative group aspect-[3/4] rounded-xl overflow-hidden border-2 border-purple-500/30 hover:border-purple-500 hover:scale-105 transition-all duration-200 bg-gray-900"
-                      >
-                        <img
-                          src={image.path}
-                          alt={image.filename}
-                          className="w-full h-full object-cover"
-                          onError={(e) => { e.currentTarget.src = '/placeholder-image.png'; }}
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end">
-                          <div className="p-3 w-full">
+                    {unlockedImages.map((image) => {
+                      const isCurrentDisplay = state.displayImage === image.path;
+                      const isSettingThisImage = settingImage === image.id;
+                      
+                      return (
+                        <div
+                          key={image.id}
+                          className="relative group aspect-[3/4] rounded-xl overflow-hidden border-2 border-purple-500/30 hover:border-purple-500 transition-all duration-200 bg-gray-900"
+                        >
+                          <img
+                            src={image.path}
+                            alt={image.filename}
+                            className="w-full h-full object-cover"
+                            onError={(e) => { e.currentTarget.src = '/placeholder-image.png'; }}
+                          />
+                          {/* Always-Visible Button Overlay */}
+                          <div className="absolute inset-0 flex flex-col justify-end opacity-90 group-hover:opacity-100 transition">
+                            <button
+                              onClick={() => handleSetDisplayImage(image.id)}
+                              disabled={isSettingThisImage || isCurrentDisplay}
+                              className={`
+                                mx-3 mb-3 px-3 py-2 rounded-lg font-bold text-sm shadow-md flex items-center justify-center gap-2 transition
+                                ${isCurrentDisplay 
+                                  ? 'bg-green-600 text-white cursor-default' 
+                                  : 'bg-purple-600 text-white hover:bg-purple-700'}
+                                ${isSettingThisImage ? 'opacity-60 cursor-wait' : ''}
+                              `}
+                              style={{ width: 'calc(100% - 1.5rem)' }}
+                            >
+                              {isSettingThisImage ? (
+                                <>
+                                  <span className="w-4 h-4 border-2 border-t-white border-white/30 rounded-full animate-spin" />
+                                  <span>Setting...</span>
+                                </>
+                              ) : isCurrentDisplay ? (
+                                <span>✅ Current</span>
+                              ) : (
+                                <span>🖼️ Set as Display</span>
+                              )}
+                            </button>
+                          </div>
+                          {/* Filename/Type Badge Overlay (on hover) */}
+                          <div className="absolute top-0 left-0 right-0 p-3 bg-gradient-to-b from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
                             <p className="text-white text-xs font-semibold truncate">{image.filename}</p>
                             <div className="flex gap-1 mt-1 flex-wrap">
                               {image.metadata.nsfw && (
@@ -212,16 +239,8 @@ export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryPr
                             </div>
                           </div>
                         </div>
-                        {settingImage === image.id && (
-                          <div className="absolute inset-0 bg-black/70 flex items-center justify-center">
-                            <div className="w-8 h-8 border-4 border-purple-500/30 border-t-purple-500 rounded-full animate-spin"></div>
-                          </div>
-                        )}
-                        <div className="absolute top-2 right-2 bg-black/60 rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <ImageIcon className="w-4 h-4 text-white" />
-                        </div>
-                      </button>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
