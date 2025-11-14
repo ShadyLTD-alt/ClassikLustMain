@@ -5,14 +5,19 @@ import { getUpgradesFromMemory } from './unifiedDataLoader';
 
 function resolvePlayerKey(player: any): string {
   if (player.telegramId && player.username) {
-    return `${player.telegramId}_${player.username}`;
+    const key = `${player.telegramId}_${player.username}`;
+    console.log(`[KeyGen] telegramId: ${player.telegramId}, username: ${player.username}, key: ${key}`);
+    return key;
   }
   if (player.id && player.username) {
-    return `${player.id}_${player.username}`;
+    const key = `${player.id}_${player.username}`;
+    console.log(`[KeyGen] id: ${player.id}, username: ${player.username}, key: ${key}`);
+    return key;
   }
-  return player.id || player.username || 'unknown';
+  const fallback = player.id || player.username || 'unknown';
+  console.log(`[KeyGen] Fallback key: ${fallback}`);
+  return fallback;
 }
-console.log('[KeyGen] telegramId:', player.telegramId, 'username:', player.username, 'key:', generatedKey);
 
 function calculateDerivedStats(playerUpgrades: Record<string, number>) {
   const upgrades = getUpgradesFromMemory();
@@ -246,6 +251,8 @@ class PlayerStateManager {
     const existingFolder = await this.findPlayerFolder(playerKey);
     const actualPlayerKey = existingFolder || playerKey;
     
+    console.log(`💾 [PLAYER SAVE] Saving to key: ${actualPlayerKey}`);
+    
     await this.ensurePlayerDirectory(actualPlayerKey);
     
     const derived = calculateDerivedStats(data.upgrades || {});
@@ -258,7 +265,10 @@ class PlayerStateManager {
     }
     
     const sanitizedData = this.sanitizeForDatabase(data);
-    await fs.writeFile(this.getPlayerFilePath(actualPlayerKey), JSON.stringify(sanitizedData, null, 2));
+    const filePath = this.getPlayerFilePath(actualPlayerKey);
+    await fs.writeFile(filePath, JSON.stringify(sanitizedData, null, 2));
+    console.log(`✅ [PLAYER SAVE] Written to: ${filePath}`);
+    console.log(`🖼️ [PLAYER SAVE] displayImage value: ${sanitizedData.displayImage}`);
     this.cache.set(actualPlayerKey, sanitizedData);
   }
   
@@ -361,8 +371,8 @@ export async function selectCharacterForPlayer(player: any, characterId: string)
 }
 
 export async function setDisplayImageForPlayer(player: any, imageUrl: string): Promise<any> {
-  const playerId = player.id;
-  console.log(`🖼️ [SET DISPLAY] Setting display image for ${playerId}: ${imageUrl}`);
+  console.log(`🖼️ [SET DISPLAY] Player object:`, { id: player.id, username: player.username, telegramId: player.telegramId });
+  console.log(`🖼️ [SET DISPLAY] Setting display image to: ${imageUrl}`);
 
   if (!imageUrl || typeof imageUrl !== 'string') {
     throw new Error('Valid image URL is required');
@@ -371,30 +381,11 @@ export async function setDisplayImageForPlayer(player: any, imageUrl: string): P
   const normalizedUrl = imageUrl.startsWith('/') ? imageUrl : `/${imageUrl}`;
   console.log(`🖼️ [SET DISPLAY] Normalized URL: ${normalizedUrl}`);
 
-  try {
-    const currentState = await getPlayerState(player);
-    currentState.displayImage = normalizedUrl;
-
-    const playerFolder = path.join(process.cwd(), 'main-gamedata', 'player-data', playerId);
-    const playerFilePath = path.join(playerFolder, 'player-state.json');
-    await fs.mkdir(playerFolder, { recursive: true });
-    await fs.writeFile(playerFilePath, JSON.stringify(currentState, null, 2), 'utf-8');
-    console.log(`✅ [SET DISPLAY] JSON file updated successfully`);
-
-    try {
-      await storage.updatePlayer(playerId, { displayImage: normalizedUrl });
-      console.log(`✅ [SET DISPLAY] Database synced`);
-    } catch (dbError) {
-      console.warn(`⚠️ [SET DISPLAY] DB sync failed (non-critical):`, dbError);
-    }
-    
-    console.log(`✅ [SET DISPLAY] All player state updated`);
-
-    return currentState;
-  } catch (error: any) {
-    console.error(`❌ [SET DISPLAY] Failed:`, error);
-    throw error;
-  }
+  const updated = await updatePlayerState(player, { displayImage: normalizedUrl });
+  
+  console.log(`✅ [SET DISPLAY] Successfully updated displayImage via updatePlayerState`);
+  
+  return updated;
 }
 
 export async function purchaseUpgradeForPlayer(player: any, upgradeId: string, level: number, cost: number) { 
