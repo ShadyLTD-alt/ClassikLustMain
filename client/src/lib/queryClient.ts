@@ -7,19 +7,21 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
+// ✅ FIXED: Add method parameter for proper HTTP method specification
 export async function apiRequest(
+  method: string,
   endpoint: string,
-  options?: RequestInit,
+  body?: any,
 ): Promise<Response> {
   const sessionToken = localStorage.getItem('sessionToken');
 
   const response = await fetch(endpoint, {
-    ...options,
+    method: method,
     headers: {
       'Content-Type': 'application/json',
       ...(sessionToken ? { 'Authorization': `Bearer ${sessionToken}` } : {}),
-      ...options?.headers,
     },
+    ...(body ? { body: JSON.stringify(body) } : {}),
   });
 
   if (!response.ok) {
