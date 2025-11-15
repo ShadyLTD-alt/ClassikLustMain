@@ -328,27 +328,54 @@ useEffect(() => {
   }
 };
 
-const executeConsoleCommand = (command: string) => {
-  try {
-    // Add to history
-    setConsoleHistory(prev => [...prev, command]);
-    setHistoryIndex(-1);
+  const executeConsoleCommand = async (command: string) => {
+    try {
+      setConsoleHistory(prev => [...prev, command]);
+      setHistoryIndex(-1);
+      addLog('info', `> ${command}`);
 
-    // Log the command
-    addLog('info', `> ${command}`);
+      // Luna CLI: route to API
+      if (command.includes('luna.cli.')) {
+        const methodMatch = command.match(/luna\.cli\.(\w+)\(/);
+        if (methodMatch) {
+          const method = methodMatch[1];
+          addLog('info', `⏳ Executing ${method}...`);
 
-    // Execute via eval (admin dev tools only)
-    const result = eval(command);
+          try {
+            const response = await fetch(`/api/luna/${method}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' }
+            });
 
-    // Log result
-    if (result !== undefined) {
-      const resultStr = typeof result === 'object' ? JSON.stringify(result, null, 2) : String(result);
-      addLog('info', `â† ${resultStr}`);
+            if (!response.ok) {
+              throw new Error(`Luna API error: ${response.statusText}`);
+            }
+
+            const result = await response.json();
+            const resultStr = typeof result === 'object' ? JSON.stringify(result, null, 2) : String(result);
+            addLog('info', `✅ ${resultStr}`);
+          } catch (apiError: any) {
+            addLog('error', `❌ API Error: ${apiError.message}`);
+          }
+          return;
+        } else {
+          addLog('error', '❌ Invalid luna.cli command format');
+          return;
+        }
+      }
+
+      // Regular JavaScript eval for non-Luna commands
+      const result = eval(command);
+      if (result !== undefined) {
+        const resultStr = typeof result === 'object' ? JSON.stringify(result, null, 2) : String(result);
+        addLog('info', `← ${resultStr}`);
+      }
+    } catch (error: any) {
+      addLog('error', `❌ ${error.message}`);
     }
-  } catch (error: any) {
-    addLog('error', `âŒ ${error.message}`);
-  }
-};
+  };
+
+
 
 const handleConsoleKeyDown = (e: React.KeyboardEvent) => {
   if (e.key === 'Enter' && !e.shiftKey) {
