@@ -21,6 +21,7 @@ interface GalleryImage {
     nsfw: boolean;
     vip: boolean;
     poses: string[];
+    category?: string;
   };
 }
 
@@ -44,52 +45,93 @@ export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryPr
     }
   }, [isOpen, state.activeCharacter]);
 
+  // ✅ FIXED: Parse /api/media response correctly
   const loadImages = async (characterId: string) => {
     try {
       setLoading(true);
       setError(null);
 
+      console.log(`🔍 [GALLERY] Loading images for character: ${characterId}`);
+
       const response = await apiRequest('GET', '/api/media');
       if (response.ok) {
         const data = await response.json();
+        console.log(`📦 [GALLERY] Received ${data.media?.length || 0} total media files`);
+
         const characterImages = (data.media || [])
-          .filter((img: any) => 
-            img.metadata?.characterId?.toLowerCase() === characterId.toLowerCase()
-          )
-          .map((img: any) => ({
-            id: img.filename.split('.')[0],
-            filename: img.filename,
-            // ✅ FIX: Build the URL from filename and characterId (no /character/ subfolder)
-            url: `/uploads/characters/${characterId}/${img.filename}`,
-            path: `/uploads/characters/${characterId}/${img.filename}`,
-            characterId: img.metadata?.characterId || characterId,
-            type: img.metadata?.type || 'default',
-            unlockLevel: img.metadata?.unlockLevel || 1,
-            isUnlocked: !img.metadata?.unlockLevel || state.level >= img.metadata.unlockLevel,
-            metadata: {
-              nsfw: img.metadata?.nsfw || false,
-              vip: img.metadata?.vip || false,
-              poses: img.metadata?.poses || [],
-              category: img.metadata?.category || 'default',
+          .filter((img: any) => {
+            // ✅ Extract characterId from path if not in metadata
+            let imgCharId = img.metadata?.characterId;
+            
+            if (!imgCharId && img.path) {
+              // Path format: /uploads/characters/CHARACTERID/TYPE/filename.png
+              const pathParts = img.path.split('/');
+              const charactersIndex = pathParts.indexOf('characters');
+              if (charactersIndex !== -1 && pathParts.length > charactersIndex + 1) {
+                imgCharId = pathParts[charactersIndex + 1];
+              }
             }
-          }));
+            
+            const matches = imgCharId?.toLowerCase() === characterId.toLowerCase();
+            if (matches) {
+              console.log(`✅ [GALLERY] Match found: ${img.filename} for ${characterId}`);
+            }
+            return matches;
+          })
+          .map((img: any) => {
+            // ✅ Extract characterId from path
+            let imgCharId = img.metadata?.characterId;
+            if (!imgCharId && img.path) {
+              const pathParts = img.path.split('/');
+              const charactersIndex = pathParts.indexOf('characters');
+              if (charactersIndex !== -1 && pathParts.length > charactersIndex + 1) {
+                imgCharId = pathParts[charactersIndex + 1];
+              }
+            }
+
+            // ✅ Use the path from API response directly
+            const imagePath = img.path || img.url || '';
+
+            return {
+              id: img.filename?.split('.')[0] || Math.random().toString(36),
+              filename: img.filename || 'unknown',
+              url: imagePath,
+              path: imagePath,
+              characterId: imgCharId || characterId,
+              type: img.metadata?.type || 'character',
+              unlockLevel: img.metadata?.unlockLevel || 1,
+              isUnlocked: !img.metadata?.unlockLevel || state.level >= img.metadata.unlockLevel,
+              metadata: {
+                nsfw: img.metadata?.nsfw || img.metadata?.category?.includes('nsfw') || false,
+                vip: img.metadata?.vip || img.metadata?.category?.includes('vip') || false,
+                poses: img.metadata?.poses || [],
+                category: img.metadata?.category || 'default',
+              }
+            };
+          });
 
         console.log(`✅ [GALLERY] Loaded ${characterImages.length} images for ${characterId}`);
         if (characterImages.length > 0) {
           console.log('🖼️ [GALLERY] First image:', characterImages[0]);
+        } else {
+          console.warn(`⚠️ [GALLERY] No images found for character: ${characterId}`);
         }
 
         setImages(characterImages);
+      } else {
+        const errorText = await response.text();
+        console.error('❌ [GALLERY] API Error:', errorText);
+        setError(`Failed to load images: ${response.status}`);
       }
     } catch (error: any) {
-      console.error('❌ [GALLERY] Error:', error);
-      setError(error.message);
+      console.error('❌ [GALLERY] Exception:', error);
+      setError(error.message || 'Failed to load images');
     } finally {
       setLoading(false);
     }
   };
 
-  // 🔧 FIXED: Proper displayImage API call receiving full image object
+  // ✅ FIXED: Proper displayImage API call receiving full image object
   const handleSetDisplayImage = async (selected: GalleryImage) => {
     try {
       const imagePath = selected.path || selected.url;
@@ -214,13 +256,23 @@ export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryPr
                           key={image.id}
                           className="relative group aspect-[3/4] rounded-xl overflow-hidden border-2 border-purple-500/30 hover:border-purple-500 transition-all duration-200 bg-gray-900"
                         >
+                          {/* ✅ FIXED: Image loading with error handling */}
                           <img
                             src={image.url}
                             alt={image.filename}
                             className="w-full h-full object-cover"
-                            onError={(e) => { e.currentTarget.src = '/placeholder-image.png'; }}
+                            crossOrigin="anonymous"
+                            loading="lazy"
+                            onLoad={(e) => {
+                              console.log(`✅ [IMG] Loaded: ${image.url}`);
+                            }}
+                            onError={(e) => {
+                              console.error(`❌ [IMG] Failed to load: ${image.url}`);
+                              e.currentTarget.src = '/placeholder-image.png';
+                              e.currentTarget.style.opacity = '0.3';
+                            }}
                           />
-                          {/* ✅ FIXED: Always-Visible Button Overlay - Pass full image object */}
+                          {/* Button Overlay */}
                           <div className="absolute inset-0 flex flex-col justify-end opacity-90 group-hover:opacity-100 transition">
                             <button
                               onClick={() => handleSetDisplayImage(image)}
@@ -284,6 +336,8 @@ export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryPr
                           src={image.url}
                           alt={image.filename}
                           className="w-full h-full object-cover blur-sm"
+                          crossOrigin="anonymous"
+                          loading="lazy"
                         />
                         <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
                           <div className="text-center">
