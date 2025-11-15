@@ -24,7 +24,7 @@ import {
 import { getPlayerState, updatePlayerState, purchaseUpgradeForPlayer, playerStateManager } from './utils/playerStateManager';
 import { storage } from './storage';
 import crypto from 'crypto';
-import playerRoutes from './routes/player-routes.mjs';
+// ✅ REMOVED: import playerRoutes - this causes TypeScript error and is loaded dynamically in index.ts
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -801,6 +801,3 @@ export async function registerRoutes(app: Express): Promise<Server> {
 }
 
 console.log('✅ [ROUTES] All routes registered');
-
-
-
