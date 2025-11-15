@@ -189,7 +189,9 @@ registerErrorQueueCommands(luna);
   // ✅ Phase 6: Add Luna API routes if available
   if (luna && lunaRouter) {
     logger.info('🌙 [PHASE 6] Registering LunaBug API routes...');
-    app.use('/api/luna', lunaRouter);
+    app.use('/api/luna', (err, req, res, next) => {
+      res.status(500).json({ error: err.message });
+    });
     logger.info('✅ LunaBug API routes registered at /api/luna/*');
   } else {
     logger.warn('⚠️ [PHASE 6] Luna API routes not available');
