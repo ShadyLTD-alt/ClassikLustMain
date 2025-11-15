@@ -13,7 +13,14 @@ interface Props {
 }
 
 export default function PlayerInfoMenu({ isOpen, onClose, openMenu }: Props) {
-  const { data: playerData } = useQuery({
+  // Debug logging
+  React.useEffect(() => {
+    if (isOpen) {
+      console.log('👤 PlayerInfoMenu opened');
+    }
+  }, [isOpen]);
+
+  const { data: playerData, isLoading, error } = useQuery({
     queryKey: ['/api/player/me'],
     queryFn: async () => {
       const r = await apiRequest('GET', '/api/player/me');
@@ -23,9 +30,17 @@ export default function PlayerInfoMenu({ isOpen, onClose, openMenu }: Props) {
     refetchOnMount: 'always',
   });
 
+  // Debug logging for data
+  React.useEffect(() => {
+    if (playerData) {
+      console.log('👤 PlayerInfoMenu data:', playerData);
+    }
+    if (error) {
+      console.error('❌ PlayerInfoMenu error:', error);
+    }
+  }, [playerData, error]);
+
   const state = playerData?.player;
-  
-  if (!state) return null;
 
   const handleCharacterGalleryClick = () => {
     onClose();
@@ -34,132 +49,159 @@ export default function PlayerInfoMenu({ isOpen, onClose, openMenu }: Props) {
   
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      {/* ONLY THIS LINE IS CHANGED (z-index) */}
-      <DialogContent className="max-w-2xl bg-gray-900/98 border-purple-500/30" style={{ zIndex: 999999 }}>
+      {/* ✅ FIXED: Ultra-high z-index + portal rendering */}
+      <DialogContent 
+        className="max-w-2xl bg-gray-900/98 border-purple-500/30" 
+        style={{ zIndex: 999999 }}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-purple-300">
             <User className="w-5 h-5" />Player Profile
           </DialogTitle>
         </DialogHeader>
         
-        <div className="space-y-6">
-          <div className="flex items-center gap-4 p-4 bg-gray-800/30 rounded-lg border border-gray-700/50">
-            <Button
-              onClick={handleCharacterGalleryClick}
-              className="w-12 h-12 bg-purple-600/20 hover:bg-purple-600/30 rounded-lg flex items-center justify-center transition-colors border border-purple-500/30 p-0"
-              title="Character Gallery"
-            >
-              <Crown className="w-6 h-6 text-purple-400" />
-            </Button>
-            
-            <div className="w-16 h-16 bg-purple-600 rounded-full flex items-center justify-center">
-              <User className="w-8 h-8 text-white" />
-            </div>
-            
-            <div className="flex-1">
-              <h2 className="text-xl font-bold text-white">{state.username}</h2>
-              <div className="flex items-center gap-2 mt-1">
-                <Badge className="bg-purple-600/20 text-purple-300 border-purple-400/30">
-                  Level {state.level}
-                </Badge>
-                {state.isAdmin && (
-                  <Badge className="bg-yellow-600/20 text-yellow-300 border-yellow-400/30">
-                    Admin
+        {/* ✅ ADDED: Loading and error states */}
+        {isLoading && (
+          <div className="p-8 text-center text-purple-300">
+            <div className="animate-spin w-8 h-8 border-4 border-purple-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+            Loading player data...
+          </div>
+        )}
+
+        {error && (
+          <div className="p-8 text-center">
+            <div className="text-red-400 mb-2">❌ Failed to load player data</div>
+            <div className="text-gray-400 text-sm">{error.message || 'Unknown error'}</div>
+          </div>
+        )}
+        
+        {state && (
+          <div className="space-y-6">
+            <div className="flex items-center gap-4 p-4 bg-gray-800/30 rounded-lg border border-gray-700/50">
+              <Button
+                onClick={handleCharacterGalleryClick}
+                className="w-12 h-12 bg-purple-600/20 hover:bg-purple-600/30 rounded-lg flex items-center justify-center transition-colors border border-purple-500/30 p-0"
+                title="Character Gallery"
+              >
+                <Crown className="w-6 h-6 text-purple-400" />
+              </Button>
+              
+              <div className="w-16 h-16 bg-purple-600 rounded-full flex items-center justify-center">
+                <User className="w-8 h-8 text-white" />
+              </div>
+              
+              <div className="flex-1">
+                <h2 className="text-xl font-bold text-white">{state.username}</h2>
+                <div className="flex items-center gap-2 mt-1">
+                  <Badge className="bg-purple-600/20 text-purple-300 border-purple-400/30">
+                    Level {state.level}
                   </Badge>
-                )}
-              </div>
-            </div>
-            
-            <div className="text-right">
-              <div className="text-purple-300 text-sm font-semibold">LP/HR</div>
-              <div className="text-white text-lg font-bold">
-                {Math.round(state.passiveIncomeRate || 0)}
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-3 gap-4">
-            <div className="p-4 bg-gray-800/30 rounded-lg border border-gray-700/50 text-center">
-              <div className="text-2xl font-bold text-transparent bg-gradient-to-r from-pink-400 via-purple-400 to-pink-500 bg-clip-text">
-                {Math.round(state.lustPoints || state.points || 0).toLocaleString()}
-              </div>
-              <div className="text-purple-300 text-sm">Current LP</div>
-            </div>
-            
-            <div className="p-4 bg-gray-800/30 rounded-lg border border-gray-700/50 text-center">
-              <div className="text-2xl font-bold text-transparent bg-gradient-to-r from-emerald-400 via-cyan-400 to-emerald-500 bg-clip-text">
-                {Math.round(state.lustGems || 0).toLocaleString()}
-              </div>
-              <div className="text-purple-300 text-sm">Lust Gems</div>
-            </div>
-            
-            <div className="p-4 bg-gray-800/30 rounded-lg border border-gray-700/50 text-center">
-              <div className="text-2xl font-bold text-purple-400">
-                {Math.round(state.passiveIncomeRate || 0)}
-              </div>
-              <div className="text-purple-300 text-sm">LP/Hour Rate</div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="p-3 bg-gray-800/30 rounded-lg border border-gray-700/50">
-              <div className="text-lg font-bold text-white">
-                {Math.round(state.totalTapsAllTime || 0).toLocaleString()}
-              </div>
-              <div className="text-gray-400 text-sm">Total Taps (All Time)</div>
-            </div>
-            
-            <div className="p-3 bg-gray-800/30 rounded-lg border border-gray-700/50">
-              <div className="text-lg font-bold text-white">
-                {Object.keys(state.upgrades || {}).length}
-              </div>
-              <div className="text-gray-400 text-sm">Upgrades Owned</div>
-            </div>
-            
-            <div className="p-3 bg-gray-800/30 rounded-lg border border-gray-700/50">
-              <div className="text-lg font-bold text-white">
-                {(state.unlockedCharacters || []).length}
-              </div>
-              <div className="text-gray-400 text-sm">Characters Unlocked</div>
-            </div>
-            
-            <div className="p-3 bg-gray-800/30 rounded-lg border border-gray-700/50">
-              <div className="text-lg font-bold text-white">
-                {Math.round(state.consecutiveDays || 0)}
-              </div>
-              <div className="text-gray-400 text-sm">Login Streak</div>
-            </div>
-          </div>
-
-          <div className="p-4 bg-gray-800/30 rounded-lg border border-gray-700/50">
-            <h3 className="text-purple-300 font-semibold mb-3 flex items-center gap-2">
-              <Clock className="w-4 h-4" />
-              Today's Progress
-            </h3>
-            <div className="grid grid-cols-3 gap-4 text-sm">
-              <div className="text-center">
-                <div className="text-white font-bold">
-                  {Math.round(state.totalTapsToday || 0).toLocaleString()}
+                  {state.isAdmin && (
+                    <Badge className="bg-yellow-600/20 text-yellow-300 border-yellow-400/30">
+                      Admin
+                    </Badge>
+                  )}
                 </div>
-                <div className="text-gray-400">Taps Today</div>
               </div>
               
-              <div className="text-center">
-                <div className="text-white font-bold">
-                  {Math.round(state.lpEarnedToday || 0).toLocaleString()}
+              <div className="text-right">
+                <div className="text-purple-300 text-sm font-semibold">LP/HR</div>
+                <div className="text-white text-lg font-bold">
+                  {Math.round(state.passiveIncomeRate || 0)}
                 </div>
-                <div className="text-gray-400">LP Earned</div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <div className="p-4 bg-gray-800/30 rounded-lg border border-gray-700/50 text-center">
+                <div className="text-2xl font-bold text-transparent bg-gradient-to-r from-pink-400 via-purple-400 to-pink-500 bg-clip-text">
+                  {Math.round(state.lustPoints || state.points || 0).toLocaleString()}
+                </div>
+                <div className="text-purple-300 text-sm">Current LP</div>
               </div>
               
-              <div className="text-center">
-                <div className="text-white font-bold">
-                  {Math.round(state.upgradesPurchasedToday || 0)}
+              <div className="p-4 bg-gray-800/30 rounded-lg border border-gray-700/50 text-center">
+                <div className="text-2xl font-bold text-transparent bg-gradient-to-r from-emerald-400 via-cyan-400 to-emerald-500 bg-clip-text">
+                  {Math.round(state.lustGems || 0).toLocaleString()}
                 </div>
-                <div className="text-gray-400">Upgrades Bought</div>
+                <div className="text-purple-300 text-sm">Lust Gems</div>
+              </div>
+              
+              <div className="p-4 bg-gray-800/30 rounded-lg border border-gray-700/50 text-center">
+                <div className="text-2xl font-bold text-purple-400">
+                  {Math.round(state.passiveIncomeRate || 0)}
+                </div>
+                <div className="text-purple-300 text-sm">LP/Hour Rate</div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-3 bg-gray-800/30 rounded-lg border border-gray-700/50">
+                <div className="text-lg font-bold text-white">
+                  {Math.round(state.totalTapsAllTime || 0).toLocaleString()}
+                </div>
+                <div className="text-gray-400 text-sm">Total Taps (All Time)</div>
+              </div>
+              
+              <div className="p-3 bg-gray-800/30 rounded-lg border border-gray-700/50">
+                <div className="text-lg font-bold text-white">
+                  {Object.keys(state.upgrades || {}).length}
+                </div>
+                <div className="text-gray-400 text-sm">Upgrades Owned</div>
+              </div>
+              
+              <div className="p-3 bg-gray-800/30 rounded-lg border border-gray-700/50">
+                <div className="text-lg font-bold text-white">
+                  {(state.unlockedCharacters || []).length}
+                </div>
+                <div className="text-gray-400 text-sm">Characters Unlocked</div>
+              </div>
+              
+              <div className="p-3 bg-gray-800/30 rounded-lg border border-gray-700/50">
+                <div className="text-lg font-bold text-white">
+                  {Math.round(state.consecutiveDays || 0)}
+                </div>
+                <div className="text-gray-400 text-sm">Login Streak</div>
+              </div>
+            </div>
+
+            <div className="p-4 bg-gray-800/30 rounded-lg border border-gray-700/50">
+              <h3 className="text-purple-300 font-semibold mb-3 flex items-center gap-2">
+                <Clock className="w-4 h-4" />
+                Today's Progress
+              </h3>
+              <div className="grid grid-cols-3 gap-4 text-sm">
+                <div className="text-center">
+                  <div className="text-white font-bold">
+                    {Math.round(state.totalTapsToday || 0).toLocaleString()}
+                  </div>
+                  <div className="text-gray-400">Taps Today</div>
+                </div>
+                
+                <div className="text-center">
+                  <div className="text-white font-bold">
+                    {Math.round(state.lpEarnedToday || 0).toLocaleString()}
+                  </div>
+                  <div className="text-gray-400">LP Earned</div>
+                </div>
+                
+                <div className="text-center">
+                  <div className="text-white font-bold">
+                    {Math.round(state.upgradesPurchasedToday || 0)}
+                  </div>
+                  <div className="text-gray-400">Upgrades Bought</div>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        )}
+        
+        {/* ✅ ADDED: Fallback for no data */}
+        {!isLoading && !error && !state && (
+          <div className="p-8 text-center text-gray-400">
+            ⚠️ No player data available
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
