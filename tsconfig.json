@@ -4,7 +4,9 @@
     "shared/**/*", 
     "server/**/*",
     "**/*.ts",
-    "**/*.tsx"
+    "**/*.tsx",
+    "main-gamedata/**/*",
+    "LunaBug/**/*"
   ],
   "exclude": [
     "node_modules", 
