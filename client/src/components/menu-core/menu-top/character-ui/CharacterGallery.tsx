@@ -59,21 +59,25 @@ export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryPr
           .map((img: any) => ({
             id: img.filename.split('.')[0],
             filename: img.filename,
-            // ✅ FIX: Build the URL from filename and characterId
-            url: `/uploads/characters/${characterId}/character/${img.filename}`,
-            path: `/uploads/characters/${characterId}/character/${img.filename}`,
+            // ✅ FIX: Build the URL from filename and characterId (no /character/ subfolder)
+            url: `/uploads/characters/${characterId}/${img.filename}`,
+            path: `/uploads/characters/${characterId}/${img.filename}`,
             characterId: img.metadata?.characterId || characterId,
             type: img.metadata?.type || 'default',
             unlockLevel: img.metadata?.unlockLevel || 1,
             isUnlocked: !img.metadata?.unlockLevel || state.level >= img.metadata.unlockLevel,
             metadata: {
-              category: img.metadata?.category?.includes('sfw') || 
-                       img.metadata?.category?.includes('safe') ? 'sfw' : 'nsfw',
+              nsfw: img.metadata?.nsfw || false,
+              vip: img.metadata?.vip || false,
+              poses: img.metadata?.poses || [],
+              category: img.metadata?.category || 'default',
             }
           }));
 
         console.log(`✅ [GALLERY] Loaded ${characterImages.length} images for ${characterId}`);
-        console.log('🖼️ [GALLERY] First image:', characterImages[0]); // Debug
+        if (characterImages.length > 0) {
+          console.log('🖼️ [GALLERY] First image:', characterImages[0]);
+        }
 
         setImages(characterImages);
       }
@@ -85,22 +89,22 @@ export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryPr
     }
   };
 
-
-
-  // 🔧 FIXED: Proper displayImage API call with path parameter
-  const handleSetDisplayImage = async (selected: any) => {
+  // 🔧 FIXED: Proper displayImage API call receiving full image object
+  const handleSetDisplayImage = async (selected: GalleryImage) => {
     try {
-      // Now selected.path will be: /uploads/characters/aria/image1.png
       const imagePath = selected.path || selected.url;
 
       console.log('🖼️ [GALLERY] Selected object:', selected);
       console.log(`🖼️ [GALLERY] Setting display image to: ${imagePath}`);
 
+      // ✅ Validate path before sending
       if (!imagePath || imagePath.includes('undefined')) {
         console.error('❌ [GALLERY] Invalid image path!');
         alert('Error: Invalid image selected');
         return;
       }
+
+      setSettingImage(selected.id);
 
       const response = await apiRequest('POST', '/api/player/set-display-image', {
         path: imagePath
@@ -110,15 +114,10 @@ export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryPr
         const data = await response.json();
         console.log('✅ [GALLERY] Display image updated:', data.displayImage);
 
-        // Update local state
-        setSettingImage(imagePath);
-
-        // Update GameContext
+        // ✅ Update GameContext
         if (updatePlayer) {
           await updatePlayer({ displayImage: data.displayImage });
         }
-
-        alert('Display image updated successfully!');
       } else {
         const errorData = await response.json();
         console.error('❌ [GALLERY] Server error:', errorData);
@@ -127,9 +126,10 @@ export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryPr
     } catch (error: any) {
       console.error('❌ [GALLERY] Exception:', error);
       alert(`Error: ${error.message}`);
+    } finally {
+      setSettingImage(null);
     }
   };
-
 
   if (!isOpen) return null;
 
@@ -215,15 +215,15 @@ export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryPr
                           className="relative group aspect-[3/4] rounded-xl overflow-hidden border-2 border-purple-500/30 hover:border-purple-500 transition-all duration-200 bg-gray-900"
                         >
                           <img
-                            src={image.path}
+                            src={image.url}
                             alt={image.filename}
                             className="w-full h-full object-cover"
                             onError={(e) => { e.currentTarget.src = '/placeholder-image.png'; }}
                           />
-                          {/* ✅ FIXED: Always-Visible Button Overlay */}
+                          {/* ✅ FIXED: Always-Visible Button Overlay - Pass full image object */}
                           <div className="absolute inset-0 flex flex-col justify-end opacity-90 group-hover:opacity-100 transition">
                             <button
-                              onClick={() => handleSetDisplayImage(image.id)}
+                              onClick={() => handleSetDisplayImage(image)}
                               disabled={isSettingThisImage || isCurrentDisplay}
                               className={`
                                 mx-3 mb-3 px-3 py-2 rounded-lg font-bold text-sm shadow-md flex items-center justify-center gap-2 transition
@@ -281,7 +281,7 @@ export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryPr
                         className="relative aspect-[3/4] rounded-xl overflow-hidden border-2 border-gray-700 bg-gray-900 opacity-60"
                       >
                         <img
-                          src={image.path}
+                          src={image.url}
                           alt={image.filename}
                           className="w-full h-full object-cover blur-sm"
                         />
