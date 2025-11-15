@@ -90,7 +90,7 @@ const createInitialState = (): GameState => ({
   passiveIncomeCap: 10000,
   energyRegenRate: 1,
   isAdmin: false,
-  displayImage: null,
+  displayImage: '/uploads/characters/aria/aria-avatar.png',
   lastTapValue: 1,
   boostActive: false,
   boostMultiplier: 1.0,

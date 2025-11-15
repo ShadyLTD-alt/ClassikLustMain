@@ -48,91 +48,88 @@ export default function CharacterGallery({ isOpen, onClose }: CharacterGalleryPr
     try {
       setLoading(true);
       setError(null);
-      const response = await apiRequest(`/api/media`, { method: 'GET' });
+
+      const response = await apiRequest('GET', '/api/media');
       if (response.ok) {
         const data = await response.json();
         const characterImages = (data.media || [])
-          .filter((img: any) => img.metadata?.characterId?.toLowerCase() === characterId.toLowerCase())
+          .filter((img: any) => 
+            img.metadata?.characterId?.toLowerCase() === characterId.toLowerCase()
+          )
           .map((img: any) => ({
             id: img.filename.split('.')[0],
             filename: img.filename,
-            url: img.url,
-            path: img.path || img.url,
+            // ✅ FIX: Build the URL from filename and characterId
+            url: `/uploads/characters/${characterId}/character/${img.filename}`,
+            path: `/uploads/characters/${characterId}/character/${img.filename}`,
             characterId: img.metadata?.characterId || characterId,
             type: img.metadata?.type || 'default',
             unlockLevel: img.metadata?.unlockLevel || 1,
             isUnlocked: !img.metadata?.unlockLevel || state.level >= img.metadata.unlockLevel,
             metadata: {
-              nsfw: img.metadata?.categories?.includes('nsfw') || false,
-              vip: img.metadata?.categories?.includes('vip') || false,
-              poses: img.metadata?.poses || []
+              category: img.metadata?.category?.includes('sfw') || 
+                       img.metadata?.category?.includes('safe') ? 'sfw' : 'nsfw',
             }
           }));
-        setImages(characterImages);
+
         console.log(`✅ [GALLERY] Loaded ${characterImages.length} images for ${characterId}`);
-      } else {
-        const data = await response.json();
-        setError(data.message || 'Failed to load images');
-        setImages([]);
+        console.log('🖼️ [GALLERY] First image:', characterImages[0]); // Debug
+
+        setImages(characterImages);
       }
-    } catch (err) {
-      console.error('❌ [GALLERY] Error loading images:', err);
-      setError('Network error - please try again');
-      setImages([]);
+    } catch (error: any) {
+      console.error('❌ [GALLERY] Error:', error);
+      setError(error.message);
     } finally {
       setLoading(false);
     }
   };
 
+
+
   // 🔧 FIXED: Proper displayImage API call with path parameter
-  const handleSetDisplayImage = async (imageId: string) => {
+  const handleSetDisplayImage = async (selected: any) => {
     try {
-      const selected = images.find(i => i.id === imageId);
-      if (!selected) {
-        console.error('❌ [GALLERY] Image not found:', imageId);
+      // Now selected.path will be: /uploads/characters/aria/image1.png
+      const imagePath = selected.path || selected.url;
+
+      console.log('🖼️ [GALLERY] Selected object:', selected);
+      console.log(`🖼️ [GALLERY] Setting display image to: ${imagePath}`);
+
+      if (!imagePath || imagePath.includes('undefined')) {
+        console.error('❌ [GALLERY] Invalid image path!');
+        alert('Error: Invalid image selected');
         return;
       }
 
-      setSettingImage(imageId);
-      setError(null);
-
-      // Use path (not url) for backend
-      const imagePath = selected.path || selected.url;
-      console.log(`🖼️ [GALLERY] Setting display image to: ${imagePath}`);
-
-      const response = await apiRequest('/api/player/set-display-image', {
-        method: 'POST',
-        body: JSON.stringify({
-          path: imagePath  // 🔧 FIXED: Use 'path' parameter (backend accepts both)
-        }),
+      const response = await apiRequest('POST', '/api/player/set-display-image', {
+        path: imagePath
       });
 
       if (response.ok) {
         const data = await response.json();
         console.log('✅ [GALLERY] Display image updated:', data.displayImage);
-        
-        // ✅ Update local state immediately
+
+        // Update local state
+        setSettingImage(imagePath);
+
+        // Update GameContext
         if (updatePlayer) {
           await updatePlayer({ displayImage: data.displayImage });
         }
-        
-        // Reload images to reflect current state
-        await loadImages(selectedCharacter);
-        
-        // Show success feedback
-        setError(null);
+
+        alert('Display image updated successfully!');
       } else {
-        const data = await response.json();
-        setError(data.error || 'Failed to set display image');
-        console.error('❌ [GALLERY] API error:', data);
+        const errorData = await response.json();
+        console.error('❌ [GALLERY] Server error:', errorData);
+        alert(`Failed to update: ${errorData.error}`);
       }
-    } catch (err) {
-      console.error('❌ [GALLERY] Exception:', err);
-      setError('Network error');
-    } finally {
-      setSettingImage(null);
+    } catch (error: any) {
+      console.error('❌ [GALLERY] Exception:', error);
+      alert(`Error: ${error.message}`);
     }
   };
+
 
   if (!isOpen) return null;
 

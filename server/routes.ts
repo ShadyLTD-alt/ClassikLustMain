@@ -257,7 +257,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             passiveIncomeRate: 0, 
             lastTapValue: 1,
             selectedCharacterId: 'aria',
-            displayImage: null, 
+            displayImage: '/uploads/characters/aria/character/default.png',
             isAdmin: false,
             consecutiveDays: 0, 
             createdAt: now, 

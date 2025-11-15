@@ -28,10 +28,7 @@ export default function CharacterSelection({ isOpen, onClose, openMenu }: Charac
       setError(null);
       setSuccessMessage(null);
       
-      const response = await apiRequest('/api/player/active-character', {
-        method: 'PATCH',
-        body: JSON.stringify({ characterId: selectedCharacterId }),
-      });
+      const response = await apiRequest('GET', '/api/player/active-character');
       
       if (response.ok) {
         const data = await response.json();
