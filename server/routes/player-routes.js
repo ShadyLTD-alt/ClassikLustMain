@@ -111,7 +111,7 @@ if (!req.body || !req.body.path) return res.status(400).json({ error: 'No imageU
 
     const updated = await updatePlayerState(player, { displayImage: path });
 
-    console.log(`✅ [DISPLAY-IMG] Successfully set to ${path}`);
+    console.log(`✅ 111111[DISPLAY-IMG] Successfully set to ${path}`);
 
     res.json({ 
       success: true, 
@@ -125,6 +125,6 @@ if (!req.body || !req.body.path) return res.status(400).json({ error: 'No imageU
   }
 });
 
-console.log('✅ [PLAYER-ROUTES] Module loaded');
+console.log('✅ 1111111111[PLAYER-ROUTES] Module loaded');
 
 module.exports = router;

@@ -62,13 +62,14 @@ export default function DevToolsCore() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [filter, setFilter] = useState<'all' | 'info' | 'warn' | 'error'>('all');
   const [autoScroll, setAutoScroll] = useState(true);
-  const [activeView, setActiveView] = useState<'console' | 'luna' | 'settings'>('console');
+  const [activeView, setActiveView] = useState<'console' | 'luna' | 'settings' | null>(null);
+  const handleMenuToggle = (view) => setActiveView(view);
   const logsEndRef = useRef<HTMLDivElement>(null);
 
   // Luna Chat State
   const [lunaMessages, setLunaMessages] = useState<ChatMessage[]>([
     {
-      text: "🌙 Hey, i'm LunaBug! Interactive AI Debugger Chat.",
+      text: "🌙 LunaBug AI Chat",
       sender: 'bot',
       timestamp: new Date().toISOString()
     }
@@ -461,7 +462,7 @@ const handleConsoleKeyDown = (e: React.KeyboardEvent) => {
           }`}
         >
           <Terminal className="w-4 h-4 inline mr-2" />
-          Console Viewer
+          Console View
         </button>
         <button
           onClick={() => setActiveView('luna')}
@@ -472,18 +473,23 @@ const handleConsoleKeyDown = (e: React.KeyboardEvent) => {
           }`}
         >
           <Moon className="w-4 h-4 inline mr-2" />
-          🌙 Luna AI Debug
+          LunaBug Debug/Chat
         </button>
-<div className="flex justify-between items-center">
   <button
-    onClick={() => setShowSettings(!showSettings)}
-    className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg flex items-center gap-2"
-  >
-    <Settings className="w-4 h-4" />
+    onClick={() => setActiveView('settings')}
+    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+    activeView === 'settings' 
+    ? 'bg-blue-600 text-white'
+     : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+          }`}
+    >
+    <Settings className="w-4 h-4 inline mr-2" />
     AI Settings
   </button>
 </div>
-      </div>
+  
+     
+    
       {/* CONSOLE VIEW */}
       {activeView === 'console' && (
         <>
@@ -709,7 +715,7 @@ const handleConsoleKeyDown = (e: React.KeyboardEvent) => {
                   disabled={lunaLoading || !apiKeySet}
                   className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 text-white rounded font-semibold"
                 >
-                  {lunaLoading ? 'Analyzing...' : 'ðŸ” Analyze Code'}
+                  {lunaLoading ? 'Analyzing...' : ' Analyze Code'}
                 </button>
               </div>
             </div>
@@ -757,7 +763,8 @@ const handleConsoleKeyDown = (e: React.KeyboardEvent) => {
         </div>
       )}
 {/*  AI SETTINGS PANEL */}
-{showSettings && (
+       {activeView === 'settings' && (
+     <div className="space-y-4">
   <div className="bg-gray-800 rounded-lg p-4 border border-purple-500/50">
     <h4 className="text-lg font-semibold text-purple-300 mb-4 flex items-center gap-2">
       <Settings className="w-5 h-5" />
@@ -777,6 +784,7 @@ const handleConsoleKeyDown = (e: React.KeyboardEvent) => {
           <option value="mistral-large-latest">Mistral Large (Best)</option>
         </select>
       </div>
+    </div>
       <div>
         <label className="text-sm text-gray-300 block mb-2">
           Temperature: {aiConfig.temperature}
