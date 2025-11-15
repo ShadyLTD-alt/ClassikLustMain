@@ -11,6 +11,14 @@ export type ChatMessage = {
   timestamp: number;
 };
 
+// Sanitize input to prevent ByteString encoding errors
+function sanitizeInput(input: string): string {
+  return input
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // Remove control chars
+    .replace(/[\uFFFD\uFFFE\uFFFF]/g, '') // Remove replacement chars
+    .trim();
+}
+
 export default function ChatModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void; }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -37,10 +45,18 @@ export default function ChatModal({ isOpen, onClose }: { isOpen: boolean; onClos
 
   const sendMessage = async () => {
     if (!input.trim() || isStreaming) return;
+    
+    // Sanitize input to prevent encoding errors
+    const sanitizedInput = sanitizeInput(input.trim());
+    if (!sanitizedInput) {
+      alert('Invalid input detected. Please avoid special characters.');
+      return;
+    }
+
     const userMsg: ChatMessage = { 
       id: crypto.randomUUID(), 
       role: 'user', 
-      content: input.trim(), 
+      content: sanitizedInput, 
       timestamp: Date.now() 
     };
     setMessages(prev => [...prev, userMsg]);
@@ -52,11 +68,11 @@ export default function ChatModal({ isOpen, onClose }: { isOpen: boolean; onClos
       const res = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/json; charset=utf-8',
           'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`
         },
         body: JSON.stringify({ 
-          message: userMsg.content,
+          message: sanitizedInput,
           characterId: state?.selectedCharacterId,
           characterName: currentCharacter?.name || 'Assistant'
         }),
@@ -65,7 +81,7 @@ export default function ChatModal({ isOpen, onClose }: { isOpen: boolean; onClos
       if (res.headers.get('content-type')?.includes('text/event-stream')) {
         // SSE streaming response
         const reader = res.body!.getReader();
-        const decoder = new TextDecoder();
+        const decoder = new TextDecoder('utf-8');
         let assistant: ChatMessage = { 
           id: crypto.randomUUID(), 
           role: 'assistant', 
@@ -94,12 +110,16 @@ export default function ChatModal({ isOpen, onClose }: { isOpen: boolean; onClos
       } else {
         throw new Error(`Server responded with ${res.status}`);
       }
-    } catch (e) {
-      console.log('AI Chat endpoint not ready:', e);
+    } catch (e: any) {
+      console.error('AI Chat error:', e);
+      const errorMessage = e.message?.includes('ByteString') 
+        ? 'Invalid characters detected. Please use standard text only.'
+        : `Hi ${currentCharacter?.name || 'there'}! AI chat is coming soon... 🤖✨`;
+      
       const err: ChatMessage = { 
         id: crypto.randomUUID(), 
         role: 'assistant', 
-        content: `Hi ${state?.selectedCharacterId || 'there'}! AI chat is coming soon... 🤖✨`, 
+        content: errorMessage, 
         timestamp: Date.now() 
       };
       setMessages(prev => [...prev, err]);
@@ -204,6 +224,7 @@ export default function ChatModal({ isOpen, onClose }: { isOpen: boolean; onClos
               placeholder={`Message ${currentCharacter?.name || 'AI'}...`}
               className="flex-1 bg-black/40 border border-purple-500/30 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-400 outline-none focus:border-purple-400 transition-colors" 
               disabled={isStreaming}
+              maxLength={500}
             />
             <button 
               onClick={sendMessage} 
@@ -212,6 +233,9 @@ export default function ChatModal({ isOpen, onClose }: { isOpen: boolean; onClos
             >
               {isStreaming ? '...' : 'Send'}
             </button>
+          </div>
+          <div className="text-xs text-gray-500 mt-2 text-center">
+            Use standard text only. Special characters may be filtered.
           </div>
         </div>
       </div>
