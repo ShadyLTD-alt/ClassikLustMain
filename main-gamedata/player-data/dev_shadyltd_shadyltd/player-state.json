@@ -2,10 +2,10 @@
   "id": "dev_shadyltd",
   "username": "shadyltd",
   "telegramId": "",
-  "points": 19477,
-  "lustPoints": 19477,
+  "points": 20137,
+  "lustPoints": 20137,
   "lustGems": 10,
-  "energy": 3999,
+  "energy": 3996,
   "energyMax": 4000,
   "level": 5,
   "passiveIncomeRate": 330,
@@ -23,8 +23,8 @@
     "extra-tap-power": 18
   },
   "unlockedCharacters": [],
-  "totalTapsAllTime": 291,
-  "totalTapsToday": 291,
+  "totalTapsAllTime": 301,
+  "totalTapsToday": 301,
   "lpEarnedToday": 0,
   "upgradesPurchasedToday": 174,
   "consecutiveDays": 0,
@@ -38,7 +38,7 @@
   ],
   "claimedAchievements": [],
   "createdAt": "2025-11-09T01:23:13.437Z",
-  "updatedAt": "2025-11-15T14:29:39.131Z",
+  "updatedAt": "2025-11-15T14:59:22.879Z",
   "activeCharacter": "aria",
   "lastActiveAt": "2025-11-09T01:23:25.874Z"
 }
