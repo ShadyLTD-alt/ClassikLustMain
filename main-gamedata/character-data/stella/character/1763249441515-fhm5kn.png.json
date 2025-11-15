@@ -1,0 +1,13 @@
+{
+  "characterId": "stella",
+  "type": "Character",
+  "levelRequired": 1,
+  "nsfw": false,
+  "vip": false,
+  "event": false,
+  "hideFromGallery": false,
+  "random": false,
+  "enableForChat": false,
+  "chatSendPercent": 0,
+  "poses": []
+}
