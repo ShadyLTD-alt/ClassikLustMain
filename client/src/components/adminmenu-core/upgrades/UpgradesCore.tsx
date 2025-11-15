@@ -30,7 +30,7 @@ export default function UpgradesCore() {
   const loadUpgrades = async () => {
     try {
       setLoading(true);
-      const response = await apiRequest('/api/admin/upgrades');
+      const response = await apiRequest('GET', '/api/admin/upgrades');
       const data = await response.json();
       setUpgrades(data.upgrades || []);
     } catch (error) {
@@ -44,7 +44,7 @@ export default function UpgradesCore() {
   const handleDelete = async (upgradeId: string) => {
     if (!confirm(`Delete upgrade "${upgradeId}"? This cannot be undone.`)) return;
     try {
-      const response = await apiRequest(`/api/admin/upgrades/${upgradeId}`, { method: 'DELETE' });
+      const response = await apiRequest('DELETE', `/api/admin/upgrades/${upgradeId}`);
       if (response.ok) {
         await loadUpgrades();
         alert('Upgrade deleted successfully!');
