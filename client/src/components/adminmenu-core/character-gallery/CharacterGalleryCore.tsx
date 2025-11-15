@@ -58,7 +58,7 @@ export default function CharacterGalleryCore() {
   const loadImages = async () => {
     try {
       setLoading(true);
-      const response = await apiRequest('/api/media');
+      const response = await apiRequest('GET', '/api/media');
       const data = await response.json();
       console.log('📸 [GALLERY] Loaded images:', data);
       setImages(data.media || []);
@@ -86,10 +86,7 @@ export default function CharacterGalleryCore() {
     if (!editingImage) return;
 
     try {
-      const response = await apiRequest(`/api/media/${editingImage.filename}`, {
-        method: 'PUT',
-        body: JSON.stringify({ metadata: editedMetadata })
-      });
+      const response = await apiRequest('PUT', `/api/media/${editingImage.filename}`, { metadata: editedMetadata });
 
       if (response.ok) {
         await loadImages();
@@ -107,9 +104,7 @@ export default function CharacterGalleryCore() {
     if (!confirm(`Delete "${filename}"?`)) return;
 
     try {
-      const response = await apiRequest(`/api/media/${encodeURIComponent(filename)}`, {
-        method: 'DELETE'
-      });
+      const response = await apiRequest('DELETE', `/api/media/${encodeURIComponent(filename)}`);
 
       if (response.ok) {
         await loadImages();

@@ -41,7 +41,7 @@ export default function LevelupCore() {
     if (!confirm(`Delete level ${level}? This cannot be undone.`)) return;
     
     try {
-      const response = await apiRequest('DELETE', '/api/admin/levels/${level})')
+      const response = await apiRequest('DELETE', `/api/admin/levels/${level}`);
       if (response.ok) {
         await loadLevels();
         alert('Level deleted successfully!');
