@@ -47,14 +47,14 @@ Be thorough, technical, and educational. Users want to LEARN, not just get quick
 };
 
 const CLI_COMMANDS = [
-  { cmd: 'luna.cli.status()', desc: 'Show Luna system status', icon: '📊' },
-  { cmd: 'luna.cli.health()', desc: 'Quick health check', icon: '💚' },
-  { cmd: 'await luna.cli.diagnose()', desc: 'Run full system diagnostic', icon: '🔍' },
-  { cmd: 'luna.cli.logs(20)', desc: 'Show last 20 log entries', icon: '📝' },
-  { cmd: 'luna.cli.errors(10)', desc: 'Show last 10 errors', icon: '🚨' },
-  { cmd: 'luna.cli.plugins()', desc: 'List all loaded plugins', icon: '🔌' },
-  { cmd: 'await luna.cli.audit()', desc: 'Force schema audit', icon: '🧪' },
-  { cmd: 'luna.cli.help()', desc: 'Show all available commands', icon: '❓' 
+  { cmd: 'luna.cli.status()', desc: 'Show Luna system status', icon: 'ðŸ“Š' },
+  { cmd: 'luna.cli.health()', desc: 'Quick health check', icon: 'ðŸ’š' },
+  { cmd: 'await luna.cli.diagnose()', desc: 'Run full system diagnostic', icon: 'ðŸ”' },
+  { cmd: 'luna.cli.logs(20)', desc: 'Show last 20 log entries', icon: 'ðŸ“' },
+  { cmd: 'luna.cli.errors(10)', desc: 'Show last 10 errors', icon: 'ðŸš¨' },
+  { cmd: 'luna.cli.plugins()', desc: 'List all loaded plugins', icon: 'ðŸ”Œ' },
+  { cmd: 'await luna.cli.audit()', desc: 'Force schema audit', icon: 'ðŸ§ª' },
+  { cmd: 'luna.cli.help()', desc: 'Show all available commands', icon: 'â“' 
   },
 ];
 
@@ -68,7 +68,7 @@ export default function DevToolsCore() {
   // Luna Chat State
   const [lunaMessages, setLunaMessages] = useState<ChatMessage[]>([
     {
-      text: "🌙 Hey, i'm LunaBug! Interactive AI Debugger Chat.",
+      text: "ðŸŒ™ Hey, i'm LunaBug! Interactive AI Debugger Chat.",
       sender: 'bot',
       timestamp: new Date().toISOString()
     }
@@ -180,7 +180,7 @@ const [historyIndex, setHistoryIndex] = useState(-1);
     }
     localStorage.setItem('mistral_api_key', apiKey);
     setApiKeySet(true);
-    alert('🌙 Luna AI Connected!');
+    alert('ðŸŒ™ Luna AI Connected!');
   };
 
   const handleStructuredDebug = async () => {
@@ -223,14 +223,14 @@ Provide a clear analysis and solution.`;
       });
 
       if (!response.ok) throw new Error('API request failed');
-      
+
       const result = await response.json();
       const botResponse = result.choices?.[0]?.message?.content || 'No response received';
 
       setLunaMessages(prev => [
         ...prev,
         {
-          text: `🔍 Debugging: ${structuredDebugData.error.substring(0, 50)}...`,
+          text: `ðŸ” Debugging: ${structuredDebugData.error.substring(0, 50)}...`,
           sender: 'user',
           timestamp: new Date().toISOString()
         },
@@ -287,7 +287,7 @@ Provide a clear analysis and solution.`;
       });
 
       if (!response.ok) throw new Error('API request failed');
-      
+
       const result = await response.json();
       const botResponse = result.choices?.[0]?.message?.content || 'No response received';
 
@@ -303,7 +303,7 @@ Provide a clear analysis and solution.`;
       setLunaMessages(prev => [
         ...prev,
         {
-          text: `❌ ${error.message}`,
+          text: `âŒ ${error.message}`,
           sender: 'bot',
           timestamp: new Date().toISOString()
         }
@@ -313,7 +313,7 @@ Provide a clear analysis and solution.`;
     }
   };
 
-  
+
 
 // Save AI config whenever it changes
 useEffect(() => {
@@ -324,7 +324,7 @@ useEffect(() => {
   const resetAIConfig = () => {
   if (confirm('Reset AI configuration to defaults?')) {
     setAiConfig(DEFAULT_AI_CONFIG);
-    alert('✅ AI Config reset to defaults!');
+    alert('âœ… AI Config reset to defaults!');
   }
 };
 
@@ -333,20 +333,20 @@ const executeConsoleCommand = (command: string) => {
     // Add to history
     setConsoleHistory(prev => [...prev, command]);
     setHistoryIndex(-1);
-    
+
     // Log the command
     addLog('info', `> ${command}`);
-    
+
     // Execute via eval (admin dev tools only)
     const result = eval(command);
-    
+
     // Log result
     if (result !== undefined) {
       const resultStr = typeof result === 'object' ? JSON.stringify(result, null, 2) : String(result);
-      addLog('info', `← ${resultStr}`);
+      addLog('info', `â† ${resultStr}`);
     }
   } catch (error: any) {
-    addLog('error', `❌ ${error.message}`);
+    addLog('error', `âŒ ${error.message}`);
   }
 };
 
@@ -445,7 +445,7 @@ const handleConsoleKeyDown = (e: React.KeyboardEvent) => {
           }`}
         >
           <Moon className="w-4 h-4 inline mr-2" />
-          🌙 Luna AI Debug
+          ðŸŒ™ Luna AI Debug
         </button>
       </div>
 <div className="flex justify-between items-center">
@@ -464,11 +464,11 @@ const handleConsoleKeyDown = (e: React.KeyboardEvent) => {
     AI Settings
   </button>
 </div>
-      
+
       {/* CONSOLE VIEW */}
       {activeView === 'console' && (
         <>
-          {/* 📟 Command List UI */}
+          {/* ðŸ“Ÿ Command List UI */}
     <div className="bg-gray-800 rounded-lg p-4 border border-green-500/30">
       <h4 className="text-sm font-semibold text-green-300 mb-3 flex items-center gap-2">
         <Command className="w-4 h-4" />
@@ -510,7 +510,7 @@ const handleConsoleKeyDown = (e: React.KeyboardEvent) => {
       value={consoleInput}
       onChange={(e) => setConsoleInput(e.target.value)}
       onKeyDown={handleConsoleKeyDown}
-      placeholder="Type command or select from list above... (↑/↓ for history)"
+      placeholder="Type command or select from list above... (â†‘/â†“ for history)"
       className="flex-1 px-3 py-2 bg-gray-900 border border-gray-700 rounded text-white font-mono text-sm"
     />
     <button
@@ -527,10 +527,10 @@ const handleConsoleKeyDown = (e: React.KeyboardEvent) => {
     </button>
   </div>
   <p className="text-xs text-gray-500 mt-2">
-    ⚡ Quick access to Luna CLI commands. Press Enter to execute, ↑/↓ for history.
+    âš¡ Quick access to Luna CLI commands. Press Enter to execute, â†‘/â†“ for history.
   </p>
 </div>
-          
+
           <div className="flex justify-between items-center bg-gray-800 p-3 rounded-lg">
             <div className="flex gap-2">
               <button
@@ -690,7 +690,7 @@ const handleConsoleKeyDown = (e: React.KeyboardEvent) => {
                   disabled={lunaLoading || !apiKeySet}
                   className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 text-white rounded font-semibold"
                 >
-                  {lunaLoading ? 'Analyzing...' : '🔍 Analyze Code'}
+                  {lunaLoading ? 'Analyzing...' : 'ðŸ” Analyze Code'}
                 </button>
               </div>
             </div>
@@ -737,7 +737,7 @@ const handleConsoleKeyDown = (e: React.KeyboardEvent) => {
           </div>
         </div>
       )}
-{/* ⚙️ AI SETTINGS PANEL */}
+{/* âš™ï¸ AI SETTINGS PANEL */}
 {showSettings && (
   <div className="bg-gray-800 rounded-lg p-4 border border-purple-500/50">
     <h4 className="text-lg font-semibold text-purple-300 mb-4 flex items-center gap-2">
@@ -816,7 +816,7 @@ const handleConsoleKeyDown = (e: React.KeyboardEvent) => {
           <button
             onClick={() => {
               localStorage.clear();
-              alert('✅ Cache cleared! Reload page to reset.');
+              alert('âœ… Cache cleared! Reload page to reset.');
             }}
             className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-sm flex items-center justify-center gap-2"
           >
@@ -838,7 +838,7 @@ const handleConsoleKeyDown = (e: React.KeyboardEvent) => {
               console.log('LocalStorage:', localStorage);
               console.log('SessionStorage:', sessionStorage);
               console.log('Current URL:', window.location.href);
-              alert('✅ State dumped to console!');
+              alert('âœ… State dumped to console!');
             }}
             className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm flex items-center justify-center gap-2"
           >
