@@ -113,7 +113,7 @@ app.use((req, res, next) => {
     // Step 3: Import Luna API routes
     // @ts-ignore
     const lunaApi = await import('./routes/luna.js');
-    lunaRouter = lunaApi.router;
+    lunaRouter = lunaApi.default;
     setLunaInstance = lunaApi.setLunaInstance;
     logger.info('✅ [LunaBug] API routes imported');
     
@@ -126,17 +126,15 @@ app.use((req, res, next) => {
       setLunaInstance(luna);
       logger.info('✅ [LunaBug] Instance is connected to API routes');
       luna.errorQueue = new ErrorQueue(luna);
-registerErrorQueueCommands(luna);
+      registerErrorQueueCommands(luna);
     }
     
-    
-    // ---- ADD THIS ----
+    // Expose Luna globally for CLI access
     if (luna) {
       (global as any).luna = luna;
       logger.info('🌙 Luna instance exposed globally for CLI access');
       logger.info('💻 Try: luna.cli.status(), luna.cli.help()');
     }
-    // ---- END ADDITION ----
 
     logger.info('✅ 🌙 [LunaBug] Instance initialized successfully');
   } catch (err) {
@@ -195,14 +193,27 @@ registerErrorQueueCommands(luna);
     logger.warn('⚠️ [PHASE 6] Luna API routes not available');
   }
 
-  logger.info('✅ All routes registered successfully');
+  logger.info('✅ All API routes registered successfully');
 
   // ✅ Phase 7: Static file serving
   logger.info('📁 [PHASE 7] Setting up static file serving...');
   app.use("/uploads", express.static(path.join(__dirname, "..", "uploads")));
   logger.info('✅ Static files configured at /uploads');
 
-  // Error handler middleware
+  // ✅ Phase 8: Vite setup or static serving (BEFORE error handler!)
+  logger.info('👨‍💻 [PHASE 8] Setting up frontend serving...');
+  if (app.get("env") === "development") {
+    logger.info('Setting up Vite dev server...');
+    await setupVite(app, server);
+    logger.info('Vite dev server ready');
+  } else {
+    logger.info('Serving static files (production mode)...');
+    serveStatic(app);
+    logger.info('Static files ready');
+  }
+
+  // ✅ FIXED: Error handler middleware MUST be registered LAST (after Vite)
+  logger.info('⚠️ [PHASE 8.5] Registering error handler (AFTER all routes)...');
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
@@ -216,18 +227,7 @@ registerErrorQueueCommands(luna);
 
     res.status(status).json({ message, error: err.message });
   });
-
-  // ✅ Phase 8: Vite setup or static serving
-  logger.info('👨‍💻 [PHASE 8] Setting up frontend serving...');
-  if (app.get("env") === "development") {
-    logger.info('Setting up Vite dev server...');
-    await setupVite(app, server);
-    logger.info('Vite dev server ready');
-  } else {
-    logger.info('Serving static files (production mode)...');
-    serveStatic(app);
-    logger.info('Static files ready');
-  }
+  logger.info('✅ Error handler registered');
 
   // ✅ Phase 9: Start server
   const port = parseInt(process.env.PORT || '5000', 10);
