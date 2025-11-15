@@ -47,14 +47,14 @@ Be thorough, technical, and educational. Users want to LEARN, not just get quick
 };
 
 const CLI_COMMANDS = [
-  { cmd: 'luna.cli.status()', desc: 'Show Luna system status', icon: 'ðŸ“Š' },
-  { cmd: 'luna.cli.health()', desc: 'Quick health check', icon: 'ðŸ’š' },
-  { cmd: 'await luna.cli.diagnose()', desc: 'Run full system diagnostic', icon: 'ðŸ”' },
-  { cmd: 'luna.cli.logs(20)', desc: 'Show last 20 log entries', icon: 'ðŸ“' },
-  { cmd: 'luna.cli.errors(10)', desc: 'Show last 10 errors', icon: 'ðŸš¨' },
-  { cmd: 'luna.cli.plugins()', desc: 'List all loaded plugins', icon: 'ðŸ”Œ' },
-  { cmd: 'await luna.cli.audit()', desc: 'Force schema audit', icon: 'ðŸ§ª' },
-  { cmd: 'luna.cli.help()', desc: 'Show all available commands', icon: 'â“' 
+  { cmd: 'luna.cli.status()', desc: 'Show Luna system status', icon: '📊' },
+  { cmd: 'luna.cli.health()', desc: 'Quick health check', icon: '💚' },
+  { cmd: 'await luna.cli.diagnose()', desc: 'Run full system diagnostic', icon: '🔍' },
+  { cmd: 'luna.cli.logs(20)', desc: 'Show last 20 log entries', icon: '📝' },
+  { cmd: 'luna.cli.errors(10)', desc: 'Show last 10 errors', icon: '🚨' },
+  { cmd: 'luna.cli.plugins()', desc: 'List all loaded plugins', icon: '🔌' },
+  { cmd: 'await luna.cli.audit()', desc: 'Force schema audit', icon: '🧪' },
+  { cmd: 'luna.cli.help()', desc: 'Show all available commands', icon: '❓' 
   },
 ];
 
@@ -62,13 +62,13 @@ export default function DevToolsCore() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [filter, setFilter] = useState<'all' | 'info' | 'warn' | 'error'>('all');
   const [autoScroll, setAutoScroll] = useState(true);
-  const [activeView, setActiveView] = useState<'console' | 'luna'>('console');
+  const [activeView, setActiveView] = useState<'console' | 'luna' | 'settings'>('console');
   const logsEndRef = useRef<HTMLDivElement>(null);
 
   // Luna Chat State
   const [lunaMessages, setLunaMessages] = useState<ChatMessage[]>([
     {
-      text: "ðŸŒ™ Hey, i'm LunaBug! Interactive AI Debugger Chat.",
+      text: "🌙 Hey, i'm LunaBug! Interactive AI Debugger Chat.",
       sender: 'bot',
       timestamp: new Date().toISOString()
     }
@@ -180,7 +180,7 @@ const [historyIndex, setHistoryIndex] = useState(-1);
     }
     localStorage.setItem('mistral_api_key', apiKey);
     setApiKeySet(true);
-    alert('ðŸŒ™ Luna AI Connected!');
+    alert(',🌙 [LunaBug] AI API Connected!');
   };
 
   const handleStructuredDebug = async () => {
@@ -230,7 +230,7 @@ Provide a clear analysis and solution.`;
       setLunaMessages(prev => [
         ...prev,
         {
-          text: `ðŸ” Debugging: ${structuredDebugData.error.substring(0, 50)}...`,
+          text: ` Debugging: ${structuredDebugData.error.substring(0, 50)}...`,
           sender: 'user',
           timestamp: new Date().toISOString()
         },
@@ -303,7 +303,7 @@ Provide a clear analysis and solution.`;
       setLunaMessages(prev => [
         ...prev,
         {
-          text: `âŒ ${error.message}`,
+          text: ` ${error.message}`,
           sender: 'bot',
           timestamp: new Date().toISOString()
         }
@@ -324,7 +324,7 @@ useEffect(() => {
   const resetAIConfig = () => {
   if (confirm('Reset AI configuration to defaults?')) {
     setAiConfig(DEFAULT_AI_CONFIG);
-    alert('âœ… AI Config reset to defaults!');
+    alert('AI Config reset to defaults!');
   }
 };
 
@@ -472,26 +472,18 @@ const handleConsoleKeyDown = (e: React.KeyboardEvent) => {
           }`}
         >
           <Moon className="w-4 h-4 inline mr-2" />
-          ðŸŒ™ Luna AI Debug
+          🌙 Luna AI Debug
         </button>
-      </div>
 <div className="flex justify-between items-center">
-  <div>
-    <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-      <Terminal className="w-5 h-5 text-green-400" />
-      Developer Tools
-    </h3>
-    <p className="text-sm text-gray-400">Console viewer + Luna AI debugging assistant</p>
-  </div>
   <button
     onClick={() => setShowSettings(!showSettings)}
-    className="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg flex items-center gap-2"
+    className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg flex items-center gap-2"
   >
     <Settings className="w-4 h-4" />
     AI Settings
   </button>
 </div>
-
+      </div>
       {/* CONSOLE VIEW */}
       {activeView === 'console' && (
         <>
@@ -537,7 +529,7 @@ const handleConsoleKeyDown = (e: React.KeyboardEvent) => {
       value={consoleInput}
       onChange={(e) => setConsoleInput(e.target.value)}
       onKeyDown={handleConsoleKeyDown}
-      placeholder="Type command or select from list above... (â†‘/â†“ for history)"
+            placeholder="Type command or select from list above... (↑/↓ for history)"
       className="flex-1 px-3 py-2 bg-gray-900 border border-gray-700 rounded text-white font-mono text-sm"
     />
     <button
@@ -554,7 +546,7 @@ const handleConsoleKeyDown = (e: React.KeyboardEvent) => {
     </button>
   </div>
   <p className="text-xs text-gray-500 mt-2">
-    âš¡ Quick access to Luna CLI commands. Press Enter to execute, â†‘/â†“ for history.
+    Quick access to Luna CLI commands. Press Enter to execute, (↑/↓) for history.
   </p>
 </div>
 
@@ -764,7 +756,7 @@ const handleConsoleKeyDown = (e: React.KeyboardEvent) => {
           </div>
         </div>
       )}
-{/* âš™ï¸ AI SETTINGS PANEL */}
+{/*  AI SETTINGS PANEL */}
 {showSettings && (
   <div className="bg-gray-800 rounded-lg p-4 border border-purple-500/50">
     <h4 className="text-lg font-semibold text-purple-300 mb-4 flex items-center gap-2">

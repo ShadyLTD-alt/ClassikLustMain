@@ -8,6 +8,9 @@ import fs from "fs";
 import logger from "./logger";
 import adminRouter from "./routes/admin";
 import { requireAuth, requireAdmin } from "./middleware/auth";
+import ErrorQueue from '../LunaBug/plugins/luna/errorQueue';
+import { registerErrorQueueCommands } from '../LunaBug/plugins/luna/cli/errorQueueCommands';
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -122,7 +125,10 @@ app.use((req, res, next) => {
     if (setLunaInstance && luna) {
       setLunaInstance(luna);
       logger.info('✅ [LunaBug] Instance is connected to API routes');
+      luna.errorQueue = new ErrorQueue(luna);
+registerErrorQueueCommands(luna);
     }
+    
     
     // ---- ADD THIS ----
     if (luna) {
