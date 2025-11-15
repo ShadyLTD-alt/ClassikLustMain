@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Terminal, Activity, Database, Zap, Trash2, RefreshCw, Moon, MessageSquare, Code, Send, Settings, Command, Play } from 'lucide-react';
+import { apiRequest } from '@/lib/queryClient';
 
 
 interface LogEntry {
@@ -63,7 +64,6 @@ export default function DevToolsCore() {
   const [filter, setFilter] = useState<'all' | 'info' | 'warn' | 'error'>('all');
   const [autoScroll, setAutoScroll] = useState(true);
   const [activeView, setActiveView] = useState<'console' | 'luna' | 'settings' | null>(null);
-  const handleMenuToggle = (view) => setActiveView(view);
   const logsEndRef = useRef<HTMLDivElement>(null);
 
   // Luna Chat State
@@ -127,7 +127,6 @@ export default function DevToolsCore() {
   }, [lunaMessages]);
 
   // AI Configuration State
-const [showSettings, setShowSettings] = useState(false);
 const [aiConfig, setAiConfig] = useState<AIConfig>(() => {
   const saved = localStorage.getItem('luna_ai_config');
   return saved ? JSON.parse(saved) : DEFAULT_AI_CONFIG;
@@ -137,6 +136,7 @@ const [aiConfig, setAiConfig] = useState<AIConfig>(() => {
 const [consoleInput, setConsoleInput] = useState('');
 const [consoleHistory, setConsoleHistory] = useState<string[]>([]);
 const [historyIndex, setHistoryIndex] = useState(-1);
+  
   const addLog = (level: 'info' | 'warn' | 'error', message: string) => {
     setLogs(prev => {
       const newLogs = [...prev, {
@@ -231,7 +231,7 @@ Provide a clear analysis and solution.`;
       setLunaMessages(prev => [
         ...prev,
         {
-          text: ` Debugging: ${structuredDebugData.error.substring(0, 50)}...`,
+          text: ` Debugging: ${structuredDebugData.error.substring(0, 50)}...`,
           sender: 'user',
           timestamp: new Date().toISOString()
         },
@@ -304,7 +304,7 @@ Provide a clear analysis and solution.`;
       setLunaMessages(prev => [
         ...prev,
         {
-          text: ` ${error.message}`,
+          text: ` ${error.message}`,
           sender: 'bot',
           timestamp: new Date().toISOString()
         }
@@ -329,13 +329,14 @@ useEffect(() => {
   }
 };
 
+  // ✅ FIXED: Use apiRequest for authenticated Luna API calls
   const executeConsoleCommand = async (command: string) => {
     try {
       setConsoleHistory(prev => [...prev, command]);
       setHistoryIndex(-1);
       addLog('info', `> ${command}`);
 
-      // Luna CLI: route to API
+      // Luna CLI: route to API with authentication
       if (command.includes('luna.cli.')) {
         const methodMatch = command.match(/luna\.cli\.(\w+)\(/);
         if (methodMatch) {
@@ -343,16 +344,10 @@ useEffect(() => {
           addLog('info', `⏳ Executing ${method}...`);
 
           try {
-            const response = await fetch(`/api/luna/${method}`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' }
-            });
-
-            if (!response.ok) {
-              throw new Error(`Luna API error: ${response.statusText}`);
-            }
-
+            // ✅ Use apiRequest which includes authentication headers
+            const response = await apiRequest('POST', `/api/luna/${method}`);
             const result = await response.json();
+            
             const resultStr = typeof result === 'object' ? JSON.stringify(result, null, 2) : String(result);
             addLog('info', `✅ ${resultStr}`);
           } catch (apiError: any) {
@@ -454,7 +449,7 @@ const handleConsoleKeyDown = (e: React.KeyboardEvent) => {
       {/* View Toggle */}
       <div className="flex gap-2">
         <button
-          onClick={() => setActiveView('console')}
+          onClick={() => setActiveView(activeView === 'console' ? null : 'console')}
           className={`px-4 py-2 rounded-lg font-medium transition-colors ${
             activeView === 'console'
               ? 'bg-green-600 text-white'
@@ -462,10 +457,10 @@ const handleConsoleKeyDown = (e: React.KeyboardEvent) => {
           }`}
         >
           <Terminal className="w-4 h-4 inline mr-2" />
-          Console View
+          Console Viewer
         </button>
         <button
-          onClick={() => setActiveView('luna')}
+          onClick={() => setActiveView(activeView === 'luna' ? null : 'luna')}
           className={`px-4 py-2 rounded-lg font-medium transition-colors ${
             activeView === 'luna'
               ? 'bg-purple-600 text-white'
@@ -473,27 +468,25 @@ const handleConsoleKeyDown = (e: React.KeyboardEvent) => {
           }`}
         >
           <Moon className="w-4 h-4 inline mr-2" />
-          LunaBug Debug/Chat
+          🌙 Luna AI Debug
         </button>
-  <button
-    onClick={() => setActiveView('settings')}
-    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-    activeView === 'settings' 
-    ? 'bg-blue-600 text-white'
-     : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+        <button
+          onClick={() => setActiveView(activeView === 'settings' ? null : 'settings')}
+          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+            activeView === 'settings'
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
           }`}
-    >
-    <Settings className="w-4 h-4 inline mr-2" />
-    AI Settings
-  </button>
-</div>
-  
-     
-    
+        >
+          <Settings className="w-4 h-4 inline mr-2" />
+          AI Settings
+        </button>
+      </div>
+      
       {/* CONSOLE VIEW */}
       {activeView === 'console' && (
         <>
-          {/* ðŸ“Ÿ Command List UI */}
+          {/* 📏 Command List UI */}
     <div className="bg-gray-800 rounded-lg p-4 border border-green-500/30">
       <h4 className="text-sm font-semibold text-green-300 mb-3 flex items-center gap-2">
         <Command className="w-4 h-4" />
@@ -522,7 +515,9 @@ const handleConsoleKeyDown = (e: React.KeyboardEvent) => {
           </button>
         ))}
       </div>
-    </div>{/* Interactive Console Input */}
+    </div>
+    
+    {/* Interactive Console Input */}
 <div className="bg-gray-800 rounded-lg p-3 border border-green-500/30">
   <div className="flex items-center gap-2 mb-2">
     <Terminal className="w-4 h-4 text-green-400" />
@@ -715,7 +710,7 @@ const handleConsoleKeyDown = (e: React.KeyboardEvent) => {
                   disabled={lunaLoading || !apiKeySet}
                   className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 text-white rounded font-semibold"
                 >
-                  {lunaLoading ? 'Analyzing...' : ' Analyze Code'}
+                  {lunaLoading ? 'Analyzing...' : '🔍 Analyze Code'}
                 </button>
               </div>
             </div>
@@ -762,9 +757,9 @@ const handleConsoleKeyDown = (e: React.KeyboardEvent) => {
           </div>
         </div>
       )}
-{/*  AI SETTINGS PANEL */}
-       {activeView === 'settings' && (
-     <div className="space-y-4">
+      
+{/*  AI SETTINGS PANEL */}
+{activeView === 'settings' && (
   <div className="bg-gray-800 rounded-lg p-4 border border-purple-500/50">
     <h4 className="text-lg font-semibold text-purple-300 mb-4 flex items-center gap-2">
       <Settings className="w-5 h-5" />
@@ -784,7 +779,6 @@ const handleConsoleKeyDown = (e: React.KeyboardEvent) => {
           <option value="mistral-large-latest">Mistral Large (Best)</option>
         </select>
       </div>
-    </div>
       <div>
         <label className="text-sm text-gray-300 block mb-2">
           Temperature: {aiConfig.temperature}
@@ -836,6 +830,7 @@ const handleConsoleKeyDown = (e: React.KeyboardEvent) => {
     </div>
   </div>
 )}
+
       {/* Quick Actions */}
       <div className="bg-gray-800 rounded-lg p-4">
         <h4 className="text-sm font-semibold text-white mb-3">Quick Actions</h4>
@@ -843,7 +838,7 @@ const handleConsoleKeyDown = (e: React.KeyboardEvent) => {
           <button
             onClick={() => {
               localStorage.clear();
-              alert('âœ… Cache cleared! Reload page to reset.');
+              alert('✅ Cache cleared! Reload page to reset.');
             }}
             className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-sm flex items-center justify-center gap-2"
           >
@@ -865,7 +860,7 @@ const handleConsoleKeyDown = (e: React.KeyboardEvent) => {
               console.log('LocalStorage:', localStorage);
               console.log('SessionStorage:', sessionStorage);
               console.log('Current URL:', window.location.href);
-              alert('âœ… State dumped to console!');
+              alert('✅ State dumped to console!');
             }}
             className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm flex items-center justify-center gap-2"
           >
