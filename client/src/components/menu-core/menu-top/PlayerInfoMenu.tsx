@@ -49,9 +49,9 @@ export default function PlayerInfoMenu({ isOpen, onClose, openMenu }: Props) {
   
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      {/* ✅ FIXED: Ultra-high z-index + portal rendering */}
+      {/* ✅ FIXED: Solid background with backdrop blur */}
       <DialogContent 
-        className="max-w-2xl bg-gray-900/98 border-purple-500/30" 
+        className="max-w-2xl bg-gray-900 border-purple-500/30 backdrop-blur-xl" 
         style={{ zIndex: 999999 }}
       >
         <DialogHeader>
@@ -77,7 +77,7 @@ export default function PlayerInfoMenu({ isOpen, onClose, openMenu }: Props) {
         
         {state && (
           <div className="space-y-6">
-            <div className="flex items-center gap-4 p-4 bg-gray-800/30 rounded-lg border border-gray-700/50">
+            <div className="flex items-center gap-4 p-4 bg-gray-800/50 rounded-lg border border-gray-700/50">
               <Button
                 onClick={handleCharacterGalleryClick}
                 className="w-12 h-12 bg-purple-600/20 hover:bg-purple-600/30 rounded-lg flex items-center justify-center transition-colors border border-purple-500/30 p-0"
@@ -113,21 +113,21 @@ export default function PlayerInfoMenu({ isOpen, onClose, openMenu }: Props) {
             </div>
 
             <div className="grid grid-cols-3 gap-4">
-              <div className="p-4 bg-gray-800/30 rounded-lg border border-gray-700/50 text-center">
+              <div className="p-4 bg-gray-800/50 rounded-lg border border-gray-700/50 text-center">
                 <div className="text-2xl font-bold text-transparent bg-gradient-to-r from-pink-400 via-purple-400 to-pink-500 bg-clip-text">
                   {Math.round(state.lustPoints || state.points || 0).toLocaleString()}
                 </div>
                 <div className="text-purple-300 text-sm">Current LP</div>
               </div>
               
-              <div className="p-4 bg-gray-800/30 rounded-lg border border-gray-700/50 text-center">
+              <div className="p-4 bg-gray-800/50 rounded-lg border border-gray-700/50 text-center">
                 <div className="text-2xl font-bold text-transparent bg-gradient-to-r from-emerald-400 via-cyan-400 to-emerald-500 bg-clip-text">
                   {Math.round(state.lustGems || 0).toLocaleString()}
                 </div>
                 <div className="text-purple-300 text-sm">Lust Gems</div>
               </div>
               
-              <div className="p-4 bg-gray-800/30 rounded-lg border border-gray-700/50 text-center">
+              <div className="p-4 bg-gray-800/50 rounded-lg border border-gray-700/50 text-center">
                 <div className="text-2xl font-bold text-purple-400">
                   {Math.round(state.passiveIncomeRate || 0)}
                 </div>
@@ -136,28 +136,28 @@ export default function PlayerInfoMenu({ isOpen, onClose, openMenu }: Props) {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <div className="p-3 bg-gray-800/30 rounded-lg border border-gray-700/50">
+              <div className="p-3 bg-gray-800/50 rounded-lg border border-gray-700/50">
                 <div className="text-lg font-bold text-white">
                   {Math.round(state.totalTapsAllTime || 0).toLocaleString()}
                 </div>
                 <div className="text-gray-400 text-sm">Total Taps (All Time)</div>
               </div>
               
-              <div className="p-3 bg-gray-800/30 rounded-lg border border-gray-700/50">
+              <div className="p-3 bg-gray-800/50 rounded-lg border border-gray-700/50">
                 <div className="text-lg font-bold text-white">
                   {Object.keys(state.upgrades || {}).length}
                 </div>
                 <div className="text-gray-400 text-sm">Upgrades Owned</div>
               </div>
               
-              <div className="p-3 bg-gray-800/30 rounded-lg border border-gray-700/50">
+              <div className="p-3 bg-gray-800/50 rounded-lg border border-gray-700/50">
                 <div className="text-lg font-bold text-white">
                   {(state.unlockedCharacters || []).length}
                 </div>
                 <div className="text-gray-400 text-sm">Characters Unlocked</div>
               </div>
               
-              <div className="p-3 bg-gray-800/30 rounded-lg border border-gray-700/50">
+              <div className="p-3 bg-gray-800/50 rounded-lg border border-gray-700/50">
                 <div className="text-lg font-bold text-white">
                   {Math.round(state.consecutiveDays || 0)}
                 </div>
@@ -165,7 +165,7 @@ export default function PlayerInfoMenu({ isOpen, onClose, openMenu }: Props) {
               </div>
             </div>
 
-            <div className="p-4 bg-gray-800/30 rounded-lg border border-gray-700/50">
+            <div className="p-4 bg-gray-800/50 rounded-lg border border-gray-700/50">
               <h3 className="text-purple-300 font-semibold mb-3 flex items-center gap-2">
                 <Clock className="w-4 h-4" />
                 Today's Progress
