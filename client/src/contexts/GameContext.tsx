@@ -465,8 +465,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
     if (!state.unlockedCharacters.includes(characterId) || connectionStatus !== 'connected') return false;
 
     try {
-      const response = await apiRequest('/api/player/select-character', {
-        method: 'POST',
+      const response = await apiRequest('/api/player/active-character', {
+        method: 'PATCH',
         body: JSON.stringify({ characterId })
       }, 5000);
 
@@ -504,7 +504,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     setState(prev => ({ ...prev, selectedAvatarId: imageId }));
   }, []);
 
-  const setDisplayImage = useCallback((imageUr: string) => {
+  const setDisplayImage = useCallback((imageUrl: string) => {
     setState(prev => ({ ...prev, displayImage: imageUrl }));
   }, []);
 

@@ -168,10 +168,8 @@ export const withSafeAsync = async (asyncOperation, options = {}) => {
 export const safeSetDisplayImage = async (imageUrl) => {
   return withSafeAsync(
     () => safeApiCall('/api/player/set-display-image', {
-      method: 'POST',
-      body: JSON.stringify({ 
-        url: imageUrl  // ← Changed from imageUrl to url
-      })
+        method: 'POST',
+          body: JSON.stringify({ path: imageUrl })
     }),
     {
       timeout: 3000,
@@ -190,13 +188,9 @@ export const safeSetDisplayImage = async (imageUrl) => {
  */
 export const safeSelectCharacter = async (characterId) => {
   return withSafeAsync(
-    () => safeApiCall('/api/player/select-character', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('sessionToken') || ''}`
-      },
-      body: JSON.stringify({ characterId })
+    () => safeApiCall('/api/player/active-character', {
+      method: 'PATCH',
+        body: JSON.stringify({ characterId })
     }),
     {
       timeout: 5000,

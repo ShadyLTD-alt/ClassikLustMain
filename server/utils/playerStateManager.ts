@@ -378,7 +378,7 @@ export async function setDisplayImageForPlayer(player: any, path: string): Promi
   console.log(`🖼️ [SET DISPLAY] Player:`, { 
     id: player.id, 
     username: player.username, 
-    currentCharacter: player.selectedCharacterId 
+    activeCharacter: player.characterId 
   });
   console.log(`🖼️ [SET DISPLAY] Setting display image to: ${path}`);
 
@@ -393,7 +393,7 @@ export async function setDisplayImageForPlayer(player: any, path: string): Promi
 
   // Update ONLY the displayImage field - don't touch anything else
   const updated = await updatePlayerState(player, { 
-    displayImage: normalizedUrl 
+    displayImage: normalizedUrl  || path
   });
 
   console.log(`✅ [SET DISPLAY] Successfully updated displayImage for ${player.selectedCharacterId}`);
