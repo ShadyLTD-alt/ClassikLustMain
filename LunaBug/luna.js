@@ -4,6 +4,7 @@
 
 import ChatInterface from './modules/chatInterface.js';
 import SchemaAuditor from './plugins/schemaAuditor.js';
+//import ErrorQueue from './plugins/errorQueue.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -30,6 +31,8 @@ class LunaBug {
 
     // Initialize plugins
     this.loadPlugin('SchemaAuditor', SchemaAuditor);
+ //   this.loadPlugin('ErrorQueue', ErrorQueue);
+    
 
     // ✨ NEW: Initialize CLI commands interface
     this.cli = this.createCliCommands();
